@@ -6,7 +6,7 @@ in x, y directions, and stitches the resulting images together into a larger sup
 
 To use:
     Run Nion Swift and get a good image
-    Set the defocus value to a large positive number such as 500000nm.
+    Set the defocus value to a large number (positive or negative) such as 500000nm.
     Ensure that the aperture is circular and centered.
     Ensure that the aperture is large enough so that the center 50% of the image is exposed through aperture.
     Decide how many images to acquire by setting the 'size' variable.
@@ -14,8 +14,6 @@ To use:
     Run the script from command line or PyCharm or another suitable Python interpreter.
 
 TODO: SShft.x, SShft.y add rotation; need to fix this in AS2.
-TODO: Setting and confirm control outputs is complicated by having to include 'confirm_factor' and
-      'confirm_timeout'. The autostem instrument object should provide default values.
 TODO: The size of the camera output is hardcoded to 1024, 1024. It should read from the camera object.
 TODO: Update composite image live during acquisition. Requires improvements to nionlib.
 """
@@ -26,7 +24,7 @@ import time
 
 import nionlib
 
-def acquire_composite_survey_image(size, reduce=4, print_fn=None):
+def acquire_composite_survey_image(size, rotation=0, scale=1, reduce=4, print_fn=None):
     print_fn = print_fn if print_fn is not None else lambda *args: None
 
     document_controller = nionlib.api.application.document_controllers[0]
@@ -54,7 +52,10 @@ def acquire_composite_survey_image(size, reduce=4, print_fn=None):
 
     image_width_m = abs(defocus) * math.sin(tv_pixel_angle_rad * image_size[0])
 
-    master_sub_area = (256, 256), (512, 512)
+    master_sub_area_size = 512, 512
+    master_sub_area = (image_size[0]//2 - master_sub_area_size[0]//2, image_size[1]//2 - master_sub_area_size[1]//2), master_sub_area_size
+
+    reduce = max(1, reduce // (512 / master_sub_area_size[0]))
 
     sub_area_shift_m = image_width_m * (master_sub_area[1][0] / image_size[0])
 
@@ -70,13 +71,31 @@ def acquire_composite_survey_image(size, reduce=4, print_fn=None):
                 delta_x_m, delta_y_m = sub_area_shift_m * (column - size[1]//2), sub_area_shift_m * (row - size[0]//2)
                 print_fn("offset (um) ", delta_x_m * 1e6, delta_y_m * 1e6)
                 start = time.time()
-                autostem.set_control_output(shift_x_control_name, sx_m + delta_x_m, {"confirm": True, "confirm_factor": 0.01, "confirm_timeout": 30.0})
-                autostem.set_control_output(shift_y_control_name, sy_m - delta_y_m, {"confirm": True, "confirm_factor": 0.01, "confirm_timeout": 30.0})  # note sign change
-                print_fn(time.time() - start)
+                # when used below, we use the rotation rotated by 180 degrees since we are moving the stage, not the
+                # view. i.e. use -angle and subtract the delta's.
+                rotated_delta_x_m = (math.cos(rotation) * delta_x_m - math.sin(rotation) * delta_y_m) / scale
+                rotated_delta_y_m = (math.sin(rotation) * delta_x_m + math.cos(rotation) * delta_y_m) / scale
+                print_fn("rotated offset (um) ", rotated_delta_x_m * 1e6, rotated_delta_y_m * 1e6)
+                # set both values. be robust, retrying if set_control_output fails.
+                attempts = 0
+                while attempts < 4:
+                    attempts += 1
+                    try:
+                        tolerance_factor = 0.02
+                        autostem.set_control_output(shift_x_control_name, sx_m - rotated_delta_x_m, {"confirm": True, "confirm_tolerance_factor": tolerance_factor})
+                        autostem.set_control_output(shift_y_control_name, sy_m - rotated_delta_y_m, {"confirm": True, "confirm_tolerance_factor": tolerance_factor})
+                    except TimeoutError as e:
+                        print("Timeout row=", row, " column=", column)
+                        continue
+                    break
+                print_fn("Time", time.time() - start, " row=", row, " column=", column)
+                time.sleep(4.0)  # until confirm is reliable
                 supradata = camera.grab_next_to_start()[0]
                 data = supradata.data[master_sub_area[0][0]:master_sub_area[0][0] + master_sub_area[1][0]:reduce, master_sub_area[0][1]:master_sub_area[0][1] + master_sub_area[1][1]:reduce]
-                slice0 = slice(row * sub_area[1][0], (row + 1) * sub_area[1][0])
-                slice1 = slice(column * sub_area[1][1], (column + 1) * sub_area[1][1])
+                slice_row = row
+                slice_column = column
+                slice0 = slice(slice_row * sub_area[1][0], (slice_row + 1) * sub_area[1][0])
+                slice1 = slice(slice_column * sub_area[1][1], (slice_column + 1) * sub_area[1][1])
                 master_data[slice0, slice1] = data
 
         data_item = library.create_data_item_from_data(master_data, "Composite Survey")
@@ -87,4 +106,10 @@ def acquire_composite_survey_image(size, reduce=4, print_fn=None):
         autostem.set_control_output(shift_x_control_name, sx_m)
         autostem.set_control_output(shift_y_control_name, sy_m)
 
-acquire_composite_survey_image(size=(3, 3))
+# these measurements are determined by a line made from a feature before a shift to a feature after a
+# shift. for instance, make a line starting on a feature. then add 100um to SShft.x and measure the
+# length of the line and the angle. plug those in here.
+rotation = math.radians(-23)
+scale = 1.2
+
+acquire_composite_survey_image(size=(5, 5), rotation=rotation, scale=scale, print_fn=print)
