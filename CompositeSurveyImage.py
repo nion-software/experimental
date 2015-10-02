@@ -89,7 +89,6 @@ def acquire_composite_survey_image(size, rotation=0, scale=1, reduce=4, print_fn
                         continue
                     break
                 print_fn("Time", time.time() - start, " row=", row, " column=", column)
-                time.sleep(4.0)  # until confirm is reliable
                 supradata = camera.grab_next_to_start()[0]
                 data = supradata.data[master_sub_area[0][0]:master_sub_area[0][0] + master_sub_area[1][0]:reduce, master_sub_area[0][1]:master_sub_area[0][1] + master_sub_area[1][1]:reduce]
                 slice_row = row
