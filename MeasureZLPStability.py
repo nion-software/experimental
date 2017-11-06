@@ -24,7 +24,7 @@ def estimate_zlp_pos(d):
         fwhm = r[1] - r[0]
         c = fwhm / (2 * math.sqrt(2 * math.log(2)))
         # now fit the gaussian to the data, using the amplitude, std dev, and bspline position as estimates (10%)
-        popt, pcov = scipy.optimize.curve_fit(gaussian, range(2000), d, bounds=([d_max * 0.9, r[0], c * 0.9], [d_max * 1.1, r[1], c * 1.1]))
+        popt, pcov = scipy.optimize.curve_fit(gaussian, range(d.shape[0]), d, bounds=([d_max * 0.9, r[0], c * 0.9], [d_max * 1.1, r[1], c * 1.1]))
         return popt[1]
     return numpy.nan
 
