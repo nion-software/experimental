@@ -13,7 +13,7 @@ setuptools.setup(
     version="0.3.0",
     author="Nion Software",
     author_email="swift@nion.com",
-    description="Useful experimental tools.",
+    description="Useful experimental tools for Nion Swift.",
     packages=["nionswift_plugin.nion_experimental_tools"],
     install_requires=[],
     license='GPLv3',
