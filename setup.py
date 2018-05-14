@@ -9,11 +9,11 @@ import setuptools
 import os
 
 setuptools.setup(
-    name="nionswift-experimental-tools",
-    version="0.3.0",
+    name="nionswift-experimental",
+    version="0.3.1",
     author="Nion Software",
     author_email="swift@nion.com",
-    description="Useful experimental tools for Nion Swift.",
+    description="Experimental tools package for Nion Swift.",
     packages=["nionswift_plugin.nion_experimental_tools"],
     install_requires=[],
     license='GPLv3',

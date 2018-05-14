@@ -1,9 +1,9 @@
 package:
-  name: 'nionswift-experimental-tools'
-  version: '0.3.0'
+  name: 'nionswift-experimental'
+  version: '0.3.1'
 
 source:
-  git_rev: 0.3.0
+  git_rev: 0.3.1
   git_url: https://github.com/nion-software/experimental.git
 
 build:
@@ -26,8 +26,8 @@ test:
 
 about:
   home: https://github.com/nion-software/experimental
-  summary: "Useful experimental tools for Nion Swift."
-  description: "Useful experimental tools for Nion Swift."
+  summary: "Experimental tools for Nion Swift."
+  description: "Experimental tools for Nion Swift."
 
 extra:
   recipe-maintainers:
