@@ -128,7 +128,7 @@ def acquire_multi_eels(interactive, api):
 
         # for each spectra, pad it out to the appropriate length, putting the actual data in the proper range
         for spectrum in spectra:
-            offset = int(ev_per_channel * spectrum.dimensional_calibrations[-1].convert_to_calibrated_value(0) - min_ev)
+            offset = int(ev_per_channel * (spectrum.dimensional_calibrations[-1].convert_to_calibrated_value(0) - min_ev))
             data = numpy.zeros((data_length, ))
             data[offset:offset + spectrum.data_shape[-1]] = spectrum.data
             padded_spectrum = DataAndMetadata.new_data_and_metadata(data, spectrum.intensity_calibration, [Calibration.Calibration(min_ev, ev_per_channel, units)])
