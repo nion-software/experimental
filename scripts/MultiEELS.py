@@ -19,12 +19,10 @@ def acquire_multi_eels(interactive, api):
     # each entry is energy offset, exposure (milliseconds), and the number of frames to integrate
     table = [
     # energy offset, exposure(ms), N frames
-      (0, 300, 2),
-      (20, 50, 1),
-      # (30, 100, 1),
+      (0, 100, 2),
+      (10, 100, 2),
+      #(250, 1000, 10),
       #(0, 100, 5),
-      #(0, 100, 20),
-      #(0, 100, 100),
     ]
 
     # this is the list of integrated spectra that will be the result of this script
@@ -37,22 +35,23 @@ def acquire_multi_eels(interactive, api):
 
     print("start taking data")
 
-    energy_offset_control = "DriftTubeLoss"  # for hardware EELS
-    energy_offset_multiplier = 1.0
+    energy_offset_control = "EELS_MagneticShift_Offset"  # for hardware EELS
     # energy_offset_control = "EELS_MagneticShift_Offset"  # for simulator
-    # energy_offset_multiplier = -1.0
 
-    for offset, exposure, frame_count in table:
+    tolerance_factor_from_nominal = 1.0
+    timeout_for_confirmation_ms = 3000
+
+    for energy_offset_ev, exposure_ms, frame_count in table:
         # for each table entry, set the drift tube loss to the energy offset
-        stem_controller.SetValAndConfirm(energy_offset_control, offset * energy_offset_multiplier, 1.0, 3000)
+        stem_controller.SetValAndConfirm(energy_offset_control, energy_offset_ev, tolerance_factor_from_nominal, timeout_for_confirmation_ms)
 
         # configure the camera to have the desired exposure
         frame_parameters = eels_camera.get_current_frame_parameters()
-        frame_parameters["exposure_ms"] = exposure
+        frame_parameters["exposure_ms"] = exposure_ms
         eels_camera.set_current_frame_parameters(frame_parameters)
 
         # disable blanker
-        stem_controller.SetValAndConfirm("C_Blank", 0, 1.0, 3000)
+        stem_controller.SetValAndConfirm("C_Blank", 0, tolerance_factor_from_nominal, timeout_for_confirmation_ms)
 
         # acquire a sequence of images and discard it; this ensures a steady state
         eels_camera.grab_sequence_prepare(frame_count)
@@ -66,8 +65,8 @@ def acquire_multi_eels(interactive, api):
 
         # extract the calibration info
         counts_per_electron = xdata.metadata.get("hardware_source", dict()).get("counts_per_electron", 1)
-        exposure = xdata.metadata.get("hardware_source", dict()).get("exposure", 1)
-        intensity_scale = xdata.intensity_calibration.scale / counts_per_electron / xdata.dimensional_calibrations[-1].scale / exposure / frame_count
+        exposure_ms = xdata.metadata.get("hardware_source", dict()).get("exposure", 1)
+        intensity_scale = xdata.intensity_calibration.scale / counts_per_electron / xdata.dimensional_calibrations[-1].scale / exposure_ms / frame_count
 
         # now sum the data in the sequence/time dimension. use xd.sum to automatically handle metadata such as calibration.
         xdata = xd.sum(xdata, 0)
@@ -75,7 +74,7 @@ def acquire_multi_eels(interactive, api):
         # if dark subtraction is enabled, perform another similar acquisition with blanker enabled and subtract it
         if do_dark:
             # enable blanker
-            stem_controller.SetValAndConfirm("C_Blank", 1, 1.0, 3000)
+            stem_controller.SetValAndConfirm("C_Blank", 1, tolerance_factor_from_nominal, timeout_for_confirmation_ms)
 
             # acquire a sequence of images and discard it; this ensures a steady state
             eels_camera.grab_sequence_prepare(frame_count)
@@ -101,14 +100,14 @@ def acquire_multi_eels(interactive, api):
         # also configure the intensity calibration and title.
         spectrum = xd.sum(xdata, 0)
         spectrum.data_metadata._set_intensity_calibration(Calibration.Calibration(scale=intensity_scale, units="e/eV/s"))
-        spectrum.data_metadata._set_metadata({"title": f"{offset}eV {int(exposure*1000)}ms [x{frame_count}]"})
+        spectrum.data_metadata._set_metadata({"title": f"{energy_offset_ev}eV {int(exposure_ms*1000)}ms [x{frame_count}]"})
 
         # add it to the list of spectra
         spectra.append(spectrum)
 
     # disable blanking and return drift tube loss to 0.0eV
-    stem_controller.SetValAndConfirm("C_Blank", 0, 1.0, 3000)
-    stem_controller.SetValAndConfirm(energy_offset_control, 0, 1.0, 3000)
+    stem_controller.SetValAndConfirm("C_Blank", 0, tolerance_factor_from_nominal, timeout_for_confirmation_ms)
+    stem_controller.SetValAndConfirm(energy_offset_control, 0, tolerance_factor_from_nominal, timeout_for_confirmation_ms)
 
     print("finished taking data")
 
@@ -130,9 +129,10 @@ def acquire_multi_eels(interactive, api):
 
         # for each spectra, pad it out to the appropriate length, putting the actual data in the proper range
         for spectrum in spectra:
-            offset = int(ev_per_channel * (spectrum.dimensional_calibrations[-1].convert_to_calibrated_value(0) - min_ev))
+            energy_offset_ev = int((spectrum.dimensional_calibrations[-1].convert_to_calibrated_value(0) - min_ev) / ev_per_channel)
+            calibration_factor = spectrum.intensity_calibration.scale / spectra[0].intensity_calibration.scale
             data = numpy.zeros((data_length, ))
-            data[offset:offset + spectrum.data_shape[-1]] = spectrum.data
+            data[energy_offset_ev:energy_offset_ev + spectrum.data_shape[-1]] = spectrum.data * calibration_factor
             padded_spectrum = DataAndMetadata.new_data_and_metadata(data, spectrum.intensity_calibration, [Calibration.Calibration(min_ev, ev_per_channel, units)])
             padded_spectra.append(padded_spectrum)
 
@@ -154,4 +154,3 @@ def script_main(api_broker):
     interactive.print_debug = interactive.print
     api = api_broker.get_api(version="~1.0")
     acquire_multi_eels(interactive, api)
-    
