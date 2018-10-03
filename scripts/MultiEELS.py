@@ -13,12 +13,14 @@ def acquire_multi_eels(interactive, api):
     eels_camera = stem_controller.eels_camera
     eels_camera.stop_playing()
 
+    print(eels_camera.hardware_source_id)
+
     # this table represents the acquisitions to be performed
     # each entry is energy offset, exposure (milliseconds), and the number of frames to integrate
     table = [
     # energy offset, exposure(ms), N frames
       (0, 300, 2),
-      # (20, 50, 1),
+      (20, 50, 1),
       # (30, 100, 1),
       #(0, 100, 5),
       #(0, 100, 20),
@@ -140,6 +142,8 @@ def acquire_multi_eels(interactive, api):
         # show the data
         window = api.application.document_windows[0]
         data_item = api.library.create_data_item_from_data_and_metadata(master_xdata)
+        legends = [s.metadata["title"] for s in spectra]
+        data_item.title = f"MultiEELS ({', '.join(legends)})"
         window.display_data_item(data_item)
 
     print("finished")
