@@ -15,9 +15,9 @@ class AlignToCenterMenuItem:
     def menu_item_execute(self, window: API.DocumentWindow) -> None:
         target_display = window.target_display
         if target_display:
-            _display = target_display._display
-            if _display.graphic_selection.has_selection:
-                graphics = [_display.graphics[index] for index in _display.graphic_selection.indexes]
+            _display_item = target_display._display_item
+            if _display_item.graphic_selection.has_selection:
+                graphics = [_display_item.graphics[index] for index in _display_item.graphic_selection.indexes]
                 for graphic in graphics:
                     if hasattr(graphic, "position"):
                         graphic.position = (0.5, 0.5)
