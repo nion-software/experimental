@@ -76,8 +76,8 @@ class DoubleGaussianMenuItem:
 
     def menu_item_execute(self, window: API.DocumentWindow) -> None:
         document_controller = window._document_controller
-        selected_data_item = document_controller.selected_data_item
-        data_item = document_controller.document_model.make_data_item_with_computation("nion.extension.doublegaussian", [(selected_data_item, None)])
+        selected_display_item = document_controller.selected_display_item
+        data_item = document_controller.document_model.make_data_item_with_computation("nion.extension.doublegaussian", [(selected_display_item, None)])
         if data_item:
             display_item = document_controller.document_model.get_display_item_for_data_item(data_item)
             document_controller.show_display_item(display_item)
