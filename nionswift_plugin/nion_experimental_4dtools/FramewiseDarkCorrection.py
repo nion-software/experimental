@@ -18,21 +18,30 @@ cam_center = int(round(data_shape[-2]/2)) if camera_center == -1 else camera_cen
 spectrum_area = np.rint(np.array(spectrum_region.bounds) * data_shape[2:]).astype(np.int)
 top_dark_area = np.rint(np.array(top_dark_region.bounds) * data_shape[2:]).astype(np.int)
 bottom_dark_area = np.rint(np.array(bottom_dark_region.bounds) * data_shape[2:]).astype(np.int)
-spectrum_range_y = np.array((spectrum_area[0,0], spectrum_area[0,0] + spectrum_area[1, 0]))
+spectrum_range_y = np.array((spectrum_area[0,0], spectrum_area[0,0] + spectrum_area[1,0]))
+spectrum_range_x = np.array((spectrum_area[0,1], spectrum_area[0,1] + spectrum_area[1,1]))
 top_dark_area_range_y = np.array((top_dark_area[0,0], top_dark_area[0,0] + top_dark_area[1, 0]))
 bottom_dark_area_range_y = np.array((bottom_dark_area[0,0], bottom_dark_area[0,0] + bottom_dark_area[1, 0]))
 
 if (cam_center >= spectrum_range_y).all(): # spectrum is above center
-    dark_image = np.mean(data[..., top_dark_area_range_y[0]:top_dark_area_range_y[1], :], axis=-2, keepdims=True)
-    corrected_image = data[..., spectrum_range_y[0]:spectrum_range_y[1], :] - np.repeat(dark_image, spectrum_range_y[1]-spectrum_range_y[0], axis=-2)
+    dark_image = np.mean(data[..., top_dark_area_range_y[0]:top_dark_area_range_y[1],
+                              spectrum_range_x[0]:spectrum_range_x[1]], axis=-2, keepdims=True)
+    corrected_image = (data[..., spectrum_range_y[0]:spectrum_range_y[1], spectrum_range_x[0]:spectrum_range_x[1]] - 
+                       np.repeat(dark_image, spectrum_range_y[1]-spectrum_range_y[0], axis=-2))
 elif (cam_center <= spectrum_range_y).all(): # spectrum is below center
-    dark_image = np.mean(data[..., bottom_dark_area_range_y[0]:bottom_dark_area_range_y[1], :], axis=-2, keepdims=True)
-    corrected_image = data[..., spectrum_range_y[0]:spectrum_range_y[1], :] - np.repeat(dark_image, spectrum_range_y[1]-spectrum_range_y[0], axis=-2)
+    dark_image = np.mean(data[..., bottom_dark_area_range_y[0]:bottom_dark_area_range_y[1],
+                              spectrum_range_x[0]:spectrum_range_x[1]], axis=-2, keepdims=True)
+    corrected_image = (data[..., spectrum_range_y[0]:spectrum_range_y[1], spectrum_range_x[0]:spectrum_range_x[1]] -
+                       np.repeat(dark_image, spectrum_range_y[1]-spectrum_range_y[0], axis=-2))
 else: # spectrum is on top of center
-    dark_image = np.mean(data[..., top_dark_area_range_y[0]:top_dark_area_range_y[1], :], axis=-2, keepdims=True)
-    corrected_image_top = data[..., spectrum_range_y[0]:cam_center, :] - np.repeat(dark_image, cam_center-spectrum_range_y[0], axis=-2)
-    dark_image = np.mean(data[..., bottom_dark_area_range_y[0]:bottom_dark_area_range_y[1], :], axis=-2, keepdims=True)
-    corrected_image_bot = data[..., cam_center:spectrum_range_y[1], :] - np.repeat(dark_image, spectrum_range_y[1]-cam_center, axis=-2)
+    dark_image = np.mean(data[..., top_dark_area_range_y[0]:top_dark_area_range_y[1],
+                              spectrum_range_x[0]:spectrum_range_x[1]], axis=-2, keepdims=True)
+    corrected_image_top = (data[..., spectrum_range_y[0]:cam_center, spectrum_range_x[0]:spectrum_range_x[1]] -
+                           np.repeat(dark_image, cam_center-spectrum_range_y[0], axis=-2))
+    dark_image = np.mean(data[..., bottom_dark_area_range_y[0]:bottom_dark_area_range_y[1],
+                              spectrum_range_x[0]:spectrum_range_x[1]], axis=-2, keepdims=True)
+    corrected_image_bot = (data[..., cam_center:spectrum_range_y[1], spectrum_range_x[0]:spectrum_range_x[1]] -
+                           np.repeat(dark_image, spectrum_range_y[1]-cam_center, axis=-2))
     corrected_image = np.concatenate((corrected_image_top, corrected_image_bot), axis=-2)
     corrected_image_top = None
     corrected_image_bot = None
@@ -49,13 +58,15 @@ else:
         if gain_data.shape == corrected_image.shape[2:]:
             corrected_image *= gain_image.xdata.data
         elif gain_data.shape == data.shape[2:]:
-            corrected_image *= gain_image.xdata.data[spectrum_range_y[0]:spectrum_range_y[1]]
+            corrected_image *= gain_image.xdata.data[spectrum_range_y[0]:spectrum_range_y[1],
+                                                     spectrum_range_x[0]:spectrum_range_x[1]]
         else:
-            raise ValueError('Shape of gain image has to match last two dimensions input data.')
+            raise ValueError('Shape of gain image has to match last two dimensions of input data.')
 
 if bin_spectrum:
     target.set_data(np.sum(corrected_image, axis=-2))
-    target.set_dimensional_calibrations(src1.xdata.dimensional_calibrations[:2] + src1.xdata.dimensional_calibrations[3:])
+    target.set_dimensional_calibrations(src1.xdata.dimensional_calibrations[:2] +
+                                        src1.xdata.dimensional_calibrations[3:])
 else:
     target.set_data(corrected_image)
     target.set_dimensional_calibrations(src1.xdata.dimensional_calibrations[:])
