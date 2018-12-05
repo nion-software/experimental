@@ -8,6 +8,7 @@ __________________________________________________________
 Usage
 ======
 Within Swift you can launch each plug-in by first selecting the source data item (click on it) and the executing the respective "4D Tools -> Plug-in name" menu item. All parameters that can be changed for the plug-ins will be accessible in the "Inspector" panel.
+
 __________________________________________________________
 
 
@@ -18,6 +19,7 @@ This plug-in will display a rectangle region in the Source data item and plot th
 
 ### Detailed description
 The only accessible parameter is the size and location of the rectangle in the source data item. You can change it by using the mouse or entering numbers in the respective section of the Inspector Panel.
+
 __________________________________________________________
 
 4D Dark Correction
@@ -29,20 +31,24 @@ There is also the option to only work with only a sub-area of the frames of the 
 
 ### Detailed Description
 Input:
+
 * Data item containing a 4D dataset
 
 Output:
+
 * Total bin 4D of ...: Data item that holds the total integrated intensity of every frame in the input dataset plotted as a 2D image.
 * 4D dark correction of ...: Data item that holds the result data of the plug-in. This will be either 3D or 4D data depending on the parameters.
 
 Parameters:
+
 * Crop: Region displayed in the input data item. It can be used to select a sub-area of the input frames. The output data will then be limited to the data within this region.
 * Dark subtract area: Region displayed in the "total bin 4d" data item. It should be adjusted so that it contains only the pixels that were acquire while the beam was blanked. For large datasets the UI might not be responsive enough to adjust the size and position of the region with the mouse. If this is the case, try to directly type numbers into the correspnding fields in the Inspector panel.
 * Bin spectra to 1D: Checkbox in the Inspector panel. When checked, the output of the plug-in will be a 3D data item with all spectra binned in y-direction.
 * Gain image uuid: Field in the Inspector panel. When it contains a valid data item UUID, this will be used as the gain image for the dataset (applied after dark subtraction but before binning, if enabled). You can get the UUID for a selected data item by clicking Edit -> Copy item uuid or by pressing Ctrl + Shift + U.
 
 Screenshot:
-![Image](4d_dark_correction.png "4d dark correction screenshot")
+
+![Screenshot of 4d dark correction](4d_dark_correction.png "Screenshot of 4d dark correction")
 
 __________________________________________________________
 
@@ -54,13 +60,16 @@ The plug-in will also create 3 regions in the data item that contains the averag
 
 ### Detailed Description
 Input:
+
 * Data item containing a 4D dataset
 
 Output:
+
 * Frame average of ...: Data item that holds the average of all frames of the dataset. It is used to select the area of the detector that contains the actuals spectrum data and the two dark areas.
 * Framewise dark correction of ...: Data item that holds the result data of the plug-in. This will be either 3D or 4D data depending on the parameters.
 
 Parameters:
+
 * Spectrum: Region displayed in the "frame average" data item. It is used to select the area of the detector that contains the actuals spectrum data.
 * Top/Bottom dark area: Regions displayed in the "frame average" data item. They are used to specify the areas of the detector that contain the data used for dark subtraction. The data in "top dark area" will be subtracted from the top part of the spectrum and the data in "bottom dark area" from the bittom part of the spectrum. If the whole part of the spectrum lies above the center of the detector, the "bottom dark area" is ignored (and the other way around).
 * Camera center: In case the center of the detector is not the center of the frames of the dataset you can specify the position of the center here (if you type set it to 0 this would mean that the center is at the very top of the frames). This parameter defaults to -1, which will assume that the center of the frames is also the center of the detector. NOTE: Due to a visual bug in Swift the field that is located on the right side of the slider might not be visible. If you want to type a number for this parameter you can open the "Edit Computation" panel by clicking on "Edit..." in the Inspector and type a number in there.
@@ -68,8 +77,10 @@ Parameters:
 * Gain image uuid: Field in the Inspector panel. When it contains a valid data item UUID, this will be used as the gain image for the dataset (applied after dark subtraction but before binning, if enabled). You can get the UUID for a selected data item by clicking Edit -> Copy item uuid or by pressing Ctrl + Shift + U.
 
 Screenshot:
-![Image](framewise_dark_correction.png "4d dark correction screenshot")
 
+![Screenshot of framewise dark correction](framewise_dark_correction.png "Screenshot of framewise dark correction")
+
+__________________________________________________________
 
 Installation and Requirements
 =============================
