@@ -75,10 +75,10 @@ correct_dark_processing_descriptions = {
                                   {'name': 'bottom_dark_region', 'type': 'rectangle'}]}
                      ],
          'parameters': [{'name': 'bin_spectrum', 'type': 'boolean', 'value_default': True, 'value': True,
-                         'label': 'bin spectrum to 1d'},
+                         'label': 'Bin spectra to 1d'},
                         {'name': 'camera_center', 'type': 'integral', 'value_default': -1, 'value': -1,
-                         'label': 'camera center', 'value_min': -1, 'value_max': 2048},
-                         {'name': 'gain_image_uuid', 'type': 'string', 'label': 'gain image uuid', 'value': '',
+                         'label': 'Camera center', 'value_min': -1, 'value_max': 2048},
+                         {'name': 'gain_image_uuid', 'type': 'string', 'label': 'Gain image uuid', 'value': '',
                          'value_default': ''}],
          'title': 'Framewise dark correction'
          }

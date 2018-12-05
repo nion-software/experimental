@@ -60,8 +60,8 @@ correct_dark_processing_descriptions = {
                       'regions': [{'name': 'dark_area_region', 'type': 'rectangle'}]}
                      ],
          'parameters': [{'name': 'bin_spectrum', 'type': 'boolean', 'value_default': True, 'value': True,
-                         'label': 'bin spectrum to 1d'},
-                        {'name': 'gain_image_uuid', 'type': 'string', 'label': 'gain image uuid', 'value': '',
+                         'label': 'Bin spectra to 1d'},
+                        {'name': 'gain_image_uuid', 'type': 'string', 'label': 'Gain image uuid', 'value': '',
                          'value_default': ''}],
          'title': '4D dark correction'
          }

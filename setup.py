@@ -14,7 +14,7 @@ setuptools.setup(
     author="Nion Software",
     author_email="swift@nion.com",
     description="Experimental tools package for Nion Swift.",
-    packages=["nionswift_plugin.nion_experimental_tools"],
+    packages=["nionswift_plugin.nion_experimental_tools", "nionswift_plugin.nion_experimental_4dtools"],
     install_requires=[],
     license='GPLv3',
     classifiers=[
