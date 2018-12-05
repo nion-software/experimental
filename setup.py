@@ -10,11 +10,11 @@ import os
 
 setuptools.setup(
     name="nionswift-experimental",
-    version="0.5.2",
+    version="0.6.0",
     author="Nion Software",
     author_email="swift@nion.com",
     description="Experimental tools package for Nion Swift.",
-    packages=["nionswift_plugin.nion_experimental_tools"],
+    packages=["nionswift_plugin.nion_experimental_tools", "nionswift_plugin.nion_experimental_4dtools"],
     install_requires=["nionswift>=0.14.0"],
     license='GPLv3',
     classifiers=[
@@ -24,4 +24,5 @@ setuptools.setup(
     ],
     include_package_data=True,
     python_requires='~=3.6',
+    zip_safe=False,
 )
