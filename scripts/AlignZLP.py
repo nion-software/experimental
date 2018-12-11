@@ -56,8 +56,13 @@ def align_zlp(interactive, api):
                 if interactive.cancelled:
                     break
 
+            dimensional_calibrations = src_xdata.dimensional_calibrations
+            energy_calibration = dimensional_calibrations[-1]
+            energy_calibration.offset = -(ref_pos + 0.5) * energy_calibration.scale
+            dimensional_calibrations = dimensional_calibrations[0:-1] + [energy_calibration]
+
             # dst_data is complete. construct xdata with correct calibration and data descriptor.
-            dst_xdata = DataAndMetadata.new_data_and_metadata(dst_data, src_xdata.intensity_calibration, src_xdata.dimensional_calibrations, data_descriptor=DataAndMetadata.DataDescriptor(False, 2, 1))
+            dst_xdata = DataAndMetadata.new_data_and_metadata(dst_data, src_xdata.intensity_calibration, dimensional_calibrations, data_descriptor=DataAndMetadata.DataDescriptor(False, 2, 1))
 
             # create a new data item in the library and set its title.
             data_item = api.library.create_data_item_from_data_and_metadata(dst_xdata)
