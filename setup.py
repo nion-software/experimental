@@ -10,7 +10,7 @@ import os
 
 setuptools.setup(
     name="nionswift-experimental",
-    version="0.5.0",
+    version="0.5.1",
     author="Nion Software",
     author_email="swift@nion.com",
     description="Experimental tools package for Nion Swift.",

@@ -1,6 +1,11 @@
 Changelog (nionswift-experimental)
 ==================================
 
+0.5.1 (2019-01-14)
+------------------
+
+- Fix issue with measure ZLP being allowed to operate on 2D data.
+
 0.5.0 (2018-12-12)
 ------------------
 
