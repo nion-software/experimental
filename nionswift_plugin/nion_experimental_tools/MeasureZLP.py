@@ -20,6 +20,7 @@ import scipy.stats
 
 def estimate_zlp_amplitude_position_width_fit_spline(d):
     # estimate the ZLP, assumes the peak value is the ZLP and that the ZLP is the only gaussian feature in the data
+    assert len(d.shape) == 1 and d.shape[0] > 1
     gaussian = lambda x, a, b, c: a*numpy.exp(-(x-b)**2/(2*c**2))
     d_max = numpy.amax(d)
     # first fit a bspline to the data
@@ -37,6 +38,7 @@ def estimate_zlp_amplitude_position_width_fit_spline(d):
 
 def estimate_zlp_amplitude_position_width_counting(d):
     # estimate the ZLP, assumes the peak value is the ZLP and that the ZLP is the only gaussian feature in the data
+    assert len(d.shape) == 1 and d.shape[0] > 1
     mx_pos = numpy.argmax(d)
     mx = d[mx_pos]
     half_mx = mx/2
@@ -48,38 +50,38 @@ def estimate_zlp_amplitude_position_width_counting(d):
 def measure_zlp_fit_spline(api, window):
     """Attaches the measure ZLP computation to the target data item in the window."""
     target_data_item = window.target_data_item
-    if target_data_item:
+    if target_data_item and target_data_item.display_xdata.is_data_1d:
         for graphic in target_data_item.graphics:
             if graphic.graphic_type == "interval-graphic" and graphic.graphic_id == "zlp_interval":
                 target_data_item.remove_region(graphic)
                 break
-    data = target_data_item.display_xdata.data
-    amplitude, pos, width = estimate_zlp_amplitude_position_width_fit_spline(data)
-    if numpy.isfinite(amplitude) and numpy.isfinite(width) and numpy.isfinite(pos):
-        fwhm = width * (2 * math.sqrt(2 * math.log(2)))
-        start = (pos - fwhm/2) / data.shape[-1]
-        end = (pos + fwhm/2) / data.shape[-1]
-        zlp_interval = target_data_item.add_interval_region(start, end)
-        zlp_interval.interval = start, end
-        zlp_interval.graphic_id = "zlp_interval"
+        data = target_data_item.display_xdata.data
+        amplitude, pos, width = estimate_zlp_amplitude_position_width_fit_spline(data)
+        if numpy.isfinite(amplitude) and numpy.isfinite(width) and numpy.isfinite(pos):
+            fwhm = width * (2 * math.sqrt(2 * math.log(2)))
+            start = (pos - fwhm/2) / data.shape[-1]
+            end = (pos + fwhm/2) / data.shape[-1]
+            zlp_interval = target_data_item.add_interval_region(start, end)
+            zlp_interval.interval = start, end
+            zlp_interval.graphic_id = "zlp_interval"
 
 
 def measure_zlp_count_pixels(api, window):
     """Attaches the measure ZLP computation to the target data item in the window."""
     target_data_item = window.target_data_item
-    if target_data_item:
+    if target_data_item and target_data_item.display_xdata.is_data_1d:
         for graphic in target_data_item.graphics:
             if graphic.graphic_type == "interval-graphic" and graphic.graphic_id == "zlp_interval_2":
                 target_data_item.remove_region(graphic)
                 break
-    data = target_data_item.display_xdata.data
-    amplitude, pos, left, right = estimate_zlp_amplitude_position_width_counting(data)
-    start = left / data.shape[-1]
-    end = right / data.shape[-1]
-    zlp_interval = target_data_item.add_interval_region(start, end)
-    zlp_interval.interval = start, end
-    zlp_interval.graphic_id = "zlp_interval_2"
-    zlp_interval._graphic.color = "#0F0"
+        data = target_data_item.display_xdata.data
+        amplitude, pos, left, right = estimate_zlp_amplitude_position_width_counting(data)
+        start = left / data.shape[-1]
+        end = right / data.shape[-1]
+        zlp_interval = target_data_item.add_interval_region(start, end)
+        zlp_interval.interval = start, end
+        zlp_interval.graphic_id = "zlp_interval_2"
+        zlp_interval._graphic.color = "#0F0"
 
 
 class MeasureZLPFitSplineMenuItemDelegate:
