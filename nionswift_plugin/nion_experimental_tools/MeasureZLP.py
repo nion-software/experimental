@@ -121,19 +121,19 @@ class Mark0eVMenuItemDelegate:
 
     def menu_item_execute(self, window):
         target_data_item = window.target_data_item
-        if target_data_item:
+        if target_data_item and target_data_item.display_xdata.is_data_1d:
             for graphic in target_data_item.graphics:
                 if graphic.graphic_type == "interval-graphic" and graphic.graphic_id == "channel_0eV":
                     target_data_item.remove_region(graphic)
                     break
-        calibration = target_data_item.display_xdata.dimensional_calibrations[-1]
-        channel = calibration.convert_from_calibrated_value(0) / target_data_item.display_xdata.dimensional_shape[-1]
-        channel_graphic = target_data_item.add_interval_region(channel, channel)
-        channel_graphic.graphic_id = "channel_0eV"
-        channel_graphic._graphic.color = "#F00"
-        channel_graphic._graphic.is_position_locked = True
-        channel_graphic._graphic.is_shape_locked = True
-        channel_graphic.label = _("0eV")
+            calibration = target_data_item.display_xdata.dimensional_calibrations[-1]
+            channel = calibration.convert_from_calibrated_value(0) / target_data_item.display_xdata.dimensional_shape[-1]
+            channel_graphic = target_data_item.add_interval_region(channel, channel)
+            channel_graphic.graphic_id = "channel_0eV"
+            channel_graphic._graphic.color = "#F00"
+            channel_graphic._graphic.is_position_locked = True
+            channel_graphic._graphic.is_shape_locked = True
+            channel_graphic.label = _("0eV")
 
 
 class MenuExampleExtension:
