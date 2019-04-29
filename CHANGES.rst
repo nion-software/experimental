@@ -1,6 +1,11 @@
 Changelog (nionswift-experimental)
 ==================================
 
+0.5.2 (2019-04-29)
+------------------
+
+- Fix issue with mark 0eV being allowed to operate on 2D data.
+
 0.5.1 (2019-01-14)
 ------------------
 

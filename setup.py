@@ -10,7 +10,7 @@ import os
 
 setuptools.setup(
     name="nionswift-experimental",
-    version="0.5.1",
+    version="0.5.2",
     author="Nion Software",
     author_email="swift@nion.com",
     description="Experimental tools package for Nion Swift.",
@@ -20,8 +20,8 @@ setuptools.setup(
     classifiers=[
         "Development Status :: 2 - Pre-Alpha",
         "License :: OSI Approved :: Apache Software License",
-        "Programming Language :: Python :: 3.5",
+        "Programming Language :: Python :: 3.6",
     ],
     include_package_data=True,
-    python_requires='~=3.5',
+    python_requires='~=3.6',
 )
