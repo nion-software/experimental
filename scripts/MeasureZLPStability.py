@@ -2,8 +2,9 @@ from nion.data import Calibration
 from nion.data import DataAndMetadata
 from nion.data import xdata_1_0 as xd
 
+from nion.eels_analysis import ZLP_Analysis
+
 import functools
-import math
 import numpy
 import operator
 import scipy.interpolate
@@ -12,28 +13,11 @@ import scipy.signal
 import scipy.stats
 
 
-def estimate_zlp_pos(d):
-    # estimate the ZLP, assumes the peak value is the ZLP and that the ZLP is the only gaussian feature in the data
-    gaussian = lambda x, a, b, c: a*numpy.exp(-(x-b)**2/(2*c**2))
-    d_max = numpy.amax(d)
-    # first fit a bspline to the data
-    s = scipy.interpolate.splrep(range(d.shape[-1]), d - d_max / 2)
-    # assuming bspline has two roots, use them to estimate FWHM
-    r = scipy.interpolate.sproot(s)
-    if len(r) == 2:
-        fwhm = r[1] - r[0]
-        c = fwhm / (2 * math.sqrt(2 * math.log(2)))
-        # now fit the gaussian to the data, using the amplitude, std dev, and bspline position as estimates (10%)
-        popt, pcov = scipy.optimize.curve_fit(gaussian, range(d.shape[0]), d, bounds=([d_max * 0.9, r[0], c * 0.9], [d_max * 1.1, r[1], c * 1.1]))
-        return popt[1]
-    return numpy.nan
-
-
 def sequence_estimate_zlp_pos(s):
     zs = numpy.empty((s.data_shape[0], ), numpy.double)
     for i in range(s.data_shape[0]):
         d = s[i].data
-        zs[i] = estimate_zlp_pos(d)
+        a, zs[i], l, r = ZLP_Analysis.estimate_zlp_amplitude_position_width_com(d)
     # replace nan's with average
     mask = numpy.isnan(zs)
     zs[mask] = numpy.interp(numpy.flatnonzero(mask), numpy.flatnonzero(~mask), zs[~mask])
