@@ -1,7 +1,7 @@
 Changelog (nionswift-experimental)
 ==================================
 
-0.6.0 (UNRELEASED)
+0.6.0 (2019-10-24)
 ------------------
 - Add 4D tools (menu items and panel).
 - Use eels_analysis library for ZLP amplitude position.
