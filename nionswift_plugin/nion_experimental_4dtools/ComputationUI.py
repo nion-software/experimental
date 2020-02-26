@@ -5,6 +5,9 @@ Created on Mon Dec 17 18:17:31 2018
 @author: Andreas
 """
 
+from nion.swift.model import Symbolic
+
+
 class ComputationUIPanelDelegate(object):
 
     def __init__(self, api):
@@ -32,6 +35,16 @@ class ComputationUIPanelDelegate(object):
         self.column._widget.remove_all()
         for computation in computations:
             create_panel_widget = getattr(computation, 'create_panel_widget', None)
+            if create_panel_widget is None:
+                compute_class = Symbolic._computation_types.get(computation.processing_id)
+                if compute_class:
+                    api_computation = self.api._new_api_object(computation)
+                    api_computation.api = self.api
+                    try:
+                        compute_class(api_computation)
+                    except IndexError:
+                        pass
+                    create_panel_widget = getattr(computation, 'create_panel_widget', None)
             if create_panel_widget:
                 try:
                     widget = create_panel_widget(self.ui, self.document_controller)
@@ -59,15 +72,15 @@ class ComputationUIPanelDelegate(object):
                 for result in computation.results:
                     if result.specifier.get('uuid') == str(data_item.uuid):
                         computations_involved.append(computation)
-                if computation.source:
-                    if str(computation.source.uuid) == str(data_item.uuid):
-                        computations_involved.append(computation)
+                src = computation.get_input('src')
+                if src and str(src.uuid) == str(data_item.uuid):
+                    computations_involved.append(computation)
 
             self.__update_computation_ui(computations_involved)
             for _ in computations_involved:
                 self.__computation_updated_event_listeners.append(
                         self.document_controller._document_controller.document_model.computation_updated_event.listen(
-                                lambda data_item, new_computation: self.__update_computation_ui(computations_involved)))
+                                lambda data_item: self.__update_computation_ui(computations_involved)))
             if not computations_involved:
                 self.column._widget.remove_all()
 
