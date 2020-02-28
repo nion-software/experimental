@@ -72,15 +72,14 @@ class ComputationUIPanelDelegate(object):
                 for result in computation.results:
                     if result.specifier.get('uuid') == str(data_item.uuid):
                         computations_involved.append(computation)
-                src = computation.get_input('src')
-                if src and str(src.uuid) == str(data_item.uuid):
+                if computation.source and str(computation.source.uuid) == str(data_item.uuid):
                     computations_involved.append(computation)
 
             self.__update_computation_ui(computations_involved)
             for _ in computations_involved:
                 self.__computation_updated_event_listeners.append(
                         self.document_controller._document_controller.document_model.computation_updated_event.listen(
-                                lambda data_item: self.__update_computation_ui(computations_involved)))
+                                lambda data_item, *args, **kwargs: self.__update_computation_ui(computations_involved)))
             if not computations_involved:
                 self.column._widget.remove_all()
 
