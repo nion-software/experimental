@@ -246,8 +246,8 @@ class FramewiseDarkMenuItem:
             computation = self.__api.library.create_computation('nion.calculate_4d_average',
                                                                 inputs={'src': api_data_item},
                                                                 outputs={'target': average_data_item})
-            computation._computation.source = data_item
-            average_display_item = document_controller.document_model.get_display_item_for_data_item(average_data_item)
+            computation._computation.source = average_data_item._data_item
+            average_display_item = document_controller.document_model.get_display_item_for_data_item(average_data_item._data_item)
             document_controller.show_display_item(average_display_item)
             spectrum_graphic = average_data_item.add_rectangle_region(0.5, 0.5, 0.1, 1.0)
             spectrum_graphic.label = 'Spectrum'
@@ -273,9 +273,9 @@ class FramewiseDarkMenuItem:
                                                                         'gain_image': [],
                                                                         'gain_mode': 'custom'},
                                                                 outputs={'target': dark_corrected_data_item})
-            computation._computation.source = data_item
+            computation._computation.source = dark_corrected_data_item._data_item
             dark_corrected_display_item = document_controller.document_model.get_display_item_for_data_item(
-                                                                                              dark_corrected_data_item)
+                                                                                              dark_corrected_data_item._data_item)
             document_controller.show_display_item(dark_corrected_display_item)
             self.__computation_data_items.update({data_item: 'source',
                                                   average_data_item._data_item: 'average',

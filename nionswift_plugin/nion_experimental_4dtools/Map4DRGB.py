@@ -290,9 +290,9 @@ class Map4DRGBMenuItem:
                                                                         'enabled_g': True,
                                                                         'enabled_b': True},
                                                                 outputs={'target': map_data_item})
-            computation._computation.source = data_item
+            computation._computation.source = map_data_item._data_item
 
-            map_display_item = document_controller.document_model.get_display_item_for_data_item(map_data_item)
+            map_display_item = document_controller.document_model.get_display_item_for_data_item(map_data_item._data_item)
             document_controller.show_display_item(map_display_item)
             pick_graphic = map_data_item.add_point_region(0.5, 0.5)
             pick_graphic.label = 'Pick'
