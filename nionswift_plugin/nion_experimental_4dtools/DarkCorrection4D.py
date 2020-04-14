@@ -216,11 +216,11 @@ class DarkCorrection4DMenuItem:
             computation = self.__api.library.create_computation('nion.total_bin_4d_SI',
                                                                 inputs={'src': api_data_item},
                                                                 outputs={'target': total_bin_data_item})
-            computation._computation.source = data_item
+            computation._computation.source = total_bin_data_item._data_item
             #computation._computation.mark_update()
 
             total_bin_display_item = document_controller.document_model.get_display_item_for_data_item(
-                                                                                                  total_bin_data_item)
+                                                                                                  total_bin_data_item._data_item)
             document_controller.show_display_item(total_bin_display_item)
             dark_subtract_area_graphic = total_bin_data_item.add_rectangle_region(0.8, 0.5, 0.4, 1.0)
             dark_subtract_area_graphic.label = 'Dark subtract area'
@@ -242,9 +242,9 @@ class DarkCorrection4DMenuItem:
                                                                         'gain_image': [],
                                                                         'gain_mode': 'custom'},
                                                                 outputs={'target': dark_corrected_data_item})
-            computation._computation.source = data_item
+            computation._computation.source = dark_corrected_data_item._data_item
             dark_corrected_display_item = document_controller.document_model.get_display_item_for_data_item(
-                                                                                             dark_corrected_data_item)
+                                                                                             dark_corrected_data_item._data_item)
             document_controller.show_display_item(dark_corrected_display_item)
             self.__computation_data_items.update({data_item: 'source',
                                                   total_bin_data_item._data_item: 'total bin',
