@@ -5,6 +5,8 @@ Created on Mon Dec 17 18:17:31 2018
 @author: Andreas
 """
 
+import functools
+
 from nion.swift.model import Symbolic
 
 
@@ -25,11 +27,17 @@ class ComputationUIPanelDelegate(object):
                                  document_controller._document_controller.focused_display_item_changed_event.listen(
                                                                                          self.__display_item_changed))
         self.__computation_updated_event_listeners = []
-
+        self.__progress_updated_event_listeners = []
         self.column = ui.create_column_widget()
-        self.column.add(self.ui.create_label_widget('test'))
 
         return self.column
+
+    def __update_progress(self, progress_bar_widget, minimum, maximum, value):
+        if minimum != progress_bar_widget.minimum:
+            progress_bar_widget.mininum = minimum
+        if maximum != progress_bar_widget.maximum:
+            progress_bar_widget.maximum = maximum
+        progress_bar_widget.value = value
 
     def __update_computation_ui(self, computations):
         self.column._widget.remove_all()
@@ -56,7 +64,17 @@ class ComputationUIPanelDelegate(object):
                     self.column.add(self.ui.create_label_widget(computation.processing_id))
                     self.column.add_spacing(2)
                     self.column.add(widget)
-                    self.column.add_spacing(5)
+                    if hasattr(computation, 'progress_updated_event'):
+                        progress_bar = self.ui.create_progress_bar_widget()
+                        listener = computation.progress_updated_event.listen(functools.partial(self.__update_progress, progress_bar))
+                        self.__progress_updated_event_listeners.append(listener)
+                        self.column.add_spacing(10)
+                        progress_row = self.ui.create_row_widget()
+                        progress_row.add_spacing(80)
+                        progress_row.add(progress_bar)
+                        progress_row.add_spacing(5)
+                        self.column.add(progress_row)
+                    self.column.add_spacing(15)
         self.column.add_stretch()
 
 
