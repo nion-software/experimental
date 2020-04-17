@@ -1,5 +1,5 @@
 import numpy
-import time
+from nion.utils import Geometry
 from nion.utils import Registry
 
 def find_interface(interactive, api):
@@ -9,7 +9,7 @@ def find_interface(interactive, api):
     # get the scan controller and stop it from playing
     scan_controller = stem_controller.scan_controller
     scan_controller.stop_playing()
-    stem_controller.probe_position = (0.5, 0.5)
+    stem_controller.probe_position = Geometry.FloatPoint(x=0.5, y=0.5)
 
     # establish the EELS camera object and stop it if it is playing
     eels_camera = stem_controller.eels_camera
@@ -36,7 +36,7 @@ def find_interface(interactive, api):
             probe_position = 0.5, i / (steps - 1) * (right - left) + left
             print(f"settings probe position {probe_position}")
             # set the probe position
-            stem_controller.probe_position = probe_position
+            stem_controller.probe_position = Geometry.FloatPoint.make(probe_position)
             # throw away an image; ensure exposure represents new scan position
             eels_camera.grab_next_to_start()
             # grab real data
