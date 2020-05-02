@@ -2,7 +2,6 @@
 language: python
 matrix:
   include:
-    - python: 3.6
     - python: 3.7
       dist: xenial
       sudo: true
@@ -36,6 +35,6 @@ deploy:
     secure: "e6GQgRDpC4JgJZQeJSaA/XFkRWpoBggl71LvQHBAgh0QV/WEeroqZS1FA/OPsjB5Ws9iQbxmfQKNrpDLWQx4pj/xvgPrZN8qU9xzcnRhdr5baUZExEwJOZkdP0rNhNUMcPVR4Sk61aaU2F2LjgMT1Mx/cD3xFR0WDp+TMIgEzpdViNok72x1k+guAoEp9Q8pjmTwkoH2CZTcNQUlqg27KJnFna29C0Y7XsLF+YRFdge/eZaln6xAaJcZoORqeyM/FD+AYtVOiMzwEZfyw4klzWkTJknsbaQ0IPXwZrZKbWvWhaSRyV8Wc8L/q5nVAE2oc4mCo5WlFp+BuuzpLZOsK2GMeU1m8T7WKieG8E6yJLOAXWcu1BPnii3LIgUyB6ZQLQ9poxQA4hBkqcofydcOxaPmUpf03Off0VXfLqEGjdFtT7Ft8TCS8oAwAT5Wd0SlQ6aLoA2Z8cTLyK3RqN4V9qmPVecL6g+WxZeF40RErPZCWL23hD7uIWBPHBxJX7gz44BIrJ9xKvpVEp2g8Kaf36YGQIO9SaPH7KZPH6JY2T2kyQLnmNcNxlra7rwCvretDjwgeNurVCSnAUkNLBfhlEv3Rld5lgjHxLEW4BaFczLMEcc2hQ9P/5LcsftjOiXKn+Uz3RJrepPI8uGJW1cSzBQ3mqoW0Di5X+NV0p49eS8="
   on:
     tags: true
-    python: '3.6'
+    python: '3.7'
     branch: master
   distributions: "sdist bdist_wheel" # Your distributions here
