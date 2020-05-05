@@ -119,7 +119,8 @@ class SequenceSplitJoinExtension:
         self.__split_menu_item_ref = api.create_menu_item(SequenceSplitMenuItem(api))
 
     def close(self):
-        self.__menu_item_ref.close()
+        self.__join_menu_item_ref.close()
+        self.__split_menu_item_ref.close()
 
 Symbolic.register_computation_type("nion.join_sequence", SequenceJoin)
 Symbolic.register_computation_type("nion.split_sequence", SequenceSplit)
