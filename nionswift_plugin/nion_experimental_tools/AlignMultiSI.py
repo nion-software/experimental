@@ -1,10 +1,17 @@
 import typing
+import gettext
+import functools
 import numpy
+
 from nion.data import Core
 from nion.data import DataAndMetadata
 from nion.swift.model import Symbolic
+from nion.swift import Facade
 from nion.typeshed import API_1_0
 from nion.utils import Event
+
+
+_ = gettext.gettext
 
 
 class AlignMultiSI:
@@ -161,3 +168,33 @@ def align_multi_si(api: API_1_0.API, window: API_1_0.DocumentWindow):
     window.display_data_item(aligned_si)
 
 Symbolic.register_computation_type("eels.align_multi_si", AlignMultiSI)
+
+
+class AlignMultiSIMenuItemDelegate:
+
+    def __init__(self, api):
+        self.__api = api
+        self.menu_id = "eels_menu"  # required, specify menu_id where this item will go
+        self.menu_name = _("EELS")  # optional, specify default name if not a standard menu
+        self.menu_before_id = "window_menu"  # optional, specify before menu_id if not a standard menu
+        self.menu_item_name = _("Align sequence of spectrum images")  # menu item name
+
+    def menu_item_execute(self, window):
+        align_multi_si(self.__api, window)
+
+
+class AlignMultiSIExtension:
+
+    # required for Swift to recognize this as an extension class.
+    extension_id = "nion.experimental.align_multi_si"
+
+    def __init__(self, api_broker):
+        # grab the api object.
+        api = api_broker.get_api(version="~1.0")
+        self.__align_multi_si_menu_item_ref = api.create_menu_item(AlignMultiSIMenuItemDelegate(api))
+
+    def close(self):
+        # close will be called when the extension is unloaded. in turn, close any references so they get closed. this
+        # is not strictly necessary since the references will be deleted naturally when this object is deleted.
+        self.__align_multi_si_menu_item_ref.close()
+        self.__align_multi_si_menu_item_ref = None
