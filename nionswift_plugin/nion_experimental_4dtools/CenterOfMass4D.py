@@ -30,12 +30,13 @@ class CenterOfMass4D:
                 graphics = document_controller.target_display.selected_graphics
                 if not graphics:
                     return
-                graphics_variable = self.computation._computation._get_variable('map_regions')
-                num_items = len(graphics_variable.objects_model.items)
-                for _ in range(num_items):
-                    graphics_variable.objects_model.remove_item(0)
+                try:
+                    while True:
+                        self.computation._computation.remove_item_from_objects('map_regions', 0)
+                except IndexError:
+                    pass
                 for graphic in graphics:
-                    graphics_variable.objects_model.append_item(graphic.specifier.rpc_dict)
+                    self.computation._computation.insert_item_into_objects('map_regions', 0, Symbolic.make_item(graphic._graphic))
 
             column = ui.create_column_widget()
             row = ui.create_row_widget()
@@ -111,6 +112,35 @@ class CenterOfMass4DMenuItem:
         self.__computation_data_items = dict()
         self.__tool_tip_boxes = list()
 
+        event_loop = self.__api.application._application.event_loop
+        def schedule_init():
+            if self.__api.application.document_controllers:
+                self.init()
+            else:
+                event_loop.call_later(0.5, schedule_init)
+        schedule_init()
+
+    def init(self):
+        document_model = self.__api.application._application.document_model
+        for computation in document_model.computations:
+            if computation.processing_id == 'nion.center_of_mass_4d':
+                src = computation.get_input('src')
+                if hasattr(src, 'data_item') and src.data_item:
+                    src = src.data_item
+                if src:
+                    target = computation.get_output('target')
+                    if target is None:
+                        continue
+                    target_api = Facade.DataItem(target)
+                    pick_graphic = None
+                    for graphic in target_api.graphics:
+                        if graphic.label == 'Pick':
+                            pick_graphic = graphic
+                            break
+                    if pick_graphic is not None:
+                        display_item = self.__api.application._application.document_model.get_display_item_for_data_item(src)
+                        self.__connect_pick_graphic(pick_graphic, computation, display_item)
+
     def __display_item_changed(self, display_item):
         data_item = display_item.data_item if display_item else None
         if data_item:
@@ -139,6 +169,33 @@ class CenterOfMass4DMenuItem:
         #box = document_controller.show_tool_tip_box(text, timeout)
         self.__tool_tip_boxes.append(box)
 
+    def __connect_pick_graphic(self, pick_graphic, computation, display_item):
+        data_item = (display_item.data_items[0] if
+                     display_item and len(display_item.data_items) > 0 else None)
+        if data_item:
+            def update_collection_index_0(value):
+                collection_index = display_item.display_data_channel.collection_index
+                if value != collection_index[0]:
+                    display_item.display_data_channel.collection_index = (value, collection_index[1], 0)
+
+            def update_collection_index_1(value):
+                collection_index = display_item.display_data_channel.collection_index
+                if value != collection_index[1]:
+                    display_item.display_data_channel.collection_index = (collection_index[0], value, 0)
+
+            computation.pick_graphic_binding_0 = Binding.TuplePropertyBinding(pick_graphic._graphic, 'position', 0, converter=FloatTupleToIntTupleConverter(data_item.data.shape[0], 0))
+            computation.pick_graphic_binding_1 = Binding.TuplePropertyBinding(pick_graphic._graphic, 'position', 1, converter=FloatTupleToIntTupleConverter(data_item.data.shape[1], 1))
+            computation.pick_graphic_binding_0.target_setter = update_collection_index_0
+            computation.pick_graphic_binding_1.target_setter = update_collection_index_1
+            def collection_index_changed(key):
+                if key == 'collection_index':
+                    collection_index = display_item.display_data_channel.collection_index
+                    if int(pick_graphic.position[0]*data_item.data.shape[0]) != collection_index[0]:
+                        computation.pick_graphic_binding_0.update_source(collection_index)
+                    if int(pick_graphic.position[1]*data_item.data.shape[1]) != collection_index[1]:
+                        computation.pick_graphic_binding_1.update_source(collection_index)
+            computation.collection_index_changed_event_listener = display_item.display_data_channel.property_changed_event.listen(collection_index_changed)
+
     def menu_item_execute(self, window: API.DocumentWindow) -> None:
         document_controller = window._document_controller
         selected_display_item = document_controller.selected_display_item
@@ -161,27 +218,7 @@ class CenterOfMass4DMenuItem:
             document_controller.show_display_item(map_display_item)
             pick_graphic = map_data_item.add_point_region(0.5, 0.5)
             pick_graphic.label = 'Pick'
-            def update_collection_index_0(value):
-                collection_index = selected_display_item.display_data_channel.collection_index
-                if value != collection_index[0]:
-                    selected_display_item.display_data_channel.collection_index = (value, collection_index[1], 0)
-
-            def update_collection_index_1(value):
-                collection_index = selected_display_item.display_data_channel.collection_index
-                if value != collection_index[1]:
-                    selected_display_item.display_data_channel.collection_index = (collection_index[0], value, 0)
-            computation.pick_graphic_binding_0 = Binding.TuplePropertyBinding(pick_graphic._graphic, 'position', 0, converter=FloatTupleToIntTupleConverter(data_item.data.shape[0], 0))
-            computation.pick_graphic_binding_1 = Binding.TuplePropertyBinding(pick_graphic._graphic, 'position', 1, converter=FloatTupleToIntTupleConverter(data_item.data.shape[1], 1))
-            computation.pick_graphic_binding_0.target_setter = update_collection_index_0
-            computation.pick_graphic_binding_1.target_setter = update_collection_index_1
-            def collection_index_changed(key):
-                if key == 'collection_index':
-                    collection_index = selected_display_item.display_data_channel.collection_index
-                    if int(pick_graphic.position[0]*data_item.data.shape[0]) != collection_index[0]:
-                        computation.pick_graphic_binding_0.update_source(collection_index)
-                    if int(pick_graphic.position[1]*data_item.data.shape[1]) != collection_index[1]:
-                        computation.pick_graphic_binding_1.update_source(collection_index)
-            computation.collection_index_changed_event_listener = selected_display_item.display_data_channel.property_changed_event.listen(collection_index_changed)
+            self.__connect_pick_graphic(pick_graphic, computation, selected_display_item)
             self.__computation_data_items.update({str(data_item.uuid): 'source',
                                                   str(map_data_item._data_item.uuid): 'center_of_mass_4d'})
             self.__show_tool_tips()
