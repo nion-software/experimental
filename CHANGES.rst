@@ -1,6 +1,11 @@
 Changelog (nionswift-experimental)
 ==================================
 
+0.6.1 (unreleased)
+------------------
+- Fix issue with "Select map graphics" buttons in 4D tools.
+- Reconnect 4D tools pick graphics after a Swift restart.
+
 0.6.0 (2019-10-24)
 ------------------
 - Add 4D tools (menu items and panel).
