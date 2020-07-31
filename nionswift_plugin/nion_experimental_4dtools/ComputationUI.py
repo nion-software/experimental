@@ -26,7 +26,7 @@ class ComputationUIPanelDelegate(object):
         self.__display_item_changed_event_listener = (
                                  document_controller._document_controller.focused_display_item_changed_event.listen(
                                                                                          self.__display_item_changed))
-        self.__computation_updated_event_listeners = []
+        self.__computation_updated_event_listener = None
         self.__progress_updated_event_listeners = []
         self.column = ui.create_column_widget()
 
@@ -77,31 +77,33 @@ class ComputationUIPanelDelegate(object):
                     self.column.add_spacing(15)
         self.column.add_stretch()
 
+    def __get_computations_involved(self, data_item):
+        computations = self.document_controller._document_controller.document_model.computations
+        computations_involved = []
+        for computation in computations:
+            for result in computation.results:
+                if result.specifier and result.specifier.get('uuid') == str(data_item.uuid) and not computation in computations_involved:
+                    computations_involved.append(computation)
+            for variable in computation.variables:
+                if variable.specifier and variable.specifier.get('uuid') == str(data_item.uuid) and not computation in computations_involved:
+                    computations_involved.append(computation)
+        return computations_involved
 
     def __display_item_changed(self, display_item):
         data_item = display_item.data_item if display_item else None
         if data_item:
-            for listener in self.__computation_updated_event_listeners:
-                listener.close()
-            self.__computation_updated_event_listeners = []
+            if self.__computation_updated_event_listener:
+                self.__computation_updated_event_listener.close()
+                self.__computation_updated_event_listener = None
             for listener in self.__progress_updated_event_listeners:
                 listener.close()
             self.__progress_updated_event_listeners = []
-            computations = self.document_controller._document_controller.document_model.computations
-            computations_involved = []
-            for computation in computations:
-                for result in computation.results:
-                    if result.specifier and result.specifier.get('uuid') == str(data_item.uuid) and not computation in computations_involved:
-                        computations_involved.append(computation)
-                for variable in computation.variables:
-                    if variable.specifier and variable.specifier.get('uuid') == str(data_item.uuid) and not computation in computations_involved:
-                        computations_involved.append(computation)
+            self.__update_computation_ui(self.__get_computations_involved(data_item))
 
-            self.__update_computation_ui(computations_involved)
-            for _ in computations_involved:
-                self.__computation_updated_event_listeners.append(
-                        self.document_controller._document_controller.document_model.computation_updated_event.listen(
-                                lambda data_item, *args, **kwargs: self.__update_computation_ui(computations_involved)))
+            def computation_updated(computation):
+                self.__update_computation_ui(self.__get_computations_involved(data_item))
+
+            self.__computation_updated_event_listener = self.document_controller._document_controller.document_model.computation_updated_event.listen(computation_updated)
         else:
             self.column._widget.remove_all()
 
