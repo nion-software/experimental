@@ -1,6 +1,7 @@
 # system imports
 import gettext
 import logging
+import copy
 
 # local libraries
 from nion.typeshed import API_1_0 as API
@@ -57,10 +58,28 @@ class SequenceJoinMenuItem:
         selected_display_items = document_controller.selected_display_items
         data_items = list()
 
-        for display_item in selected_display_items:
+        # Check if it makes sense to copy display properties from the source to the result display item.
+        # For line plots with multiple display layers we want to copy the display properties so that the joined item
+        # look like the original display items. We copy the display properties of the first display item, but only
+        # if the number of display layers is the same for all input display items.
+        display_layers = None
+        legend_position = None
+        display_type = None
+        copy_display_properties = False
+        for i, display_item in enumerate(selected_display_items):
             data_item = display_item.data_items[0] if display_item and len(display_item.data_items) > 0 else None
+
             if data_item:
                 data_items.append(data_item)
+                if (len(display_item.data_items) == 1 and len(data_item.data_shape) > 1 and
+                        (data_item.xdata.datum_dimension_count == 1 or display_item.display_type == 'line_plot')):
+                    if i== 0:
+                        display_layers = copy.deepcopy(display_item.display_layers)
+                        legend_position = display_item.get_display_property('legend_position')
+                        display_type = display_item.display_type
+                        copy_display_properties = True
+                    elif display_layers is not None:
+                        copy_display_properties &= len(display_layers) == len(display_item.display_layers)
 
         if not data_items:
             return
@@ -74,6 +93,15 @@ class SequenceJoinMenuItem:
         computation._computation.source = result_data_item._data_item
         result_display_item = document_controller.document_model.get_display_item_for_data_item(result_data_item._data_item)
         document_controller.show_display_item(result_display_item)
+
+        if copy_display_properties:
+            if display_layers is not None:
+                result_display_item.display_layers = display_layers
+            if legend_position is not None:
+                result_display_item.set_display_property('legend_position', legend_position)
+            if display_type is not None:
+                result_display_item.display_type = display_type
+
 
 class SequenceSplitMenuItem:
     menu_id = "_processing_menu"
@@ -90,6 +118,18 @@ class SequenceSplitMenuItem:
         if not data_item:
             return
 
+        # Check if it makes sense to copy display properties from the source to the result display item.
+        # For line plots with multiple display layers we want to copy the display properties so that the split items
+        # look like the original display item. Exclude case where the display layers are generated from the sequence
+        # dimension because in this case the display layers are not valid anymore.
+        display_layers = None
+        legend_position = None
+        display_type = None
+        if (len(display_item.data_items) == 1 and len(data_item.data_shape) > 2 and
+                (data_item.xdata.datum_dimension_count == 1 or display_item.display_type == 'line_plot')):
+            display_layers = copy.deepcopy(display_item.display_layers)
+            legend_position = display_item.get_display_property('legend_position')
+            display_type = display_item.display_type
         api_data_item = Facade.DataItem(data_item)
 
         if api_data_item.xdata.is_sequence:
@@ -101,9 +141,17 @@ class SequenceSplitMenuItem:
                                                                 inputs={"src": api_data_item},
                                                                 outputs=result_data_items)
             computation._computation.source = result_data_items["target_0"]._data_item
+
             for result_data_item in result_data_items.values():
                 result_display_item = document_controller.document_model.get_display_item_for_data_item(result_data_item._data_item)
                 document_controller.show_display_item(result_display_item)
+
+                if display_layers is not None:
+                    result_display_item.display_layers = display_layers
+                if legend_position is not None:
+                    result_display_item.set_display_property('legend_position', legend_position)
+                if display_type is not None:
+                    result_display_item.display_type = display_type
 
 
 class SequenceSplitJoinExtension:
