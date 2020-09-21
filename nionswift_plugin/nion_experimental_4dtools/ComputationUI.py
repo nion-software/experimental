@@ -82,11 +82,15 @@ class ComputationUIPanelDelegate(object):
         computations_involved = []
         for computation in computations:
             for result in computation.results:
-                if result.specifier and result.specifier.get('uuid') == str(data_item.uuid) and not computation in computations_involved:
-                    computations_involved.append(computation)
+                if data_item in result.output_items:
+                    if not computation in computations_involved:
+                        computations_involved.append(computation)
+                    break
             for variable in computation.variables:
-                if variable.specifier and variable.specifier.get('uuid') == str(data_item.uuid) and not computation in computations_involved:
-                    computations_involved.append(computation)
+                if data_item in variable.input_items:
+                    if not computation in computations_involved:
+                        computations_involved.append(computation)
+                    break
         return computations_involved
 
     def __display_item_changed(self, display_item):
