@@ -1,6 +1,11 @@
 Changelog (nionswift-experimental)
 ==================================
 
+0.7.1 (2020-11-13)
+------------------
+- Make join/split preserve display layers.
+- Utilize improved tracking of 4D back-graphics.
+
 0.7.0 (2020-08-31)
 ------------------
 - Fix issue with "Select map graphics" buttons in 4D tools.
