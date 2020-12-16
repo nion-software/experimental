@@ -1,6 +1,11 @@
 Changelog (nionswift-experimental)
 ==================================
 
+0.7.2 (unreleased)
+------------------
+- Add computation for making an iDPC image out of DPC data.
+- Add affine transform computation.
+
 0.7.1 (2020-11-13)
 ------------------
 - Make join/split preserve display layers.
