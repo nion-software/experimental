@@ -2,6 +2,7 @@
 import gettext
 import logging
 import copy
+import numpy
 
 # local libraries
 from nion.typeshed import API_1_0 as API
@@ -86,7 +87,7 @@ class SequenceJoinMenuItem:
 
         api_data_items = [Facade.DataItem(data_item) for data_item in data_items]
 
-        result_data_item = self.__api.library.create_data_item(title="Joined " + data_items[0].title)
+        result_data_item = self.__api.library.create_data_item_from_data(numpy.zeros((1, 1, 1)), title="Joined " + data_items[0].title)
         computation = self.__api.library.create_computation("nion.join_sequence",
                                                             inputs={"src_list": api_data_items},
                                                             outputs={"target": result_data_item})
