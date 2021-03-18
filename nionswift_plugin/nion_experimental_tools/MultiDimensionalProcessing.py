@@ -13,7 +13,7 @@ from nion.swift.model import Symbolic
 from nion.swift.model import Schema
 from nion.swift.model import DataStructure
 from nion.swift.model import DataItem
-from nion.typeshed import API_1_0
+from nion.typeshed import API_1_0 as API
 
 _ = gettext.gettext
 
@@ -30,7 +30,7 @@ class IntegrateAlongAxis:
     def __init__(self, computation, **kwargs):
         self.computation = computation
 
-    def execute(self, input_data_item: API_1_0.DataItem, integration_axes: str, integration_graphic: typing.Optional[API_1_0.Graphic]=None):
+    def execute(self, input_data_item: API.DataItem, integration_axes: str, integration_graphic: typing.Optional[API.Graphic]=None):
         input_xdata: DataAndMetadata.DataAndMetadata = input_data_item.xdata
         integration_axes = integration_axes._data_structure.entity.entity_type.entity_id
         if integration_axes == "collection":
@@ -231,12 +231,15 @@ def function_apply_multi_dimensional_shifts(xdata: DataAndMetadata.DataAndMetada
     else:
         raise ValueError(f"Unknown shift axis: '{shift_axis}'.")
 
+    # Find the axes that we do not want to shift (== iteration shape)
     iteration_shape = list()
     for i in range(len(xdata.data_shape)):
         if not i in shift_axis_indices:
             iteration_shape.append(xdata.data_shape[i])
     iteration_shape = tuple(iteration_shape)
 
+    # Now we need to find matching axes between the iteration shape and the provided shifts. We can then iterate over
+    # these matching axis and apply the shifts.
     for i in range(len(iteration_shape) - len(shifts_shape) + 1):
         if iteration_shape[i:i+len(shifts_shape)] == shifts_shape:
             shifts_start_axis = i
@@ -245,29 +248,42 @@ def function_apply_multi_dimensional_shifts(xdata: DataAndMetadata.DataAndMetada
     else:
         raise ValueError("Did not find any axis matching the shifts shape.")
 
+    # Now drop all iteration axes after the last shift axis. This will greatly improve speed because we don't have
+    # to iterate and shift each individual element but can work in larger sub-arrays. It will also be beneficial for
+    # working with chunked hdf5 files because we usually have our chunks along the last axes.
+    squeezed_iteration_shape = iteration_shape[:shifts_end_axis]
+    # Chunking it up finer (still aligned with chunks on disk) does not make it faster (actually slower by about a factor
+    # of 3). This might change with a storage handler that allows multi-threaded access but for now with h5py we don't
+    # want to use this.
+    # squeezed_iteration_shape = iteration_shape[:max(shifts_end_axis, shift_axis_indices[0])]
+
     if out is None:
-        result = numpy.empty_like(xdata.data)
+        result = numpy.empty(xdata.data_shape, dtype=xdata.data_dtype)
     else:
         result = out.data
 
-    # for i in range(numpy.prod(iteration_shape, dtype=numpy.int64)):
-    #     coords = numpy.unravel_index(i, iteration_shape)
-    #     shift_coords = coords[shifts_start_axis:shifts_end_axis]
-    #     data_coords = coords[:shift_axis_indices[0]] + (...,) + coords[shift_axis_indices[0]:]
-    #     result[data_coords] = scipy.ndimage.shift(xdata.data[data_coords], shifts[shift_coords], order=1)
+    # for i in range(numpy.prod(squeezed_iteration_shape, dtype=numpy.int64)):
+    #     coords = numpy.unravel_index(i, squeezed_iteration_shape)
+    #     for i, ind in enumerate(shift_axis_indices):
+    #         shifts_array[ind - len(squeezed_iteration_shape)] = shifts[coords][i]
+    #     result[coords] = scipy.ndimage.shift(xdata.data[coords], shifts_array, order=1)
 
-    navigation_len = numpy.prod(iteration_shape, dtype=numpy.int64)
+    navigation_len = numpy.prod(squeezed_iteration_shape, dtype=numpy.int64)
     sections = list(range(0, navigation_len, max(1, navigation_len//8)))
     sections.append(navigation_len)
     barrier = threading.Barrier(len(sections))
 
     def run_on_thread(range_):
         try:
+            shifts_array = numpy.zeros(len(shift_axis_indices) + (len(iteration_shape) - len(squeezed_iteration_shape)))
             for i in range_:
-                coords = numpy.unravel_index(i, iteration_shape)
-                shift_coords = coords[shifts_start_axis:shifts_end_axis]
-                data_coords = coords[:shift_axis_indices[0]] + (...,) + coords[shift_axis_indices[0]:]
-                result[data_coords] = scipy.ndimage.shift(xdata.data[data_coords], shifts[shift_coords], order=1)
+                coords = numpy.unravel_index(i, squeezed_iteration_shape)
+                for j, ind in enumerate(shift_axis_indices):
+                    shift_coords = coords[:shifts_end_axis]
+                    shifts_array[ind - len(squeezed_iteration_shape)] = shifts[shift_coords][j]
+                # if i % max((range_.stop - range_.start) // 4, 1) == 0:
+                #     print(f'Working on slice {coords}: shifting by {shifts_array}')
+                result[coords] = scipy.ndimage.shift(xdata.data[coords], shifts_array, order=1)
         finally:
             barrier.wait()
 
@@ -296,14 +312,14 @@ class MeasureShifts:
     def __init__(self, computation, **kwargs):
         self.computation = computation
 
-    def execute(self, input_data_item: API_1_0.DataItem, shift_axis: str, reference_index: typing.Union[None, int, typing.Sequence[int]]=None, shift_bounds_graphic: typing.Optional[API_1_0.Graphic]=None):
+    def execute(self, input_data_item: API.DataItem, shift_axis: str, reference_index: typing.Union[None, int, typing.Sequence[int]]=None, bounds_graphic: typing.Optional[API.Graphic]=None):
         input_xdata = input_data_item.xdata
         bounds = None
-        if shift_bounds_graphic is not None:
-            if shift_bounds_graphic.graphic_type == "interval-graphic":
-                bounds = shift_bounds_graphic.interval
+        if bounds_graphic is not None:
+            if bounds_graphic.graphic_type == "interval-graphic":
+                bounds = bounds_graphic.interval
             else:
-                bounds = shift_bounds_graphic.bounds
+                bounds = bounds_graphic.bounds
         shift_axis = shift_axis._data_structure.entity.entity_type.entity_id
         self.__shifts_xdata = function_measure_multi_dimensional_shifts(input_xdata, shift_axis, reference_index=reference_index, bounds=bounds)
 
@@ -312,14 +328,14 @@ class MeasureShifts:
 
 
 class MeasureShiftsMenuItemDelegate:
-    def __init__(self, api: API_1_0.API):
+    def __init__(self, api: API.API):
         self.__api = api
         self.menu_id = "multi_dimensional_processing_menu"
         self.menu_name = _("Multi-Dimensional Processing")
         self.menu_before_id = "window_menu"
         self.menu_item_name = _("Measure shifts")
 
-    def menu_item_execute(self, window: API_1_0.DocumentWindow):
+    def menu_item_execute(self, window: API.DocumentWindow):
         selected_data_item = window.target_data_item
 
         if not selected_data_item or not selected_data_item.xdata:
@@ -327,7 +343,9 @@ class MeasureShiftsMenuItemDelegate:
 
         bounds_graphic = None
         if selected_data_item.display.selected_graphics:
-            bounds_graphic = selected_data_item.display.selected_graphics
+            for graphic in selected_data_item.display.selected_graphics:
+                if graphic.graphic_type in {"rect-graphic", "interval-graphic"}:
+                    bounds_graphic = graphic
 
         # If we have a bound graphic we probably want to align the displayed dimensions
         if bounds_graphic:
@@ -378,26 +396,31 @@ class ApplyShifts:
     def __init__(self, computation, **kwargs):
         self.computation = computation
 
-    def execute(self, input_data_item: API_1_0.DataItem, shifts_data_item: API_1_0.DataItem, shift_axis: str):
+    def execute(self, input_data_item: API.DataItem, shifts_data_item: API.DataItem, shift_axis: str):
         input_xdata = input_data_item.xdata
         shifts  = shifts_data_item.data
         shift_axis = shift_axis._data_structure.entity.entity_type.entity_id
-        shifted = self.computation.get_result("shifted")
-        function_apply_multi_dimensional_shifts(input_xdata, shifts, shift_axis, out=shifted.xdata)
+        # Like this we directly write to the underlying storage and don't have to cache everything in memory first
+        result_data_item = self.computation.get_result('shifted')
+        function_apply_multi_dimensional_shifts(input_xdata, shifts, shift_axis, out=result_data_item.xdata)
+        # self.__result_xdata = function_apply_multi_dimensional_shifts(input_xdata, shifts, shift_axis)
 
     def commit(self):
+        # self.computation.set_referenced_xdata("shifted", self.__result_xdata)
+        # self.__result_xdata = None
+        # Still call "set_referenced_xdata" to notify Swift that the data has been updated.
         self.computation.set_referenced_xdata("shifted", self.computation.get_result("shifted").xdata)
 
 
 class ApplyShiftsMenuItemDelegate:
-    def __init__(self, api: API_1_0.API):
+    def __init__(self, api: API.API):
         self.__api = api
         self.menu_id = "multi_dimensional_processing_menu"
         self.menu_name = _("Multi-Dimensional Processing")
         self.menu_before_id = "window_menu"
         self.menu_item_name = _("Apply shifts")
 
-    def menu_item_execute(self, window: API_1_0.DocumentWindow):
+    def menu_item_execute(self, window: API.DocumentWindow):
         selected_display_items = window._document_controller._get_two_data_sources()
         error_msg = "Select a multi-dimensional data item and another one that contains shifts that can be broadcast to the shape of the first one."
         assert selected_display_items[0][0] is not None, error_msg
@@ -492,14 +515,14 @@ class ApplyShiftsMenuItemDelegate:
 
 
 class IntegrateAlongAxisMenuItemDelegate:
-    def __init__(self, api: API_1_0.API):
+    def __init__(self, api: API.API):
         self.__api = api
         self.menu_id = "multi_dimensional_processing_menu"
         self.menu_name = _("Multi-Dimensional Processing")
         self.menu_before_id = "window_menu"
         self.menu_item_name = _("Integrate axis")
 
-    def menu_item_execute(self, window: API_1_0.DocumentWindow):
+    def menu_item_execute(self, window: API.DocumentWindow):
         selected_data_item = window.target_data_item
 
         if not selected_data_item or not selected_data_item.xdata:
@@ -546,6 +569,147 @@ class IntegrateAlongAxisMenuItemDelegate:
         window.display_data_item(result_data_item)
 
 
+class Crop:
+    label = _("Crop")
+    inputs = {"input_data_item": {"label": _("Input data item")},
+              "crop_axis": {"label": _("Crop along this axis"), "entity_id": "axis_choice"},
+              "crop_graphic": {"label": _("Crop bounds")},
+              "crop_bounds_left": {"label": _("Crop bound left")},
+              "crop_bounds_right": {"label": _("Crop bound right")},
+              "crop_bounds_top": {"label": _("Crop bound top")},
+              "crop_bounds_bottom": {"label": _("Crop bound bottom")}}
+    outputs = {"cropped": {"label": _("Cropped")}}
+
+    def __init__(self, computation, **kwargs):
+        self.computation = computation
+
+    def execute(self, input_data_item: API.DataItem, crop_axis: str, crop_graphic: typing.Optional[API.Graphic]=None, **kwargs):
+        input_xdata: DataAndMetadata.DataAndMetadata = input_data_item.xdata
+        crop_axis = crop_axis._data_structure.entity.entity_type.entity_id
+        if crop_axis == "collection":
+            assert input_xdata.is_collection
+            crop_axis_indices = list(input_xdata.collection_dimension_indexes)
+        elif crop_axis == "sequence":
+            assert input_xdata.is_sequence
+            crop_axis_indices = [input_xdata.sequence_dimension_index]
+        else:
+            crop_axis_indices = list(input_xdata.datum_dimension_indexes)
+
+        if crop_graphic is not None:
+            if len(crop_axis_indices) == 2:
+                bounds = crop_graphic.bounds
+                assert numpy.ndim(bounds) == 2
+                crop_bounds_left = bounds[0][1] * input_xdata.data_shape[crop_axis_indices[1]]
+                crop_bounds_right = (bounds[0][1] + bounds[1][1]) * input_xdata.data_shape[crop_axis_indices[1]]
+                crop_bounds_top = bounds[0][0] * input_xdata.data_shape[crop_axis_indices[0]]
+                crop_bounds_bottom = (bounds[0][0] + bounds[1][0]) * input_xdata.data_shape[crop_axis_indices[0]]
+            else:
+                bounds = crop_graphic.interval
+                assert numpy.ndim(bounds) == 1
+                crop_bounds_left = bounds[0] * input_xdata.data_shape[crop_axis_indices[0]]
+                crop_bounds_right = bounds[1] * input_xdata.data_shape[crop_axis_indices[0]]
+        else:
+            crop_bounds_left = kwargs.get("crop_bounds_left")
+            crop_bounds_right = kwargs.get("crop_bounds_right")
+            crop_bounds_top = kwargs.get("crop_bounds_top")
+            crop_bounds_bottom = kwargs.get("crop_bounds_bottom")
+
+        if len(crop_axis_indices) == 2:
+            crop_bounds_left = max(0, crop_bounds_left)
+            crop_bounds_top = max(0, crop_bounds_top)
+            if crop_bounds_right == -1:
+                crop_bounds_right = None
+            else:
+                crop_bounds_right = min(crop_bounds_right, input_xdata.data_shape[crop_axis_indices[1]])
+            if crop_bounds_bottom == -1:
+                crop_bounds_bottom = None
+            else:
+                crop_bounds_bottom = min(crop_bounds_bottom, input_xdata.data_shape[crop_axis_indices[0]])
+        else:
+            crop_bounds_left = max(0, crop_bounds_left)
+            if crop_bounds_right == -1:
+                crop_bounds_right = None
+            else:
+                crop_bounds_right = min(crop_bounds_right, input_xdata.data_shape[crop_axis_indices[0]])
+
+        crop_slices = tuple()
+        for i in range(len(input_xdata.data_shape)):
+            if len(crop_axis_indices) == 1 and i == crop_axis_indices[0]:
+                crop_slices += (slice(crop_bounds_left, crop_bounds_right),)
+            elif len(crop_axis_indices) == 2 and i == crop_axis_indices[0]:
+                crop_slices += (slice(crop_bounds_top, crop_bounds_bottom),)
+            elif len(crop_axis_indices) == 2 and i == crop_axis_indices[1]:
+                crop_slices += (slice(crop_bounds_left, crop_bounds_right),)
+            else:
+                crop_slices += (slice(None),)
+
+        self.__result_xdata = input_xdata[crop_slices]
+
+    def commit(self):
+        self.computation.set_referenced_xdata("cropped", self.__result_xdata)
+
+
+class CropMenuItemDelegate:
+    def __init__(self, api: API.API):
+        self.__api = api
+        self.menu_id = "multi_dimensional_processing_menu"
+        self.menu_name = _("Multi-Dimensional Processing")
+        self.menu_before_id = "window_menu"
+        self.menu_item_name = _("Crop")
+
+    def menu_item_execute(self, window: API.DocumentWindow):
+        selected_data_item = window.target_data_item
+
+        if not selected_data_item or not selected_data_item.xdata:
+            return
+
+        crop_graphic = None
+        if selected_data_item.display.selected_graphics:
+            for graphic in selected_data_item.display.selected_graphics:
+                if graphic.graphic_type in {"rect-graphic", "interval-graphic"}:
+                    crop_graphic = graphic
+                    break
+
+        # If we have a crop graphic we probably want to integrate the displayed dimensions
+        if crop_graphic:
+            # For collections with 1D data we see the collection dimensions
+            if selected_data_item.xdata.is_collection and selected_data_item.xdata.datum_dimension_count == 1:
+                crop_axes = "collection"
+            # Otherwise we see the data dimensions
+            else:
+                crop_axes = "data"
+        # If not, use some generic rules
+        else:
+            if selected_data_item.xdata.is_collection and selected_data_item.xdata.datum_dimension_count == 1:
+                crop_axes = "collection"
+            else:
+                crop_axes = "data"
+
+        # Make a result data item with 3 dimensions to ensure we get a large_format data item
+        result_data_item = self.__api.library.create_data_item_from_data(numpy.zeros((1,1,1)), title="Cropped {}".format(selected_data_item.title))
+
+        crop_axes_structure = DataStructure.DataStructure(structure_type=crop_axes)
+        self.__api.library._document_model.append_data_structure(crop_axes_structure)
+        crop_axes_structure.source = result_data_item._data_item
+
+        inputs = {"input_data_item": selected_data_item,
+                  "crop_axis": self.__api._new_api_object(crop_axes_structure),
+                  }
+        if crop_graphic:
+            inputs["crop_graphic"] = crop_graphic
+        else:
+            inputs["crop_bounds_left"] = 0
+            inputs["crop_bounds_right"] = -1
+            inputs["crop_bounds_top"] = 0
+            inputs["crop_bounds_bottom"] = -1
+
+        computation = self.__api.library.create_computation("nion.crop_multi_dimensional",
+                                                            inputs=inputs,
+                                                            outputs={"cropped": result_data_item})
+        computation._computation.source = result_data_item._data_item
+        window.display_data_item(result_data_item)
+
+
 class MultiDimensionalProcessingExtension:
 
     extension_id = "nion.experimental.multi_dimensional_processing"
@@ -555,6 +719,7 @@ class MultiDimensionalProcessingExtension:
         self.__integrate_menu_item_ref = api.create_menu_item(IntegrateAlongAxisMenuItemDelegate(api))
         self.__measure_shifts_menu_item_ref = api.create_menu_item(MeasureShiftsMenuItemDelegate(api))
         self.__apply_shifts_menu_item_ref = api.create_menu_item(ApplyShiftsMenuItemDelegate(api))
+        self.__crop_menu_item_ref = api.create_menu_item(CropMenuItemDelegate(api))
 
     def close(self):
         self.__integrate_menu_item_ref.close()
@@ -563,11 +728,14 @@ class MultiDimensionalProcessingExtension:
         self.__measure_shifts_menu_item_ref = None
         self.__apply_shifts_menu_item_ref.close()
         self.__apply_shifts_menu_item_ref = None
+        self.__crop_menu_item_ref.close()
+        self.__crop_menu_item_ref = None
 
 
 Symbolic.register_computation_type("nion.integrate_along_axis", IntegrateAlongAxis)
 Symbolic.register_computation_type("nion.measure_shifts", MeasureShifts)
 Symbolic.register_computation_type("nion.apply_shifts", ApplyShifts)
+Symbolic.register_computation_type("nion.crop_multi_dimensional", Crop)
 
 AxesChoice = Schema.entity("axis_choice", None, None, {})
 
