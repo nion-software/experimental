@@ -98,7 +98,7 @@ class AlignMultiSI:
             bounds = align_region.bounds
         translations = Core.function_sequence_measure_relative_translation(haadf_xdata,
                                                                            haadf_xdata[align_index],
-                                                                           10, True, bounds=bounds)
+                                                                           True, bounds=bounds)
         sequence_shape = haadf_sequence_data_item.xdata.sequence_dimension_shape
         data_zeros = (0,) * si_xdata.datum_dimension_count
         c = int(numpy.product(sequence_shape))

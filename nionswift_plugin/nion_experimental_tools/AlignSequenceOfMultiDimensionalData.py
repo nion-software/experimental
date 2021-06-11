@@ -30,7 +30,7 @@ class AlignMultiDimensionalSequence:
         bounds = align_region.bounds
         translations = Core.function_sequence_measure_relative_translation(haadf_xdata,
                                                                            haadf_xdata[align_index],
-                                                                           10, True, bounds=bounds)
+                                                                           True, bounds=bounds)
         sequence_shape = haadf_sequence_data_item.xdata.sequence_dimension_shape
         c = int(numpy.product(sequence_shape))
         haadf_result_data = numpy.empty_like(haadf_xdata.data)
