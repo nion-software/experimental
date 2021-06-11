@@ -84,6 +84,22 @@ class TestMultiDimensionalProcessing(unittest.TestCase):
 
             self.assertTrue(numpy.allclose(result.data, shifted))
 
+        with self.subTest("Test for a sequence of 1D collections of 2D data, shift collection dimension along sequence axis"):
+            shape = (5, 2, 3, 4)
+            data = numpy.arange(numpy.prod(shape)).reshape(shape)
+            xdata = DataAndMetadata.new_data_and_metadata(data, data_descriptor=DataAndMetadata.DataDescriptor(True, 1, 2))
+
+            shifts = numpy.linspace(0, 1, num=5)
+
+            result = MultiDimensionalProcessing.function_apply_multi_dimensional_shifts(xdata, shifts, "collection")
+
+            shifted = numpy.empty_like(data)
+
+            for i in range(shape[0]):
+                shifted[i] = scipy.ndimage.shift(data[i], [shifts[i], 0.0, 0.0], order=1)
+
+            self.assertTrue(numpy.allclose(result.data, shifted))
+
     def test_function_apply_multi_dimensional_shifts_5d(self):
         with self.subTest("Test for a sequence of 4D images, shift collection dimensions along sequence axis"):
             shape = (5, 2, 3, 4, 6)
@@ -253,3 +269,88 @@ class TestMultiDimensionalProcessing(unittest.TestCase):
                                                                                           reference_index=reference_index)
 
             self.assertTrue(numpy.allclose(result.data, -1.0 * (shifts - shifts[numpy.unravel_index(reference_index, shifts.shape[:-1])]), atol=0.5))
+
+    def test_apply_shifts_guesses_correct_shift_axis(self):
+        with self.subTest("Test sequence of SIs, shift sequence dimension along collection axis."):
+            data = numpy.zeros((5, 3, 3, 7))
+            shifts = numpy.zeros((5, 2))
+
+            data_descriptor = DataAndMetadata.DataDescriptor(True, 2, 1)
+            xdata = DataAndMetadata.new_data_and_metadata(data, data_descriptor=data_descriptor)
+            shifts_xdata = DataAndMetadata.new_data_and_metadata(shifts)
+
+            shift_axis = MultiDimensionalProcessing.ApplyShiftsMenuItemDelegate.guess_shift_axis(shifts_xdata, xdata)
+
+            self.assertEqual(shift_axis, "collection")
+
+        with self.subTest("Test sequence of SIs, shift collection dimension along data axis."):
+            data = numpy.zeros((5, 3, 3, 7))
+            shifts = numpy.zeros((3, 3))
+
+            data_descriptor = DataAndMetadata.DataDescriptor(True, 2, 1)
+            xdata = DataAndMetadata.new_data_and_metadata(data, data_descriptor=data_descriptor)
+            shifts_xdata = DataAndMetadata.new_data_and_metadata(shifts)
+
+            shift_axis = MultiDimensionalProcessing.ApplyShiftsMenuItemDelegate.guess_shift_axis(shifts_xdata, xdata)
+
+            self.assertEqual(shift_axis, "data")
+
+        with self.subTest("Test sequence of SIs, shift sequence dimension along data axis."):
+            data = numpy.zeros((5, 3, 3, 7))
+            shifts = numpy.zeros((5,))
+
+            data_descriptor = DataAndMetadata.DataDescriptor(True, 2, 1)
+            xdata = DataAndMetadata.new_data_and_metadata(data, data_descriptor=data_descriptor)
+            shifts_xdata = DataAndMetadata.new_data_and_metadata(shifts)
+
+            shift_axis = MultiDimensionalProcessing.ApplyShiftsMenuItemDelegate.guess_shift_axis(shifts_xdata, xdata)
+
+            self.assertEqual(shift_axis, "data")
+
+        with self.subTest("Test sequence of 4D Data, shift sequence dimension along collection axis."):
+            data = numpy.zeros((5, 3, 3, 4, 7))
+            shifts = numpy.zeros((5, 2))
+
+            data_descriptor = DataAndMetadata.DataDescriptor(True, 2, 2)
+            xdata = DataAndMetadata.new_data_and_metadata(data, data_descriptor=data_descriptor)
+            shifts_xdata = DataAndMetadata.new_data_and_metadata(shifts)
+
+            shift_axis = MultiDimensionalProcessing.ApplyShiftsMenuItemDelegate.guess_shift_axis(shifts_xdata, xdata)
+
+            self.assertEqual(shift_axis, "collection")
+
+        with self.subTest("Test sequence of 4D Data, shift collection dimension along data axis."):
+            data = numpy.zeros((5, 3, 3, 4, 7))
+            shifts = numpy.zeros((3, 3, 2))
+
+            data_descriptor = DataAndMetadata.DataDescriptor(True, 2, 2)
+            xdata = DataAndMetadata.new_data_and_metadata(data, data_descriptor=data_descriptor)
+            shifts_xdata = DataAndMetadata.new_data_and_metadata(shifts)
+
+            shift_axis = MultiDimensionalProcessing.ApplyShiftsMenuItemDelegate.guess_shift_axis(shifts_xdata, xdata)
+
+            self.assertEqual(shift_axis, "data")
+
+        with self.subTest("Test sequence of 2D images, shift sequence dimension along data axis."):
+            data = numpy.zeros((5, 3, 3))
+            shifts = numpy.zeros((5, 2))
+
+            data_descriptor = DataAndMetadata.DataDescriptor(True, 0, 2)
+            xdata = DataAndMetadata.new_data_and_metadata(data, data_descriptor=data_descriptor)
+            shifts_xdata = DataAndMetadata.new_data_and_metadata(shifts)
+
+            shift_axis = MultiDimensionalProcessing.ApplyShiftsMenuItemDelegate.guess_shift_axis(shifts_xdata, xdata)
+
+            self.assertEqual(shift_axis, "data")
+
+        with self.subTest("Test SI, shift collection dimension along data axis."):
+            data = numpy.zeros((5, 5, 3))
+            shifts = numpy.zeros((5, 5))
+
+            data_descriptor = DataAndMetadata.DataDescriptor(False, 2, 1)
+            xdata = DataAndMetadata.new_data_and_metadata(data, data_descriptor=data_descriptor)
+            shifts_xdata = DataAndMetadata.new_data_and_metadata(shifts)
+
+            shift_axis = MultiDimensionalProcessing.ApplyShiftsMenuItemDelegate.guess_shift_axis(shifts_xdata, xdata)
+
+            self.assertEqual(shift_axis, "data")

@@ -4,7 +4,6 @@ import copy
 import numpy
 import scipy.ndimage
 import threading
-import time
 
 from nion.data import Core
 from nion.data import DataAndMetadata
@@ -30,7 +29,7 @@ class IntegrateAlongAxis:
     def __init__(self, computation, **kwargs):
         self.computation = computation
 
-    def execute(self, input_data_item: API.DataItem, integration_axes: str, integration_graphic: typing.Optional[API.Graphic]=None):
+    def execute(self, input_data_item: API.DataItem, integration_axes: typing.Any, integration_graphic: typing.Optional[API.Graphic]=None):
         input_xdata: DataAndMetadata.DataAndMetadata = input_data_item.xdata
         integration_axes = integration_axes._data_structure.entity.entity_type.entity_id
         if integration_axes == "collection":
@@ -123,7 +122,7 @@ class IntegrateAlongAxis:
 def function_measure_multi_dimensional_shifts(xdata: DataAndMetadata.DataAndMetadata,
                                               shift_axis: str,
                                               reference_index: typing.Union[None, int, typing.Sequence[int]]=None,
-                                              bounds: typing.Optional[typing.Sequence[int]]=None) -> numpy.ndarray:
+                                              bounds: typing.Any=None) -> numpy.ndarray:
     if shift_axis == "collection":
         assert xdata.is_collection
         if xdata.collection_dimension_count == 2:
@@ -144,16 +143,18 @@ def function_measure_multi_dimensional_shifts(xdata: DataAndMetadata.DataAndMeta
     else:
         raise ValueError(f"Unknown shift axis: '{shift_axis}'.")
 
-    iteration_shape = list()
+    iteration_shape: typing.Tuple[int, ...] = tuple()
     dimensional_calibrations = list()
     intensity_calibration = None
     for i in range(len(xdata.data_shape)):
         if not i in shift_axis_indices:
-            iteration_shape.append(xdata.data_shape[i])
+            iteration_shape += (xdata.data_shape[i],)
             dimensional_calibrations.append(xdata.dimensional_calibrations[i])
         else:
             intensity_calibration = xdata.dimensional_calibrations[i]
-    iteration_shape = tuple(iteration_shape)
+
+    shape: typing.Tuple[int, ...]
+    register_slice: typing.Union[slice, typing.Tuple[slice, slice]]
 
     if shifts_ndim == 1:
         result_shape = iteration_shape + (2,)
@@ -232,11 +233,13 @@ def function_apply_multi_dimensional_shifts(xdata: DataAndMetadata.DataAndMetada
         raise ValueError(f"Unknown shift axis: '{shift_axis}'.")
 
     # Find the axes that we do not want to shift (== iteration shape)
-    iteration_shape = list()
+    iteration_shape: typing.Tuple[int, ...] = tuple()
+    iteration_shape_offset = 0
     for i in range(len(xdata.data_shape)):
         if not i in shift_axis_indices:
-            iteration_shape.append(xdata.data_shape[i])
-    iteration_shape = tuple(iteration_shape)
+            iteration_shape += (xdata.data_shape[i],)
+        elif len(iteration_shape) == 0:
+            iteration_shape_offset += 1
 
     # Now we need to find matching axes between the iteration shape and the provided shifts. We can then iterate over
     # these matching axis and apply the shifts.
@@ -276,20 +279,38 @@ def function_apply_multi_dimensional_shifts(xdata: DataAndMetadata.DataAndMetada
     def run_on_thread(range_):
         try:
             shifts_array = numpy.zeros(len(shift_axis_indices) + (len(iteration_shape) - len(squeezed_iteration_shape)))
-            for i in range_:
-                coords = numpy.unravel_index(i, squeezed_iteration_shape)
-                for j, ind in enumerate(shift_axis_indices):
+            if shifts_end_axis < len(shifts.shape):
+                for i in range_:
+                    coords = numpy.unravel_index(i, squeezed_iteration_shape)
                     shift_coords = coords[:shifts_end_axis]
-                    shifts_array[ind - len(squeezed_iteration_shape)] = shifts[shift_coords][j]
-                # if i % max((range_.stop - range_.start) // 4, 1) == 0:
-                #     print(f'Working on slice {coords}: shifting by {shifts_array}')
-                result[coords] = scipy.ndimage.shift(xdata.data[coords], shifts_array, order=1)
+                    for j, ind in enumerate(shift_axis_indices):
+                        shifts_array[ind - len(squeezed_iteration_shape)] = shifts[shift_coords][j]
+                    # if i % max((range_.stop - range_.start) // 4, 1) == 0:
+                    #     print(f'Working on slice {coords}: shifting by {shifts_array}')
+                    result[coords] = scipy.ndimage.shift(xdata.data[coords], shifts_array, order=1)
+            # Note: Once we have multi-dimensional sequences, we need and implementation for iteration_shape_offset != 0
+            # and shifts for more than 1-D data (so similar to the loop above but with offset)
+            elif iteration_shape_offset != 0:
+                offset_slices = tuple([slice(None) for _ in range(iteration_shape_offset)])
+                for i in range_:
+                    shift_coords = numpy.unravel_index(i, squeezed_iteration_shape)
+                    coords = offset_slices + shift_coords
+                    shifts_array[0] = shifts[shift_coords]
+                    result[coords] = scipy.ndimage.shift(xdata.data[coords], shifts_array, order=1)
+            else:
+                for i in range_:
+                    coords = numpy.unravel_index(i, squeezed_iteration_shape)
+                    shifts_array[0] = shifts[coords]
+                    result[coords] = scipy.ndimage.shift(xdata.data[coords], shifts_array, order=1)
         finally:
             barrier.wait()
 
     for i in range(len(sections) - 1):
         threading.Thread(target=run_on_thread, args=(range(sections[i], sections[i+1]),)).start()
     barrier.wait()
+    # For debugging it is helpful to run a non-threaded version of the code. Comment out the 3 lines above and uncomment
+    # the line below to do so. You also need to comment out "barrier.wait()" in the function running on the thread.
+    # run_on_thread(range(0, navigation_len))
 
     if out is None:
         return DataAndMetadata.new_data_and_metadata(result,
@@ -312,7 +333,7 @@ class MeasureShifts:
     def __init__(self, computation, **kwargs):
         self.computation = computation
 
-    def execute(self, input_data_item: API.DataItem, shift_axis: str, reference_index: typing.Union[None, int, typing.Sequence[int]]=None, bounds_graphic: typing.Optional[API.Graphic]=None):
+    def execute(self, input_data_item: API.DataItem, shift_axis: typing.Any, reference_index: typing.Union[None, int, typing.Sequence[int]]=None, bounds_graphic: typing.Optional[API.Graphic]=None):
         input_xdata = input_data_item.xdata
         bounds = None
         if bounds_graphic is not None:
@@ -396,7 +417,7 @@ class ApplyShifts:
     def __init__(self, computation, **kwargs):
         self.computation = computation
 
-    def execute(self, input_data_item: API.DataItem, shifts_data_item: API.DataItem, shift_axis: str):
+    def execute(self, input_data_item: API.DataItem, shifts_data_item: API.DataItem, shift_axis: typing.Any):
         input_xdata = input_data_item.xdata
         shifts  = shifts_data_item.data
         shift_axis = shift_axis._data_structure.entity.entity_type.entity_id
@@ -420,6 +441,57 @@ class ApplyShiftsMenuItemDelegate:
         self.menu_before_id = "window_menu"
         self.menu_item_name = _("Apply shifts")
 
+    @staticmethod
+    def guess_shift_axis(shifts_xdata: DataAndMetadata.DataAndMetadata, input_xdata: DataAndMetadata.DataAndMetadata) -> str:
+        shifts_shape = shifts_xdata.data.shape
+        data_shape = input_xdata.data.shape
+        for i in range(len(data_shape) - len(shifts_shape) + 1):
+            if data_shape[i:i+len(shifts_shape)] == shifts_shape:
+                shifts_start_axis = i
+                shifts_end_axis = i + len(shifts_shape)
+                break
+            elif data_shape[i:i+len(shifts_shape)-1] == shifts_shape[:-1] and shifts_shape[-1] == 2:
+                shifts_start_axis = i
+                shifts_end_axis = i + len(shifts_shape) - 1
+                break
+        else:
+            raise ValueError("Did not find any axis matching the shifts shape.")
+
+        shifts_indexes = range(shifts_start_axis, shifts_end_axis)
+        shift_axis_points = {"collection": 0, "sequence": 0, "data": 0}
+        if input_xdata.is_collection:
+            collection_dimension_indexes = input_xdata.collection_dimension_indexes
+            cond = False
+            for ind in collection_dimension_indexes:
+                if ind in shifts_indexes:
+                    cond = True
+            if not cond and (len(collection_dimension_indexes) == 1 or len(collection_dimension_indexes) == shifts_shape[-1]):
+                shift_axis_points["collection"] += 1
+
+        if input_xdata.is_sequence:
+            sequence_dimension_index = input_xdata.sequence_dimension_index
+            if not sequence_dimension_index in shifts_indexes:
+                shift_axis_points["sequence"] += 1
+
+        datum_dimension_indexes = input_xdata.datum_dimension_indexes
+        cond = False
+        for ind in datum_dimension_indexes:
+            if ind in shifts_indexes:
+                cond = True
+        if not cond and (len(datum_dimension_indexes) == 1 or len(datum_dimension_indexes) == shifts_shape[-1]):
+            shift_axis_points["data"] += 1
+
+        if shift_axis_points["collection"] > 0:
+            shift_axis = "collection"
+        elif shift_axis_points["data"] > 0:
+            shift_axis = "data"
+        elif shift_axis_points["sequence"] > 0:
+            shift_axis = "sequence"
+        else:
+            shift_axis = "data"
+
+        return shift_axis
+
     def menu_item_execute(self, window: API.DocumentWindow):
         selected_display_items = window._document_controller._get_two_data_sources()
         error_msg = "Select a multi-dimensional data item and another one that contains shifts that can be broadcast to the shape of the first one."
@@ -442,52 +514,7 @@ class ApplyShiftsMenuItemDelegate:
         else:
             raise ValueError(error_msg)
 
-        shifts_shape = shifts_di.data.shape
-        data_shape = input_di.data.shape
-        for i in range(len(data_shape) - len(shifts_shape) + 1):
-            if data_shape[i:i+len(shifts_shape)] == shifts_shape:
-                shifts_start_axis = i
-                shifts_end_axis = i + len(shifts_shape)
-                break
-            elif data_shape[i:i+len(shifts_shape)-1] == shifts_shape[:-1] and shifts_shape[-1] == 2:
-                shifts_start_axis = i
-                shifts_end_axis = i + len(shifts_shape) - 1
-                break
-        else:
-            raise ValueError("Did not find any axis matching the shifts shape.")
-
-        shifts_indexes = range(shifts_start_axis, shifts_end_axis)
-        shift_axis_points = {"collection": 0, "sequence": 0, "data": 0}
-        if input_di.xdata.is_collection:
-            collection_dimension_indexes = input_di.xdata.collection_dimension_indexes
-            cond = False
-            for ind in collection_dimension_indexes:
-                if ind in shifts_indexes:
-                    cond = True
-            if not cond and (len(collection_dimension_indexes) == 1 or len(collection_dimension_indexes) == shifts_shape[-1]):
-                shift_axis_points["collection"] += 1
-
-        if input_di.xdata.is_sequence:
-            sequence_dimension_index = input_di.xdata.sequence_dimension_index
-            if not sequence_dimension_index in shifts_indexes:
-                shift_axis_points["sequence"] += 1
-
-        datum_dimension_indexes = input_di.xdata.datum_dimension_indexes
-        cond = False
-        for ind in datum_dimension_indexes:
-            if ind in shifts_indexes:
-                cond = True
-        if not cond and (len(datum_dimension_indexes) == 1 or len(datum_dimension_indexes) == shifts_shape[-1]):
-            shift_axis_points["data"] += 1
-
-        if shift_axis_points["data"] > 0:
-            shift_axis = "data"
-        elif shift_axis_points["collection"] > 0:
-            shift_axis = "collection"
-        elif shift_axis_points["sequence"] > 0:
-            shift_axis = "sequence"
-        else:
-            shift_axis = "data"
+        shift_axis = ApplyShiftsMenuItemDelegate.guess_shift_axis(shifts_di.xdata, input_di.xdata)
 
         data_item = DataItem.DataItem(large_format=True)
         data_item.title="Shifted {}".format(input_di.title)
@@ -583,7 +610,7 @@ class Crop:
     def __init__(self, computation, **kwargs):
         self.computation = computation
 
-    def execute(self, input_data_item: API.DataItem, crop_axis: str, crop_graphic: typing.Optional[API.Graphic]=None, **kwargs):
+    def execute(self, input_data_item: API.DataItem, crop_axis: typing.Any, crop_graphic: typing.Optional[API.Graphic]=None, **kwargs):
         input_xdata: DataAndMetadata.DataAndMetadata = input_data_item.xdata
         crop_axis = crop_axis._data_structure.entity.entity_type.entity_id
         if crop_axis == "collection":
@@ -632,7 +659,7 @@ class Crop:
             else:
                 crop_bounds_right = min(crop_bounds_right, input_xdata.data_shape[crop_axis_indices[0]])
 
-        crop_slices = tuple()
+        crop_slices: typing.Tuple[slice, ...] = tuple()
         for i in range(len(input_xdata.data_shape)):
             if len(crop_axis_indices) == 1 and i == crop_axis_indices[0]:
                 crop_slices += (slice(crop_bounds_left, crop_bounds_right),)
