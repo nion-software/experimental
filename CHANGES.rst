@@ -1,14 +1,13 @@
 Changelog (nionswift-experimental)
 ==================================
 
-0.7.2 (unreleased)
+0.7.2 (2021-06-16)
 ------------------
 - Fix problem with some axis + shape combinations in MultiDimensionalProcessing.
 - Add computations for aligning virtual detector images and combining COM data into a color image.
 - Rework DoubleGaussian to use new-style computations and and improved UI.
 - Add affine transformation computation.
 - Add computation for making an iDPC image out of DPC data.
-- Add affine transform computation.
 
 0.7.1 (2020-11-13)
 ------------------
