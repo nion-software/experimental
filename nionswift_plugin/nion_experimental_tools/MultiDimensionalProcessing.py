@@ -642,6 +642,10 @@ class Crop:
             crop_bounds_bottom = kwargs.get("crop_bounds_bottom")
 
         if len(crop_axis_indices) == 2:
+            crop_bounds_left = int(crop_bounds_left)
+            crop_bounds_right = int(crop_bounds_right)
+            crop_bounds_top = int(crop_bounds_top)
+            crop_bounds_bottom = int(crop_bounds_bottom)
             crop_bounds_left = max(0, crop_bounds_left)
             crop_bounds_top = max(0, crop_bounds_top)
             if crop_bounds_right == -1:
@@ -653,6 +657,8 @@ class Crop:
             else:
                 crop_bounds_bottom = min(crop_bounds_bottom, input_xdata.data_shape[crop_axis_indices[0]])
         else:
+            crop_bounds_left = int(crop_bounds_left)
+            crop_bounds_right = int(crop_bounds_right)
             crop_bounds_left = max(0, crop_bounds_left)
             if crop_bounds_right == -1:
                 crop_bounds_right = None
