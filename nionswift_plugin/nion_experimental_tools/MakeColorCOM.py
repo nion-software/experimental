@@ -19,13 +19,15 @@ class MakeColorCOM:
               "com_y_index": {"label": _("COM y-slice")},
               "magnitude_min": {"label": _("Magnitude min (percentile)")},
               "magnitude_max": {"label": _("Magnitude max (percentile)")},
-              "rotation": {"label": _("Rotation")},
+              "rotation": {"label": _("Rotation (deg) or 'None' for automatic")},
+              "crop_region": {"label": _("Crop")},
               }
     outputs = {"output": {"label": _("Color COM")}}
 
     def __init__(self, computation, **kwargs):
         self.computation = computation
         self.__result_xdata = None
+        self.__divergence_xdata = None
 
     def __calculate_curl(self, rotation, com_x, com_y):
         com_x_rotated = com_x * numpy.cos(rotation) - com_y * numpy.sin(rotation)
@@ -33,15 +35,23 @@ class MakeColorCOM:
         curl_com = numpy.gradient(com_y_rotated, axis=1) - numpy.gradient(com_x_rotated, axis=0)
         return numpy.mean(curl_com**2)
 
-    def execute(self, src, com_x_index, com_y_index, magnitude_min, magnitude_max, rotation, **kwargs) -> None:
+    def execute(self, src, com_x_index, com_y_index, magnitude_min, magnitude_max, rotation, crop_region, **kwargs) -> None:
         try:
             com_xdata = src.xdata
             assert com_xdata.is_datum_2d
             assert com_xdata.is_sequence or com_xdata.is_collection
             com_x = com_xdata.data[com_x_index]
             com_y = com_xdata.data[com_y_index]
+            top_x = crop_region.bounds[0][1] * com_x.shape[1]
+            top_y = crop_region.bounds[0][0] * com_x.shape[0]
+            crop_slices = (slice(int(top_y), int(top_y + crop_region.bounds[1][0] * com_x.shape[0])),
+                           slice(int(top_x), int(top_x + crop_region.bounds[1][1] * com_x.shape[1])))
 
-            if not rotation or rotation == "None":
+            # Subtract the mean of each com component so that we remove any global com offset
+            com_x = com_x[crop_slices] - numpy.mean(com_x[crop_slices])
+            com_y = com_y[crop_slices] - numpy.mean(com_y[crop_slices])
+            # Don't use "if rotation" here because that would also calculate rotation for a given value of 0
+            if rotation is None or rotation == "None" or rotation == "":
                 res = scipy.optimize.minimize_scalar(self.__calculate_curl, 0, args=(com_x, com_y), bounds=(0, numpy.pi*2), method='bounded')
                 if res.success:
                     rotation = res.x
@@ -54,6 +64,8 @@ class MakeColorCOM:
 
             com_x_rotated = com_x * numpy.cos(rotation) - com_y * numpy.sin(rotation)
             com_y_rotated = com_x * numpy.sin(rotation) + com_y * numpy.cos(rotation)
+
+            divergence = numpy.gradient(com_x_rotated, axis=1) + numpy.gradient(com_y_rotated, axis=0)
 
             com_magnitude = numpy.sqrt(com_x_rotated**2 + com_y_rotated**2)
             com_angle = numpy.arctan2(com_y_rotated, com_x_rotated)
@@ -78,6 +90,8 @@ class MakeColorCOM:
 
             self.__result_xdata = DataAndMetadata.new_data_and_metadata(combined,
                                                                         dimensional_calibrations=com_xdata.dimensional_calibrations[1:])
+            self.__divergence_xdata = DataAndMetadata.new_data_and_metadata(divergence,
+                                                                            dimensional_calibrations=com_xdata.dimensional_calibrations[1:])
         except Exception as e:
             import traceback
             print(traceback.format_exc())
@@ -86,6 +100,7 @@ class MakeColorCOM:
 
     def commit(self):
         self.computation.set_referenced_xdata("output", self.__result_xdata)
+        self.computation.set_referenced_xdata("divergence", self.__divergence_xdata)
 
 
 class MakeColorCOMMenuItem:
@@ -105,16 +120,28 @@ class MakeColorCOMMenuItem:
 
         api_data_item = Facade.DataItem(data_item)
 
-        if api_data_item.xdata.is_sequence and api_data_item.xdata.datum_dimension_count == 2:
-            result_data_item = {"output": self.__api.library.create_data_item(title="Color COM image of " + data_item.title)}
+        if (api_data_item.xdata.is_sequence or api_data_item.xdata.collection_dimension_count == 1) and api_data_item.xdata.datum_dimension_count == 2:
+            result_data_items = {"output": self.__api.library.create_data_item(title="Color COM image of " + data_item.title),
+                                "divergence": self.__api.library.create_data_item(title="Divergence of " + data_item.title)}
+            crop_region = None
+            for graphic in api_data_item.graphics:
+                if graphic.graphic_type == 'rect-graphic':
+                    crop_region = graphic
+                    break
+            if crop_region is None:
+                crop_region = api_data_item.add_rectangle_region(0.5, 0.5, 0.75, 0.75)
+            crop_region.label = 'Crop'
             self.__api.library.create_computation("nion.make_color_com",
                                                   inputs={"src": api_data_item,
                                                           "com_x_index": 0,
                                                           "com_y_index": 1,
-                                                          "magnitude_min": 0,
-                                                          "magnitude_max": 100,
-                                                          "rotation": "None"},
-                                                  outputs=result_data_item)
+                                                          "magnitude_min": 15,
+                                                          "magnitude_max": 99,
+                                                          "rotation": "None",
+                                                          "crop_region": crop_region},
+                                                  outputs=result_data_items)
+            for data_item in result_data_items.values():
+                window.display_data_item(data_item)
 
 
 class MakeColorCOMExtension:

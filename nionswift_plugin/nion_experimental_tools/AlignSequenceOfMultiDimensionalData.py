@@ -16,6 +16,7 @@ class AlignMultiDimensionalSequence:
               "haadf_sequence_data_item": {"label": _("HAADF sequence data item")},
               "align_index": {"label": _("Align to this slice")},
               "align_region": {"label": _("Alignment bounds")},
+              "align_collection_index": {"label": _("Calculate shifts from this slice")}
               }
     outputs = {"aligned_haadf": {"label": _("Aligned HAADF sequence")},
                "aligned_si": {"label": _("Aligned multi-dimensional sequence")}}
@@ -24,19 +25,25 @@ class AlignMultiDimensionalSequence:
         self.computation = computation
 
     def execute(self, si_sequence_data_item: API_1_0.DataItem, haadf_sequence_data_item: API_1_0.DataItem,
-                align_index: int, align_region: API_1_0.Graphic):
-        haadf_xdata = haadf_sequence_data_item.xdata
+                align_index: int, align_region: API_1_0.Graphic, align_collection_index: int):
+        if haadf_sequence_data_item == si_sequence_data_item:
+            haadf_xdata = haadf_sequence_data_item.xdata[:, align_collection_index]
+            two_items = False
+        else:
+            haadf_xdata = haadf_sequence_data_item.xdata
+            two_items = True
         si_xdata = si_sequence_data_item.xdata
         bounds = align_region.bounds
         translations = Core.function_sequence_measure_relative_translation(haadf_xdata,
                                                                            haadf_xdata[align_index],
                                                                            True, bounds=bounds)
         sequence_shape = haadf_sequence_data_item.xdata.sequence_dimension_shape
+
         c = int(numpy.product(sequence_shape))
         haadf_result_data = numpy.empty_like(haadf_xdata.data)
         si_result_data = numpy.empty_like(si_xdata.data)
 
-        align_data_shape = haadf_sequence_data_item.xdata.datum_dimension_shape
+        align_data_shape = haadf_xdata.datum_dimension_shape
         align_axes_start_index = None
         for i in range(len(si_xdata.data_shape) - 1):
             if align_data_shape == si_xdata.data_shape[i:i+2]:
@@ -58,12 +65,15 @@ class AlignMultiDimensionalSequence:
             si_translation[align_axes_start_index] = translation[0]
             si_translation[align_axes_start_index+1] = translation[1]
             si_result_data[ii] = Core.function_shift(current_xdata, tuple(si_translation)).data
+        if two_items:
+            self.__aligned_haadf_sequence = DataAndMetadata.new_data_and_metadata(haadf_result_data,
+                                                                                  intensity_calibration=haadf_xdata.intensity_calibration,
+                                                                                  dimensional_calibrations=haadf_xdata.dimensional_calibrations,
+                                                                                  metadata=haadf_xdata.metadata,
+                                                                                  data_descriptor=haadf_xdata.data_descriptor)
+        else:
+            self.__aligned_haadf_sequence = None
 
-        self.__aligned_haadf_sequence = DataAndMetadata.new_data_and_metadata(haadf_result_data,
-                                                                              intensity_calibration=haadf_xdata.intensity_calibration,
-                                                                              dimensional_calibrations=haadf_xdata.dimensional_calibrations,
-                                                                              metadata=haadf_xdata.metadata,
-                                                                              data_descriptor=haadf_xdata.data_descriptor)
         self.__aligned_si_sequence = DataAndMetadata.new_data_and_metadata(si_result_data,
                                                                            intensity_calibration=si_xdata.intensity_calibration,
                                                                            dimensional_calibrations=si_xdata.dimensional_calibrations,
@@ -71,12 +81,14 @@ class AlignMultiDimensionalSequence:
                                                                            data_descriptor=si_xdata.data_descriptor)
 
     def commit(self):
-        self.computation.set_referenced_xdata("aligned_haadf", self.__aligned_haadf_sequence)
+        if self.__aligned_haadf_sequence is not None:
+            self.computation.set_referenced_xdata("aligned_haadf", self.__aligned_haadf_sequence)
         self.computation.set_referenced_xdata("aligned_si", self.__aligned_si_sequence)
 
 
 def align_multi_si(api: API_1_0.API, window: API_1_0.DocumentWindow):
     selected_display_items = window._document_controller._get_two_data_sources()
+    print(selected_display_items)
     error_msg = "Select a sequence of spectrum images and a sequence of scanned images in order to use this computation."
     assert selected_display_items[0][0] is not None, error_msg
     assert selected_display_items[1][0] is not None, error_msg
@@ -88,30 +100,44 @@ def align_multi_si(api: API_1_0.API, window: API_1_0.DocumentWindow):
     di_1 = selected_display_items[0][0].data_item
     di_2 = selected_display_items[1][0].data_item
 
-    haadf_footprint = (2, True, 0, True)
-    di_1_footprint = (di_1.datum_dimension_count, di_1.is_sequence, di_1.collection_dimension_count,
-                      di_1.metadata.get("hardware_source", {}).get("harwdare_source_id", "") == "superscan")
-    di_2_footprint = (di_2.datum_dimension_count, di_2.is_sequence, di_2.collection_dimension_count,
-                      di_2.metadata.get("hardware_source", {}).get("harwdare_source_id", "") == "superscan")
+    align_collection_index = 0
+    aligned_haadf = None
 
-    di_1_points = 0
-    di_2_points = 0
-    print(di_1_footprint, di_2_footprint)
-    for i in range(len(haadf_footprint)):
-        di_1_points -= abs(haadf_footprint[i] - di_1_footprint[i])
-        di_2_points -= abs(haadf_footprint[i] - di_2_footprint[i])
-    print(di_1_points, di_2_points)
-    if di_1_points > di_2_points:
-        assert di_1_footprint[:-1] == haadf_footprint[:-1], error_msg
-        haadf_sequence_data_item = api._new_api_object(di_1)
-        si_sequence_data_item = api._new_api_object(di_2)
-    elif di_2_points > di_1_points:
-        assert di_2_footprint[:-1] == haadf_footprint[:-1], error_msg
-        haadf_sequence_data_item = api._new_api_object(di_2)
-        si_sequence_data_item = api._new_api_object(di_1)
+    if di_1 != di_2:
+        haadf_footprint = (2, True, 0, True)
+        di_1_footprint = (di_1.datum_dimension_count, di_1.is_sequence, di_1.collection_dimension_count,
+                          di_1.metadata.get("hardware_source", {}).get("harwdare_source_id", "") == "superscan")
+        di_2_footprint = (di_2.datum_dimension_count, di_2.is_sequence, di_2.collection_dimension_count,
+                          di_2.metadata.get("hardware_source", {}).get("harwdare_source_id", "") == "superscan")
+
+        di_1_points = 0
+        di_2_points = 0
+        for i in range(len(haadf_footprint)):
+            di_1_points -= abs(haadf_footprint[i] - di_1_footprint[i])
+            di_2_points -= abs(haadf_footprint[i] - di_2_footprint[i])
+        if di_1_points > di_2_points:
+            assert di_1_footprint[:-1] == haadf_footprint[:-1], error_msg
+            haadf_sequence_data_item = api._new_api_object(di_1)
+            si_sequence_data_item = api._new_api_object(di_2)
+        elif di_2_points > di_1_points:
+            assert di_2_footprint[:-1] == haadf_footprint[:-1], error_msg
+            haadf_sequence_data_item = api._new_api_object(di_2)
+            si_sequence_data_item = api._new_api_object(di_1)
+        else:
+            raise ValueError(error_msg)
+
+        aligned_haadf = api.library.create_data_item_from_data(numpy.zeros((1,1,1)), title="Aligned {}".format(haadf_sequence_data_item.title))
+        aligned_si = api.library.create_data_item_from_data(numpy.zeros((1,1,1)), title="Aligned {}".format(si_sequence_data_item.title))
+        outputs = {"aligned_haadf": aligned_haadf,
+                   "aligned_si": aligned_si}
     else:
-        raise ValueError(error_msg)
-    print('here')
+        assert di_1.collection_dimension_count == 1, error_msg
+        haadf_sequence_data_item = api._new_api_object(di_1)
+        si_sequence_data_item = haadf_sequence_data_item
+        align_collection_index = haadf_sequence_data_item.display._display.display_data_channel.collection_index[0]
+        aligned_si = api.library.create_data_item_from_data(numpy.zeros((1,1,1)), title="Aligned {}".format(si_sequence_data_item.title))
+        outputs = {"aligned_si": aligned_si}
+
     align_region = None
     for graphic in haadf_sequence_data_item.graphics:
         if graphic.graphic_type == 'rect-graphic':
@@ -120,24 +146,23 @@ def align_multi_si(api: API_1_0.API, window: API_1_0.DocumentWindow):
     if align_region is None:
         align_region = haadf_sequence_data_item.add_rectangle_region(0.5, 0.5, 0.75, 0.75)
     align_region.label = 'Alignment bounds'
-    print('here2')
     align_index = haadf_sequence_data_item.display._display.display_data_channel.sequence_index
 
-    aligned_haadf = api.library.create_data_item_from_data(numpy.zeros((1,1,1)), title="Aligned {}".format(haadf_sequence_data_item.title))
-    aligned_si = api.library.create_data_item_from_data(numpy.zeros((1,1,1)), title="Aligned {}".format(si_sequence_data_item.title))
+
     inputs = {"si_sequence_data_item": si_sequence_data_item,
               "haadf_sequence_data_item": haadf_sequence_data_item,
               "align_index": align_index,
-              "align_region": align_region}
+              "align_region": align_region,
+              "align_collection_index": align_collection_index}
 
     computation = api.library.create_computation("nion.align_multi_d_sequence",
                                                  inputs=inputs,
-                                                 outputs={"aligned_haadf": aligned_haadf,
-                                                          "aligned_si": aligned_si})
+                                                 outputs=outputs)
     computation._computation.source = aligned_si._data_item
-    window.display_data_item(aligned_haadf)
     window.display_data_item(aligned_si)
-    print('here3')
+    if aligned_haadf is not None:
+        window.display_data_item(aligned_haadf)
+
 
 Symbolic.register_computation_type("nion.align_multi_d_sequence", AlignMultiDimensionalSequence)
 
