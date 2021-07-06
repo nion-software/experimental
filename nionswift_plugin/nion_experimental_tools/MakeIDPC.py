@@ -113,6 +113,7 @@ class MakeIDPCMenuItem:
                                                           "rotation": "None",
                                                           "crop_region": crop_region},
                                                   outputs=result_data_item)
+            window.display_data_item(result_data_item)
 
 
 class MakeIDPCExtension:
