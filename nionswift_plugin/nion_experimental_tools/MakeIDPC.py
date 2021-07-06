@@ -105,15 +105,16 @@ class MakeIDPCMenuItem:
             if crop_region is None:
                 crop_region = api_data_item.add_rectangle_region(0.5, 0.5, 0.75, 0.75)
             crop_region.label = 'Crop'
-            result_data_item = {"output": self.__api.library.create_data_item(title="iDPC of " + data_item.title)}
+            result_data_items = {"output": self.__api.library.create_data_item(title="iDPC of " + data_item.title)}
             self.__api.library.create_computation("nion.make_idpc",
                                                   inputs={"src": api_data_item,
                                                           "gradient_x_index": 0,
                                                           "gradient_y_index": 1,
                                                           "rotation": "None",
                                                           "crop_region": crop_region},
-                                                  outputs=result_data_item)
-            window.display_data_item(result_data_item)
+                                                  outputs=result_data_items)
+            for data_item in result_data_items.values():
+                window.display_data_item(data_item)
 
 
 class MakeIDPCExtension:
