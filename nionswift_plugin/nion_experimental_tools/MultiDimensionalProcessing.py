@@ -320,6 +320,54 @@ def function_apply_multi_dimensional_shifts(xdata: DataAndMetadata.DataAndMetada
                                                      data_descriptor=xdata.data_descriptor)
 
 
+def function_make_tableau_image(xdata: DataAndMetadata.DataAndMetadata,
+                                scale: float = 1.0) -> DataAndMetadata.DataAndMetadata:
+    assert xdata.is_collection or xdata.is_sequence
+    assert xdata.datum_dimension_count == 2
+
+    iteration_shape: typing.Tuple[int, ...] = tuple()
+    tableau_shape: typing.Tuple[int, ...] = tuple()
+
+    if xdata.is_collection:
+        iteration_shape = tuple([xdata.data.shape[index] for index in xdata.collection_dimension_indexes])
+        iteration_start_index = xdata.collection_dimension_indexes[0]
+        data_descriptor = DataAndMetadata.DataDescriptor(xdata.is_sequence, 0, 2)
+    elif xdata.is_sequence:
+        iteration_shape = (xdata.data.shape[xdata.sequence_dimension_index],)
+        iteration_start_index = xdata.sequence_dimension_index
+        data_descriptor = DataAndMetadata.DataDescriptor(False, 0, 2)
+
+    tableau_height = int(numpy.sqrt(numpy.prod(iteration_shape, dtype=numpy.int64)))
+    tableau_width = int(numpy.ceil(numpy.prod(iteration_shape, dtype=numpy.int64) / tableau_height))
+    tableau_shape = (tableau_height, tableau_width)
+
+    result = typing.cast(None, numpy.ndarray)
+    for i in range(numpy.prod(iteration_shape, dtype=numpy.int64)):
+        coords = numpy.unravel_index(i, iteration_shape)
+        data_coords = tuple([slice(None) for k in range(iteration_start_index)]) + coords
+        if scale != 1.0:
+            scale_sequence = [1.0] * iteration_start_index + [scale] * 2
+            scaled_data = scipy.ndimage.zoom(xdata.data[data_coords], scale_sequence, order=1)
+        else:
+            scaled_data = xdata.data[data_coords]
+
+        if i==0:
+            result = numpy.zeros(xdata.data.shape[:iteration_start_index] + (scaled_data.shape[-2] * tableau_height, scaled_data.shape[-1] * tableau_width), dtype=xdata.data.dtype)
+
+        coords = numpy.unravel_index(i, tableau_shape)
+        pos = (coords[0] * scaled_data.shape[-2], coords[1] * scaled_data.shape[-1])
+        result_coords = tuple([slice(None) for k in range(iteration_start_index)]) + (slice(pos[0], pos[0] + scaled_data.shape[-2]), slice(pos[1], pos[1] + scaled_data.shape[-1]))
+        result[result_coords] = scaled_data
+
+    dimensional_calibrations = list(copy.deepcopy(xdata.dimensional_calibrations))
+    [dimensional_calibrations.pop(iteration_start_index) for _ in range(len(iteration_shape))]
+    return DataAndMetadata.new_data_and_metadata(result,
+                                                 intensity_calibration=xdata.intensity_calibration,
+                                                 dimensional_calibrations=dimensional_calibrations,
+                                                 metadata=xdata.metadata,
+                                                 data_descriptor=data_descriptor)
+
+
 class MeasureShifts:
     label = _("Measure shifts")
     inputs = {"input_data_item": {"label": _("Input data item")},
@@ -743,6 +791,67 @@ class CropMenuItemDelegate:
         window.display_data_item(result_data_item)
 
 
+class MakeTableau:
+    label = _("Display Tableau")
+    inputs = {"input_data_item": {"label": _("Input data item")},
+              "scale": {"label": _("Scale")}}
+    outputs = {"tableau": {"label": "Tableau"}}
+
+    def __init__(self, computation, **kwargs):
+        self.computation = computation
+
+    def execute(self, input_data_item: API.DataItem, scale: float):
+        try:
+            self.__result_xdata = function_make_tableau_image(input_data_item.xdata, scale)
+        except:
+            import traceback
+            traceback.print_exc()
+            raise
+
+    def commit(self):
+        self.computation.set_referenced_xdata("tableau", self.__result_xdata)
+        self.__result_xdata = None
+
+
+class MakeTableauMenuItemDelegate:
+    def __init__(self, api: API.API):
+        self.__api = api
+        self.menu_id = "multi_dimensional_processing_menu"
+        self.menu_name = _("Multi-Dimensional Processing")
+        self.menu_before_id = "window_menu"
+        self.menu_item_name = _("Make tableau image")
+
+    def menu_item_execute(self, window: API.DocumentWindow):
+        selected_data_item = window.target_data_item
+        error_msg = "Select one data item that contains a sequence or collection of two-dimensional data."
+        assert selected_data_item is not None, error_msg
+        assert selected_data_item.xdata is not None, error_msg
+        assert selected_data_item.xdata.is_sequence or selected_data_item.xdata.is_collection, error_msg
+        assert selected_data_item.xdata.datum_dimension_count == 2, error_msg
+
+        # Limit the maximum size of the result to something sensible:
+        max_result_pixels = 8192
+        if selected_data_item.xdata.is_collection:
+            scale = min(1.0, max_result_pixels / (numpy.sqrt(numpy.prod(selected_data_item.xdata.collection_dimension_shape)) *
+                                                  numpy.sqrt(numpy.prod(selected_data_item.xdata.datum_dimension_shape))))
+        elif selected_data_item.xdata.is_sequence:
+            scale = min(1.0, max_result_pixels / (numpy.sqrt(numpy.prod(selected_data_item.xdata.sequence_dimension_shape)) *
+                                                  numpy.sqrt(numpy.prod(selected_data_item.xdata.datum_dimension_shape))))
+
+        inputs = {"input_data_item": selected_data_item,
+                  "scale": scale}
+
+        # Make a result data item with 3 dimensions to ensure we get a large_format data item
+        result_data_item = self.__api.library.create_data_item_from_data(numpy.zeros((1,1,1)), title="Tableau of {}".format(selected_data_item.title))
+
+        computation = self.__api.library.create_computation("nion.make_tableau_image",
+                                                            inputs=inputs,
+                                                            outputs={"tableau": result_data_item})
+
+        computation._computation.source = result_data_item._data_item
+        window.display_data_item(result_data_item)
+
+
 class MultiDimensionalProcessingExtension:
 
     extension_id = "nion.experimental.multi_dimensional_processing"
@@ -753,6 +862,7 @@ class MultiDimensionalProcessingExtension:
         self.__measure_shifts_menu_item_ref = api.create_menu_item(MeasureShiftsMenuItemDelegate(api))
         self.__apply_shifts_menu_item_ref = api.create_menu_item(ApplyShiftsMenuItemDelegate(api))
         self.__crop_menu_item_ref = api.create_menu_item(CropMenuItemDelegate(api))
+        self.__tableau_menu_item_ref = api.create_menu_item(MakeTableauMenuItemDelegate(api))
 
     def close(self):
         self.__integrate_menu_item_ref.close()
@@ -763,12 +873,15 @@ class MultiDimensionalProcessingExtension:
         self.__apply_shifts_menu_item_ref = None
         self.__crop_menu_item_ref.close()
         self.__crop_menu_item_ref = None
+        self.__tableau_menu_item_ref.close()
+        self.__tableau_menu_item_ref = None
 
 
 Symbolic.register_computation_type("nion.integrate_along_axis", IntegrateAlongAxis)
 Symbolic.register_computation_type("nion.measure_shifts", MeasureShifts)
 Symbolic.register_computation_type("nion.apply_shifts", ApplyShifts)
 Symbolic.register_computation_type("nion.crop_multi_dimensional", Crop)
+Symbolic.register_computation_type("nion.make_tableau_image", MakeTableau)
 
 AxesChoice = Schema.entity("axis_choice", None, None, {})
 
