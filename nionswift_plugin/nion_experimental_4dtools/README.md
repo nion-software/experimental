@@ -88,7 +88,7 @@ Installation and Requirements
 
 Requirements
 ------------
-* Python >= 3.7 (lower versions might work but are untested)
+* Python >= 3.8
 * numpy (should be already installed if you have Swift installed)
 
 Installation
