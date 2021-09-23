@@ -20,7 +20,8 @@ _ = gettext.gettext
 class IntegrateAlongAxis:
     label = _("Integrate")
     inputs = {"input_data_item": {"label": _("Input data item")},
-              "integration_axes": {"label": _("Integrate along this axis"), "entity_id": "axis_choice"},
+              "integration_axes": {"label": _("Integrate these axes"), "entity_id": "axis_choice"},
+              "sub_integration_axes": {"label": _("Select which of the above axes to integrate"), "entity_id": "sub_axis_choice"},
               "integration_graphic": {"label": _("Integration mask")},
               }
     outputs = {"integrated": {"label": _("Integrated")},
@@ -29,14 +30,20 @@ class IntegrateAlongAxis:
     def __init__(self, computation, **kwargs):
         self.computation = computation
 
-    def execute(self, input_data_item: API.DataItem, integration_axes: typing.Any, integration_graphic: typing.Optional[API.Graphic]=None):
+    def execute(self, input_data_item: API.DataItem, integration_axes: typing.Any, sub_integration_axes: typing.Any, integration_graphic: typing.Optional[API.Graphic]=None):
         input_xdata: DataAndMetadata.DataAndMetadata = input_data_item.xdata
         integration_axes = integration_axes._data_structure.entity.entity_type.entity_id
+        sub_integration_axes = sub_integration_axes._data_structure.entity.entity_type.entity_id
         if integration_axes == "collection":
             assert input_xdata.is_collection
             integration_axis_indices = list(input_xdata.collection_dimension_indexes)
             integration_axis_shape = input_xdata.collection_dimension_shape
             result_data_descriptor = DataAndMetadata.DataDescriptor(input_xdata.is_sequence, 0, input_xdata.datum_dimension_count)
+            if sub_integration_axes != "all" and input_xdata.collection_dimension_count > 1:
+                index = ["first", "second"].index(sub_integration_axes)
+                integration_axis_indices = [integration_axis_indices[index]]
+                integration_axis_shape = (integration_axis_shape[index],)
+                result_data_descriptor = DataAndMetadata.DataDescriptor(input_xdata.is_sequence, input_xdata.collection_dimension_count - 1, input_xdata.datum_dimension_count)
         elif integration_axes == "sequence":
             assert input_xdata.is_sequence
             integration_axis_indices = [input_xdata.sequence_dimension_index]
@@ -52,6 +59,12 @@ class IntegrateAlongAxis:
                 result_data_descriptor = DataAndMetadata.DataDescriptor(input_xdata.is_sequence, 0, input_xdata.collection_dimension_count)
             else:
                 result_data_descriptor = DataAndMetadata.DataDescriptor(False, 0, 1)
+
+            if sub_integration_axes != "all" and input_xdata.datum_dimension_count > 1:
+                index = ["first", "second"].index(sub_integration_axes)
+                integration_axis_indices = [integration_axis_indices[index]]
+                integration_axis_shape = (integration_axis_shape[index],)
+                result_data_descriptor = DataAndMetadata.DataDescriptor(input_xdata.is_sequence, input_xdata.collection_dimension_count, input_xdata.datum_dimension_count - 1)
 
         navigation_shape = []
         navigation_axis_indices = []
@@ -631,8 +644,13 @@ class IntegrateAlongAxisMenuItemDelegate:
         self.__api.library._document_model.append_data_structure(integration_axes_structure)
         integration_axes_structure.source = result_data_item._data_item
 
+        integration_sub_axes_structure = DataStructure.DataStructure(structure_type="all")
+        self.__api.library._document_model.append_data_structure(integration_sub_axes_structure)
+        integration_sub_axes_structure.source = result_data_item._data_item
+
         inputs = {"input_data_item": selected_data_item,
                   "integration_axes": self.__api._new_api_object(integration_axes_structure),
+                  "sub_integration_axes": self.__api._new_api_object(integration_sub_axes_structure),
                   }
         if integrate_graphic:
             inputs["integration_graphic"] = integrate_graphic
@@ -885,6 +903,13 @@ Symbolic.register_computation_type("nion.make_tableau_image", MakeTableau)
 
 AxesChoice = Schema.entity("axis_choice", None, None, {})
 
-for choice_id, choice_name in [('collection', 'Collection'), ('sequence', 'Sequence'), ('data', 'Data')]:
+for choice_id, choice_name in [("collection", "Collection"), ("sequence", "Sequence"), ("data", "Data")]:
     axis_choice_entity = Schema.entity(choice_id, AxesChoice, None, {})
     DataStructure.DataStructure.register_entity(axis_choice_entity, entity_name=choice_name, entity_package_name=_("EELS Analysis"))
+
+SubAxesChoice = Schema.entity("sub_axis_choice", None, None, {})
+
+for choice_id, choice_name in [("all", "All"), ("first", "First"), ("second", "Second")]:
+    sub_axis_choice_entity = Schema.entity(choice_id, SubAxesChoice, None, {})
+    DataStructure.DataStructure.register_entity(sub_axis_choice_entity, entity_name=choice_name, entity_package_name=_("EELS Analysis"))
+
