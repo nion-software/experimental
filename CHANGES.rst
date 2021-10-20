@@ -1,12 +1,6 @@
 Changelog (nionswift-experimental)
 ==================================
 
-0.7.3 (2021-10-20)
-------------------
-- Add computation for visualizating tableau data.
-- Add more finegrained axis control for multi-dimensional integrate.
-- Add Wizard base classes.
-
 0.7.2 (2021-06-16)
 ------------------
 - Fix problem with some axis + shape combinations in MultiDimensionalProcessing.
