@@ -4,5 +4,7 @@
 #   pip install -r test-requirements.txt
 
 -e git://github.com/nion-software/nionutils.git#egg=nionutils
+-e git://github.com/nion-software/nionui.git#egg=nionui
+-e git://github.com/nion-software/nionswift.git#egg=nionswift
 
-numpy
+numpy==1.21.3
