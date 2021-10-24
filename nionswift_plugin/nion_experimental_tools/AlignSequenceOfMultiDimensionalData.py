@@ -88,7 +88,6 @@ class AlignMultiDimensionalSequence:
 
 def align_multi_si(api: API_1_0.API, window: API_1_0.DocumentWindow):
     selected_display_items = window._document_controller._get_two_data_sources()
-    print(selected_display_items)
     error_msg = "Select a sequence of spectrum images and a sequence of scanned images in order to use this computation."
     assert selected_display_items[0][0] is not None, error_msg
     assert selected_display_items[1][0] is not None, error_msg

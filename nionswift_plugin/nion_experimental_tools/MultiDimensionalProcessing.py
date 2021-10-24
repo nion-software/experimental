@@ -912,4 +912,3 @@ SubAxesChoice = Schema.entity("sub_axis_choice", None, None, {})
 for choice_id, choice_name in [("all", "All"), ("first", "First"), ("second", "Second")]:
     sub_axis_choice_entity = Schema.entity(choice_id, SubAxesChoice, None, {})
     DataStructure.DataStructure.register_entity(sub_axis_choice_entity, entity_name=choice_name, entity_package_name=_("EELS Analysis"))
-
