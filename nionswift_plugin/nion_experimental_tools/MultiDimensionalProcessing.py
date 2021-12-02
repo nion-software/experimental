@@ -131,11 +131,88 @@ class IntegrateAlongAxis:
         self.computation.set_referenced_xdata("integrated", self.__result_xdata)
 
 
+def ellipse_radius(polar_angle: typing.Union[float, numpy.ndarray], a: float, b: float, rotation: float) -> typing.Union[float, numpy.ndarray]:
+    """
+    Returns the radius of a point lying on an ellipse with the given parameters. The ellipse is described in polar
+    coordinates here, which makes it easy to incorporate a rotation.
+    Parameters
+    -----------
+    polar_angle : float or numpy.ndarray
+                  Polar angle of a point to which the corresponding radius should be calculated (rad).
+    a : float
+        Length of the major half-axis of the ellipse.
+    b : float
+        Length of the minor half-axis of the ellipse.
+    rotation : Rotation of the ellipse with respect to the x-axis (rad). Counter-clockwise is positive.
+    Returns
+    --------
+    radius : float or numpy.ndarray
+             Radius of a point lying on an ellipse with the given parameters.
+    """
+
+    return a*b/numpy.sqrt((b*numpy.cos(polar_angle+rotation))**2+(a*numpy.sin(polar_angle+rotation))**2)
+
+
+def draw_ellipse(image: numpy.ndarray, ellipse: typing.Tuple[float, float, float, float, float], *,
+                 color: typing.Any=1.0) -> None:
+    """
+    Draws an ellipse on a 2D-array.
+    Parameters
+    ----------
+    image : array
+            The array on which the ellipse will be drawn. Note that the data will be modified in place.
+    ellipse : tuple
+              A tuple describing an ellipse. The values must be (in this order):
+              [0] The y-coordinate of the center.
+              [1] The x-coordinate of the center.
+              [2] The length of the major half-axis
+              [3] The length of the minor half-axis
+              [4] The rotation of the ellipse in rad.
+    color : optional
+            The color to which the pixels inside the given ellipse will be set. Note that `color` will be cast to the
+            type of `image` automatically. If this is not possible, an exception will be raised. The default is 1.0.
+    Returns
+    --------
+    None
+    """
+    shape = image.shape
+    assert len(shape) == 2, 'Can only draw an ellipse on a 2D-array.'
+
+    top = max(int(ellipse[0] - ellipse[2]), 0)
+    left = max(int(ellipse[1] - ellipse[2]), 0)
+    bottom = min(int(ellipse[0] + ellipse[2]) + 1, shape[0])
+    right = min(int(ellipse[1] + ellipse[2]) + 1, shape[1])
+    coords = numpy.mgrid[top - ellipse[0]:bottom - ellipse[0], left - ellipse[1]:right - ellipse[1]] # type: ignore # Not working yet, see https://github.com/python/mypy/issues/2410
+    radii = numpy.sqrt(numpy.sum(coords**2, axis=0))
+    polar_angles = numpy.arctan2(coords[0], coords[1])
+    ellipse_radii = ellipse_radius(polar_angles, *ellipse[2:])
+    image[top:bottom, left:right][radii<ellipse_radii] = color
+
+
+def _make_mask(max_shift: int, origin: typing.Tuple[int, ...], data_shape: typing.Tuple[int, ...]) -> numpy.ndarray:
+    mask = numpy.zeros(data_shape, dtype=bool)
+    if len(data_shape) == 2:
+        half_shape = (data_shape[0] // 2, data_shape[1] // 2)
+        offset = (origin[0] + half_shape[0], origin[1] + half_shape[1])
+        draw_ellipse(mask, offset + (max_shift, max_shift, 0))
+    elif len(data_shape) == 1:
+        half_shape = data_shape[0] // 2
+        mask[max(0, origin[0] + half_shape - max_shift):min(data_shape[0], origin[0] + half_shape + max_shift + 1)] = True
+    else:
+        raise ValueError('Only data of 1 or 2 dimensions is allowed.')
+    return mask
+
 
 def function_measure_multi_dimensional_shifts(xdata: DataAndMetadata.DataAndMetadata,
                                               shift_axis: str,
                                               reference_index: typing.Union[None, int, typing.Sequence[int]]=None,
-                                              bounds: typing.Any=None) -> numpy.ndarray:
+                                              bounds: typing.Any=None,
+                                              max_shift: typing.Optional[int] = None,
+                                              origin: typing.Tuple[int, ...] = (0, 0)) -> DataAndMetadata.DataAndMetadata:
+    """
+    "max_shift" defines the maximum allowed template shift in pixels. "max_shift" is calculated around "origin", which
+    is the offset from the center of the image.
+    """
     if shift_axis == "collection":
         assert xdata.is_collection
         if xdata.collection_dimension_count == 2:
@@ -196,22 +273,40 @@ def function_measure_multi_dimensional_shifts(xdata: DataAndMetadata.DataAndMeta
         data_coords = coords[:shift_axis_indices[0]] + (...,) + coords[shift_axis_indices[0]:]
         reference_data = xdata.data[data_coords]
 
+    mask = None
+    # If we measure shifts relative to the last frame, we can always use a mask that is centered around the input origin
+    if max_shift is not None and reference_index is None:
+        coords = numpy.unravel_index(0, iteration_shape)
+        data_coords = coords[:shift_axis_indices[0]] + (...,) + coords[shift_axis_indices[0]:]
+        data_shape = xdata.data[data_coords][register_slice].shape
+        mask = _make_mask(max_shift, origin, data_shape)
+
     shifts = numpy.zeros(result_shape, dtype=numpy.float32)
 
     start_index = 0 if reference_index is not None else 1
-
-    for i in range(start_index, numpy.prod(iteration_shape, dtype=numpy.int64)):
+    end_index = numpy.prod(iteration_shape, dtype=numpy.int64)
+    for i in range(start_index, end_index):
         coords = numpy.unravel_index(i, iteration_shape)
         data_coords = coords[:shift_axis_indices[0]] + (...,) + coords[shift_axis_indices[0]:]
         if reference_index is None:
             coords_ref = numpy.unravel_index(i - 1, iteration_shape)
             data_coords_ref = coords_ref[:shift_axis_indices[0]] + (...,) + coords_ref[shift_axis_indices[0]:]
             reference_data = xdata.data[data_coords_ref]
-        shifts[coords] = Core.function_register_template(reference_data[register_slice], xdata.data[data_coords][register_slice])[1]
+        elif max_shift is not None and i > start_index:
+            last_coords = numpy.unravel_index(i - 1, iteration_shape)
+            last_shift = shifts[last_coords]
+            data_shape = reference_data[register_slice].shape
+            if len(data_shape) == 2:
+                mask = _make_mask(max_shift, (origin[0] + round(last_shift[0]), origin[1] + round(last_shift[1])), data_shape)
+            else:
+                mask = _make_mask(max_shift, (origin[0] + round(last_shift[0]),), data_shape)
+        shifts[coords] = Core.function_register_template(reference_data[register_slice], xdata.data[data_coords][register_slice], ccorr_mask=mask)[1]
 
     shifts = numpy.squeeze(shifts)
 
     if reference_index is None:
+        if len(iteration_shape) == 2:
+            shifts = numpy.cumsum(shifts, axis=1)
         shifts = numpy.cumsum(shifts, axis=0)
 
     return DataAndMetadata.new_data_and_metadata(shifts,
@@ -222,7 +317,7 @@ def function_measure_multi_dimensional_shifts(xdata: DataAndMetadata.DataAndMeta
 def function_apply_multi_dimensional_shifts(xdata: DataAndMetadata.DataAndMetadata,
                                             shifts: numpy.ndarray,
                                             shift_axis: str,
-                                            out: typing.Optional[DataAndMetadata.DataAndMetadata] = None):
+                                            out: typing.Optional[DataAndMetadata.DataAndMetadata] = None) -> typing.Optional[DataAndMetadata.DataAndMetadata]:
     if shift_axis == "collection":
         assert xdata.is_collection
         if xdata.collection_dimension_count == 2:
@@ -386,6 +481,8 @@ class MeasureShifts:
     inputs = {"input_data_item": {"label": _("Input data item")},
               "shift_axis": {"label": _("Measure shift along this axis"), "entity_id": "axis_choice"},
               "reference_index": {"label": _("Reference index for shifts")},
+              "relative_shifts": {"label": _("Measure shifts relative to previous slice")},
+              "max_shift": {"label": _("Max shift between consecutive frames (in pixels, <= 0 to disable)")},
               "bounds_graphic": {"label": _("Shift bounds")},
               }
     outputs = {"shifts": {"label": _("Shifts")},
@@ -394,7 +491,7 @@ class MeasureShifts:
     def __init__(self, computation, **kwargs):
         self.computation = computation
 
-    def execute(self, input_data_item: API.DataItem, shift_axis: typing.Any, reference_index: typing.Union[None, int, typing.Sequence[int]]=None, bounds_graphic: typing.Optional[API.Graphic]=None):
+    def execute(self, input_data_item: API.DataItem, shift_axis: typing.Any, reference_index: typing.Union[None, int, typing.Sequence[int]]=None, relative_shifts: bool=True, max_shift: int=0, bounds_graphic: typing.Optional[API.Graphic]=None):
         input_xdata = input_data_item.xdata
         bounds = None
         if bounds_graphic is not None:
@@ -403,7 +500,9 @@ class MeasureShifts:
             else:
                 bounds = bounds_graphic.bounds
         shift_axis = shift_axis._data_structure.entity.entity_type.entity_id
-        self.__shifts_xdata = function_measure_multi_dimensional_shifts(input_xdata, shift_axis, reference_index=reference_index, bounds=bounds)
+        max_shift_ = max_shift if max_shift > 0 else None
+        reference_index = reference_index if not relative_shifts else None
+        self.__shifts_xdata = function_measure_multi_dimensional_shifts(input_xdata, shift_axis, reference_index=reference_index, bounds=bounds, max_shift=max_shift_)
 
     def commit(self):
         self.computation.set_referenced_xdata("shifts", self.__shifts_xdata)
@@ -455,6 +554,8 @@ class MeasureShiftsMenuItemDelegate:
         inputs = {"input_data_item": selected_data_item,
                   "shift_axis": self.__api._new_api_object(shift_axis_structure),
                   "reference_index": 0,
+                  "relative_shifts": True,
+                  "max_shift": 0,
                   }
         if bounds_graphic:
             inputs["bounds_graphic"] = bounds_graphic
