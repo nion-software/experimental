@@ -194,7 +194,6 @@ class TestMultiDimensionalProcessing(unittest.TestCase):
             result = MultiDimensionalProcessing.function_measure_multi_dimensional_shifts(shifted_xdata,
                                                                                           "data",
                                                                                           reference_index=reference_index)
-
             self.assertTrue(numpy.allclose(result.data, -1.0 * (shifts - shifts[numpy.unravel_index(reference_index, shifts.shape)]), atol=0.5))
 
         with self.subTest("Test for a sequence of 2D data, measure shift of data dimensions along sequence axis relative to previous slice"):
@@ -220,6 +219,31 @@ class TestMultiDimensionalProcessing(unittest.TestCase):
             expected_res = numpy.cumsum(expected_res, axis=0)
 
             self.assertTrue(numpy.allclose(result.data, expected_res, atol=0.5))
+
+    def test_function_measure_multi_dimensional_shifts_3d_works_with_non_integer_bounds(self):
+        with self.subTest("Test for a sequence of 2D data, measure shift of data dimensions along sequence axis (relative shifts)"):
+            shape = (10, 100, 100)
+            reference_index = None
+            data = numpy.random.rand(*shape[1:])
+            data = scipy.ndimage.gaussian_filter(data, 3.0)
+            data = numpy.repeat(data[numpy.newaxis, ...], shape[0], axis=0)
+            bounds = [[0.0584, 0.0622], [0.9161, 0.8775]]
+            # bounds = [[0.05, 0.06], [0.9, 0.9]]
+
+            shifts = numpy.array([(0., 0.), (0., 5.), (0., 10.), (0., 2.5), (0., 3.), (0.5, 2.), (1.8, 5.), (2.5, 10.), (6.1, 2.5), (3.5, 3.)])
+
+            shifted = numpy.empty_like(data)
+
+            for i in range(shape[0]):
+                shifted[i] = scipy.ndimage.shift(data[i], [shifts[i, 0], shifts[i, 1]], order=5, cval=numpy.mean(data))
+
+            shifted_xdata = DataAndMetadata.new_data_and_metadata(shifted, data_descriptor=DataAndMetadata.DataDescriptor(True, 0, 2))
+
+            result = MultiDimensionalProcessing.function_measure_multi_dimensional_shifts(shifted_xdata,
+                                                                                          "data",
+                                                                                          reference_index=reference_index,
+                                                                                          bounds=bounds)
+            self.assertTrue(numpy.allclose(result.data, -1.0 * shifts, atol=1.5))
 
     def test_function_measure_multi_dimensional_shifts_4d(self):
         with self.subTest("Test for a 2D collection of 2D data, measure shift of data dimensions along collection axis"):
