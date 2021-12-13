@@ -1,6 +1,11 @@
 Changelog (nionswift-experimental)
 ==================================
 
+0.7.5 (2021-12-13)
+------------------
+- Add option for relative shifts and limited shift range to Multi-D measure shifts.
+- Python 3.10 compatibility.
+
 0.7.4 (2021-10-24)
 ------------------
 - Add wizard base classes.
