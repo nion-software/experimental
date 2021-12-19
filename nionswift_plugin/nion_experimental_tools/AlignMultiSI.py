@@ -159,11 +159,10 @@ def align_multi_si(api: API_1_0.API, window: API_1_0.DocumentWindow):
               "align_index": align_index}
     if align_region:
         inputs["align_region"] = api._new_api_object(align_region)
-    computation = api.library.create_computation("eels.align_multi_si",
-                                                 inputs=inputs,
-                                                 outputs={"aligned_haadf": aligned_haadf,
-                                                          "aligned_si": aligned_si})
-    computation._computation.source = aligned_si._data_item
+    api.library.create_computation("eels.align_multi_si",
+                                   inputs=inputs,
+                                   outputs={"aligned_haadf": aligned_haadf,
+                                            "aligned_si": aligned_si})
     window.display_data_item(aligned_haadf)
     window.display_data_item(aligned_si)
 

@@ -96,13 +96,12 @@ class DoubleGaussianMenuItem:
         graphic.radius_2 = 0.25
         api_fft_data_item.display._display_item.add_graphic(graphic)
         api_graphic = self.__api._new_api_object(graphic)
-        computation = self.__api.library.create_computation("nion.extension.doublegaussian",
-                                                            inputs={"src": input_data_item,
-                                                                    "weight2": 0.3,
-                                                                    "ring_graphic": api_graphic},
-                                                            outputs={"target": result_data_item,
-                                                                     "filtered_fft": api_fft_data_item})
-        computation._computation.source = result_data_item._data_item
+        self.__api.library.create_computation("nion.extension.doublegaussian",
+                                              inputs={"src": input_data_item,
+                                                      "weight2": 0.3,
+                                                      "ring_graphic": api_graphic},
+                                              outputs={"target": result_data_item,
+                                                       "filtered_fft": api_fft_data_item})
         window.display_data_item(result_data_item)
         window.display_data_item(api_fft_data_item)
 

@@ -154,10 +154,9 @@ def align_multi_si(api: API_1_0.API, window: API_1_0.DocumentWindow):
               "align_region": align_region,
               "align_collection_index": align_collection_index}
 
-    computation = api.library.create_computation("nion.align_multi_d_sequence",
-                                                 inputs=inputs,
-                                                 outputs=outputs)
-    computation._computation.source = aligned_si._data_item
+    api.library.create_computation("nion.align_multi_d_sequence",
+                                   inputs=inputs,
+                                   outputs=outputs)
     window.display_data_item(aligned_si)
     if aligned_haadf is not None:
         window.display_data_item(aligned_haadf)

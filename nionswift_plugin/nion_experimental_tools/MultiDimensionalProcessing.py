@@ -560,10 +560,9 @@ class MeasureShiftsMenuItemDelegate:
         if bounds_graphic:
             inputs["bounds_graphic"] = bounds_graphic
 
-        computation = self.__api.library.create_computation("nion.measure_shifts",
-                                                            inputs=inputs,
-                                                            outputs={"shifts": result_data_item})
-        computation._computation.source = result_data_item._data_item
+        self.__api.library.create_computation("nion.measure_shifts",
+                                              inputs=inputs,
+                                              outputs={"shifts": result_data_item})
         window.display_data_item(result_data_item)
 
 
@@ -696,10 +695,9 @@ class ApplyShiftsMenuItemDelegate:
                   "shift_axis": self.__api._new_api_object(shift_axis_structure)
                   }
 
-        computation = self.__api.library.create_computation("nion.apply_shifts",
-                                                            inputs=inputs,
-                                                            outputs={"shifted": result_data_item})
-        computation._computation.source = result_data_item._data_item
+        self.__api.library.create_computation("nion.apply_shifts",
+                                              inputs=inputs,
+                                              outputs={"shifted": result_data_item})
         window.display_data_item(result_data_item)
 
 
@@ -756,10 +754,9 @@ class IntegrateAlongAxisMenuItemDelegate:
         if integrate_graphic:
             inputs["integration_graphic"] = integrate_graphic
 
-        computation = self.__api.library.create_computation("nion.integrate_along_axis",
-                                                            inputs=inputs,
-                                                            outputs={"integrated": result_data_item})
-        computation._computation.source = result_data_item._data_item
+        self.__api.library.create_computation("nion.integrate_along_axis",
+                                              inputs=inputs,
+                                              outputs={"integrated": result_data_item})
         window.display_data_item(result_data_item)
 
 
@@ -903,10 +900,9 @@ class CropMenuItemDelegate:
             inputs["crop_bounds_top"] = 0
             inputs["crop_bounds_bottom"] = -1
 
-        computation = self.__api.library.create_computation("nion.crop_multi_dimensional",
-                                                            inputs=inputs,
-                                                            outputs={"cropped": result_data_item})
-        computation._computation.source = result_data_item._data_item
+        self.__api.library.create_computation("nion.crop_multi_dimensional",
+                                              inputs=inputs,
+                                              outputs={"cropped": result_data_item})
         window.display_data_item(result_data_item)
 
 
@@ -963,11 +959,10 @@ class MakeTableauMenuItemDelegate:
         # Make a result data item with 3 dimensions to ensure we get a large_format data item
         result_data_item = self.__api.library.create_data_item_from_data(numpy.zeros((1,1,1)), title="Tableau of {}".format(selected_data_item.title))
 
-        computation = self.__api.library.create_computation("nion.make_tableau_image",
-                                                            inputs=inputs,
-                                                            outputs={"tableau": result_data_item})
+        self.__api.library.create_computation("nion.make_tableau_image",
+                                              inputs=inputs,
+                                              outputs={"tableau": result_data_item})
 
-        computation._computation.source = result_data_item._data_item
         window.display_data_item(result_data_item)
 
 

@@ -213,11 +213,9 @@ class DarkCorrection4DMenuItem:
                 self.__show_tool_tips('wrong_shape')
                 return
             total_bin_data_item = self.__api.library.create_data_item(title='Total bin 4D of ' + data_item.title)
-            computation = self.__api.library.create_computation('nion.total_bin_4d_SI',
-                                                                inputs={'src': api_data_item},
-                                                                outputs={'target': total_bin_data_item})
-            computation._computation.source = total_bin_data_item._data_item
-            #computation._computation.mark_update()
+            self.__api.library.create_computation('nion.total_bin_4d_SI',
+                                                  inputs={'src': api_data_item},
+                                                  outputs={'target': total_bin_data_item})
 
             total_bin_display_item = document_controller.document_model.get_display_item_for_data_item(
                                                                                                   total_bin_data_item._data_item)
@@ -233,16 +231,15 @@ class DarkCorrection4DMenuItem:
             self.__api.library._document_model.append_data_item(dark_corrected_data_item._data_item)
             dark_corrected_data_item._data_item.session_id = self.__api.library._document_model.session_id
             dark_corrected_data_item.title = '4D dark correction of ' + data_item.title
-            computation = self.__api.library.create_computation('nion.dark_correction_4d',
-                                                                inputs={'src1': api_data_item,
-                                                                        'src2': total_bin_data_item,
-                                                                        'dark_area_region': dark_subtract_area_graphic,
-                                                                        'crop_region': crop_region,
-                                                                        'bin_spectrum': True,
-                                                                        'gain_image': [],
-                                                                        'gain_mode': 'custom'},
-                                                                outputs={'target': dark_corrected_data_item})
-            computation._computation.source = dark_corrected_data_item._data_item
+            self.__api.library.create_computation('nion.dark_correction_4d',
+                                                  inputs={'src1': api_data_item,
+                                                          'src2': total_bin_data_item,
+                                                          'dark_area_region': dark_subtract_area_graphic,
+                                                          'crop_region': crop_region,
+                                                          'bin_spectrum': True,
+                                                          'gain_image': [],
+                                                          'gain_mode': 'custom'},
+                                                  outputs={'target': dark_corrected_data_item})
             dark_corrected_display_item = document_controller.document_model.get_display_item_for_data_item(
                                                                                              dark_corrected_data_item._data_item)
             document_controller.show_display_item(dark_corrected_display_item)
