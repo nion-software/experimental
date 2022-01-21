@@ -88,10 +88,9 @@ class SequenceJoinMenuItem:
         api_data_items = [Facade.DataItem(data_item) for data_item in data_items]
 
         result_data_item = self.__api.library.create_data_item_from_data(numpy.zeros((1, 1, 1)), title="Joined " + data_items[0].title)
-        computation = self.__api.library.create_computation("nion.join_sequence",
-                                                            inputs={"src_list": api_data_items},
-                                                            outputs={"target": result_data_item})
-        computation._computation.source = result_data_item._data_item
+        self.__api.library.create_computation("nion.join_sequence",
+                                              inputs={"src_list": api_data_items},
+                                              outputs={"target": result_data_item})
         result_display_item = document_controller.document_model.get_display_item_for_data_item(result_data_item._data_item)
         document_controller.show_display_item(result_display_item)
 
@@ -138,10 +137,9 @@ class SequenceSplitMenuItem:
                 logging.error("Splitting sequences of more than 100 items is disabled for performance reasons.")
                 return
             result_data_items = {f"target_{i}": self.__api.library.create_data_item(title=f"Split ({i}) of " + data_item.title) for i in range(api_data_item.xdata.data_shape[0])}
-            computation = self.__api.library.create_computation("nion.split_sequence",
-                                                                inputs={"src": api_data_item},
-                                                                outputs=result_data_items)
-            computation._computation.source = result_data_items["target_0"]._data_item
+            self.__api.library.create_computation("nion.split_sequence",
+                                                  inputs={"src": api_data_item},
+                                                  outputs=result_data_items)
 
             for result_data_item in result_data_items.values():
                 result_display_item = document_controller.document_model.get_display_item_for_data_item(result_data_item._data_item)

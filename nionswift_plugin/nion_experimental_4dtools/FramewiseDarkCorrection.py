@@ -243,10 +243,9 @@ class FramewiseDarkMenuItem:
                 self.__show_tool_tips('wrong_shape')
                 return
             average_data_item = self.__api.library.create_data_item(title='Frame average of ' + data_item.title)
-            computation = self.__api.library.create_computation('nion.calculate_4d_average',
-                                                                inputs={'src': api_data_item},
-                                                                outputs={'target': average_data_item})
-            computation._computation.source = average_data_item._data_item
+            self.__api.library.create_computation('nion.calculate_4d_average',
+                                                  inputs={'src': api_data_item},
+                                                  outputs={'target': average_data_item})
             average_display_item = document_controller.document_model.get_display_item_for_data_item(average_data_item._data_item)
             document_controller.show_display_item(average_display_item)
             spectrum_graphic = average_data_item.add_rectangle_region(0.5, 0.5, 0.1, 1.0)
@@ -263,19 +262,18 @@ class FramewiseDarkMenuItem:
             self.__api.library._document_model.append_data_item(dark_corrected_data_item._data_item)
             dark_corrected_data_item._data_item.session_id = self.__api.library._document_model.session_id
             dark_corrected_data_item.title = 'Framewise dark correction of ' + data_item.title
-            computation = self.__api.library.create_computation('nion.framewise_dark_correction',
-                                                                inputs={'src1': api_data_item,
-                                                                        'src2': average_data_item,
-                                                                        'spectrum_region': spectrum_graphic,
-                                                                        'top_dark_region': top_dark_graphic,
-                                                                        'bottom_dark_region': bottom_dark_graphic,
-                                                                        'bin_spectrum': True,
-                                                                        'gain_image': [],
-                                                                        'gain_mode': 'custom'},
-                                                                outputs={'target': dark_corrected_data_item})
-            computation._computation.source = dark_corrected_data_item._data_item
+            self.__api.library.create_computation('nion.framewise_dark_correction',
+                                                  inputs={'src1': api_data_item,
+                                                          'src2': average_data_item,
+                                                          'spectrum_region': spectrum_graphic,
+                                                          'top_dark_region': top_dark_graphic,
+                                                          'bottom_dark_region': bottom_dark_graphic,
+                                                          'bin_spectrum': True,
+                                                          'gain_image': [],
+                                                          'gain_mode': 'custom'},
+                                                  outputs={'target': dark_corrected_data_item})
             dark_corrected_display_item = document_controller.document_model.get_display_item_for_data_item(
-                                                                                              dark_corrected_data_item._data_item)
+                dark_corrected_data_item._data_item)
             document_controller.show_display_item(dark_corrected_display_item)
             self.__computation_data_items.update({data_item: 'source',
                                                   average_data_item._data_item: 'average',
