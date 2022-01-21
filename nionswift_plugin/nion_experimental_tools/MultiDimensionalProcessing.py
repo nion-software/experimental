@@ -9,19 +9,22 @@ from nion.data import Core
 from nion.data import DataAndMetadata
 from nion.data import Calibration
 from nion.swift.model import Symbolic
-from nion.swift.model import Schema
-from nion.swift.model import DataStructure
 from nion.swift.model import DataItem
+from nion.swift import Inspector
+from nion.swift import DocumentController
+from nion.ui import Declarative
+from nion.utils import Registry
+from nion.utils import Observable
 from nion.typeshed import API_1_0 as API
 
 _ = gettext.gettext
 
 
-class IntegrateAlongAxis:
+class IntegrateAlongAxis(Symbolic.ComputationHandlerLike):
     label = _("Integrate")
     inputs = {"input_data_item": {"label": _("Input data item")},
-              "integration_axes": {"label": _("Integrate these axes"), "entity_id": "axis_choice"},
-              "sub_integration_axes": {"label": _("Select which of the above axes to integrate"), "entity_id": "sub_axis_choice"},
+              "axes_description": {"label": _("Integrate these axes")},
+              # "sub_integration_axes": {"label": _("Select which of the above axes to integrate"), "entity_id": "sub_axis_choice"},
               "integration_graphic": {"label": _("Integration mask")},
               }
     outputs = {"integrated": {"label": _("Integrated")},
@@ -30,10 +33,32 @@ class IntegrateAlongAxis:
     def __init__(self, computation, **kwargs):
         self.computation = computation
 
-    def execute(self, input_data_item: API.DataItem, integration_axes: typing.Any, sub_integration_axes: typing.Any, integration_graphic: typing.Optional[API.Graphic]=None):
+    @staticmethod
+    def guess_starting_axis(data_item: DataItem.DataItem, graphic: typing.Optional[API.Graphic] = None) -> str:
+        # If we have an integrate graphic we probably want to integrate the displayed dimensions
+        if graphic:
+            # For collections with 1D data we see the collection dimensions
+            if data_item.xdata.is_collection and data_item.xdata.datum_dimension_count == 1:
+                integration_axes = "collection"
+            # Otherwise we see the data dimensions
+            else:
+                integration_axes = "data"
+        # If not, use some generic rules
+        else:
+            if data_item.xdata.is_sequence:
+                integration_axes = "sequence"
+            elif data_item.xdata.is_collection and data_item.xdata.datum_dimension_count == 1:
+                integration_axes = "collection"
+            else:
+                integration_axes = "data"
+
+        return integration_axes
+
+    def execute(self, input_data_item: API.DataItem, axes_description: str, integration_graphic: typing.Optional[API.Graphic]=None):
         input_xdata: DataAndMetadata.DataAndMetadata = input_data_item.xdata
-        integration_axes = integration_axes._data_structure.entity.entity_type.entity_id
-        sub_integration_axes = sub_integration_axes._data_structure.entity.entity_type.entity_id
+        split_description = axes_description.split("-")
+        integration_axes = split_description[0]
+        sub_integration_axes = split_description[1] if len(split_description) > 1 else "all"
         if integration_axes == "collection":
             assert input_xdata.is_collection
             integration_axis_indices = list(input_xdata.collection_dimension_indexes)
@@ -92,7 +117,6 @@ class IntegrateAlongAxis:
             sum_str = data_str + ',' + mask_str
         else:
             sum_str = data_str + '->' + navigation_str
-
         result_data = numpy.einsum(sum_str, *operands)
 
         # result_data = numpy.empty(navigation_shape, dtype=input_xdata.data_dtype)
@@ -122,7 +146,12 @@ class IntegrateAlongAxis:
             if not i in integration_axis_indices:
                 result_dimensional_calibrations.append(input_xdata.dimensional_calibrations[i])
 
-        self.__result_xdata = DataAndMetadata.new_data_and_metadata(numpy.atleast_1d(result_data),
+        result_data = numpy.atleast_1d(result_data)
+
+        if len(result_dimensional_calibrations) != len(result_data.shape):
+            result_dimensional_calibrations = [Calibration.Calibration() for _ in range(len(result_data.shape))]
+
+        self.__result_xdata = DataAndMetadata.new_data_and_metadata(result_data,
                                                                     intensity_calibration=input_xdata.intensity_calibration,
                                                                     dimensional_calibrations=result_dimensional_calibrations,
                                                                     data_descriptor=result_data_descriptor)
@@ -435,7 +464,7 @@ def function_make_tableau_image(xdata: DataAndMetadata.DataAndMetadata,
 
     iteration_shape: typing.Tuple[int, ...] = tuple()
     tableau_shape: typing.Tuple[int, ...] = tuple()
-
+    iteration_start_index: typing.Optional[int] = None
     if xdata.is_collection:
         iteration_shape = tuple([xdata.data.shape[index] for index in xdata.collection_dimension_indexes])
         iteration_start_index = xdata.collection_dimension_indexes[0]
@@ -444,6 +473,7 @@ def function_make_tableau_image(xdata: DataAndMetadata.DataAndMetadata,
         iteration_shape = (xdata.data.shape[xdata.sequence_dimension_index],)
         iteration_start_index = xdata.sequence_dimension_index
         data_descriptor = DataAndMetadata.DataDescriptor(False, 0, 2)
+    assert iteration_start_index is not None
 
     tableau_height = int(numpy.sqrt(numpy.prod(iteration_shape, dtype=numpy.int64)))
     tableau_width = int(numpy.ceil(numpy.prod(iteration_shape, dtype=numpy.int64) / tableau_height))
@@ -476,10 +506,10 @@ def function_make_tableau_image(xdata: DataAndMetadata.DataAndMetadata,
                                                  data_descriptor=data_descriptor)
 
 
-class MeasureShifts:
+class MeasureShifts(Symbolic.ComputationHandlerLike):
     label = _("Measure shifts")
     inputs = {"input_data_item": {"label": _("Input data item")},
-              "shift_axis": {"label": _("Measure shift along this axis"), "entity_id": "axis_choice"},
+              "axes_description": {"label": _("Measure shift along this axis")},
               "reference_index": {"label": _("Reference index for shifts")},
               "relative_shifts": {"label": _("Measure shifts relative to previous slice")},
               "max_shift": {"label": _("Max shift between consecutive frames (in pixels, <= 0 to disable)")},
@@ -491,7 +521,26 @@ class MeasureShifts:
     def __init__(self, computation, **kwargs):
         self.computation = computation
 
-    def execute(self, input_data_item: API.DataItem, shift_axis: typing.Any, reference_index: typing.Union[None, int, typing.Sequence[int]]=None, relative_shifts: bool=True, max_shift: int=0, bounds_graphic: typing.Optional[API.Graphic]=None):
+    @staticmethod
+    def guess_starting_axis(data_item: DataItem.DataItem, graphic: typing.Optional[API.Graphic] = None) -> str:
+        # If we have a bound graphic we probably want to align the displayed dimensions
+        if graphic:
+            # For collections with 1D data we see the collection dimensions
+            if data_item.xdata.is_collection and data_item.xdata.datum_dimension_count == 1:
+                shift_axis = 'collection'
+            # Otherwise we see the data dimensions
+            else:
+                shift_axis = 'data'
+        # If not, use some generic rules
+        else:
+            shift_axis = 'data'
+
+            if data_item.xdata.is_collection and data_item.xdata.datum_dimension_count == 1:
+                shift_axis = 'collection'
+
+        return shift_axis
+
+    def execute(self, input_data_item: API.DataItem, axes_description: str, reference_index: typing.Union[None, int, typing.Sequence[int]]=None, relative_shifts: bool=True, max_shift: int=0, bounds_graphic: typing.Optional[API.Graphic]=None):
         input_xdata = input_data_item.xdata
         bounds = None
         if bounds_graphic is not None:
@@ -499,7 +548,8 @@ class MeasureShifts:
                 bounds = bounds_graphic.interval
             else:
                 bounds = bounds_graphic.bounds
-        shift_axis = shift_axis._data_structure.entity.entity_type.entity_id
+        split_description = axes_description.split("-")
+        shift_axis = split_description[0]
         max_shift_ = max_shift if max_shift > 0 else None
         reference_index = reference_index if not relative_shifts else None
         self.__shifts_xdata = function_measure_multi_dimensional_shifts(input_xdata, shift_axis, reference_index=reference_index, bounds=bounds, max_shift=max_shift_)
@@ -528,31 +578,17 @@ class MeasureShiftsMenuItemDelegate:
                 if graphic.graphic_type in {"rect-graphic", "interval-graphic"}:
                     bounds_graphic = graphic
 
-        # If we have a bound graphic we probably want to align the displayed dimensions
-        if bounds_graphic:
-            # For collections with 1D data we see the collection dimensions
-            if selected_data_item.xdata.is_collection and selected_data_item.xdata.datum_dimension_count == 1:
-                shift_axis = 'collection'
-            # Otherwise we see the data dimensions
-            else:
-                shift_axis = 'data'
-        # If not, use some generic rules
-        else:
-            shift_axis = 'data'
-
-            if selected_data_item.xdata.is_collection and selected_data_item.xdata.datum_dimension_count == 1:
-                shift_axis = 'collection'
-
+        shift_axis = MeasureShifts.guess_starting_axis(selected_data_item, graphic=bounds_graphic)
 
         # Make a result data item with 3 dimensions to ensure we get a large_format data item
         result_data_item = self.__api.library.create_data_item_from_data(numpy.zeros((1,1,1)), title="Shifts of {}".format(selected_data_item.title))
 
-        shift_axis_structure = DataStructure.DataStructure(structure_type=shift_axis)
-        self.__api.library._document_model.append_data_structure(shift_axis_structure)
-        shift_axis_structure.source = result_data_item._data_item
+        # shift_axis_structure = DataStructure.DataStructure(structure_type=shift_axis)
+        # self.__api.library._document_model.append_data_structure(shift_axis_structure)
+        # shift_axis_structure.source = result_data_item._data_item
 
-        inputs = {"input_data_item": selected_data_item,
-                  "shift_axis": self.__api._new_api_object(shift_axis_structure),
+        inputs = {"input_data_item": {"object": selected_data_item, "type": "data_source"},
+                  "axes_description": shift_axis,
                   "reference_index": 0,
                   "relative_shifts": True,
                   "max_shift": 0,
@@ -567,11 +603,11 @@ class MeasureShiftsMenuItemDelegate:
         window.display_data_item(result_data_item)
 
 
-class ApplyShifts:
+class ApplyShifts(Symbolic.ComputationHandlerLike):
     label = _("Apply shifts")
     inputs = {"input_data_item": {"label": _("Input data item")},
               "shifts_data_item": {"label": _("Shifts data item")},
-              "shift_axis": {"label": _("Apply shift along this axis"), "entity_id": "axis_choice"},
+              "axes_description": {"label": _("Apply shift along this axis")},
               }
     outputs = {"shifted": {"label": _("Shifted")},
                }
@@ -579,32 +615,8 @@ class ApplyShifts:
     def __init__(self, computation, **kwargs):
         self.computation = computation
 
-    def execute(self, input_data_item: API.DataItem, shifts_data_item: API.DataItem, shift_axis: typing.Any):
-        input_xdata = input_data_item.xdata
-        shifts  = shifts_data_item.data
-        shift_axis = shift_axis._data_structure.entity.entity_type.entity_id
-        # Like this we directly write to the underlying storage and don't have to cache everything in memory first
-        result_data_item = self.computation.get_result('shifted')
-        function_apply_multi_dimensional_shifts(input_xdata, shifts, shift_axis, out=result_data_item.xdata)
-        # self.__result_xdata = function_apply_multi_dimensional_shifts(input_xdata, shifts, shift_axis)
-
-    def commit(self):
-        # self.computation.set_referenced_xdata("shifted", self.__result_xdata)
-        # self.__result_xdata = None
-        # Still call "set_referenced_xdata" to notify Swift that the data has been updated.
-        self.computation.set_referenced_xdata("shifted", self.computation.get_result("shifted").xdata)
-
-
-class ApplyShiftsMenuItemDelegate:
-    def __init__(self, api: API.API):
-        self.__api = api
-        self.menu_id = "multi_dimensional_processing_menu"
-        self.menu_name = _("Multi-Dimensional Processing")
-        self.menu_before_id = "window_menu"
-        self.menu_item_name = _("Apply shifts")
-
     @staticmethod
-    def guess_shift_axis(shifts_xdata: DataAndMetadata.DataAndMetadata, input_xdata: DataAndMetadata.DataAndMetadata) -> str:
+    def guess_starting_axis(shifts_xdata: DataAndMetadata.DataAndMetadata, input_xdata: DataAndMetadata.DataAndMetadata) -> str:
         shifts_shape = shifts_xdata.data.shape
         data_shape = input_xdata.data.shape
         for i in range(len(data_shape) - len(shifts_shape) + 1):
@@ -654,6 +666,31 @@ class ApplyShiftsMenuItemDelegate:
 
         return shift_axis
 
+    def execute(self, input_data_item: API.DataItem, shifts_data_item: API.DataItem, axes_description: str):
+        input_xdata = input_data_item.xdata
+        shifts  = shifts_data_item.data
+        split_description = axes_description.split("-")
+        shift_axis = split_description[0]
+        # Like this we directly write to the underlying storage and don't have to cache everything in memory first
+        result_data_item = self.computation.get_result('shifted')
+        function_apply_multi_dimensional_shifts(input_xdata, shifts, shift_axis, out=result_data_item.xdata)
+        # self.__result_xdata = function_apply_multi_dimensional_shifts(input_xdata, shifts, shift_axis)
+
+    def commit(self):
+        # self.computation.set_referenced_xdata("shifted", self.__result_xdata)
+        # self.__result_xdata = None
+        # Still call "set_referenced_xdata" to notify Swift that the data has been updated.
+        self.computation.set_referenced_xdata("shifted", self.computation.get_result("shifted").xdata)
+
+
+class ApplyShiftsMenuItemDelegate:
+    def __init__(self, api: API.API):
+        self.__api = api
+        self.menu_id = "multi_dimensional_processing_menu"
+        self.menu_name = _("Multi-Dimensional Processing")
+        self.menu_before_id = "window_menu"
+        self.menu_item_name = _("Apply shifts")
+
     def menu_item_execute(self, window: API.DocumentWindow):
         selected_display_items = window._document_controller._get_two_data_sources()
         error_msg = "Select a multi-dimensional data item and another one that contains shifts that can be broadcast to the shape of the first one."
@@ -676,7 +713,7 @@ class ApplyShiftsMenuItemDelegate:
         else:
             raise ValueError(error_msg)
 
-        shift_axis = ApplyShiftsMenuItemDelegate.guess_shift_axis(shifts_di.xdata, input_di.xdata)
+        shift_axis = ApplyShifts.guess_starting_axis(shifts_di.xdata, input_di.xdata)
 
         data_item = DataItem.DataItem(large_format=True)
         data_item.title="Shifted {}".format(input_di.title)
@@ -687,13 +724,13 @@ class ApplyShiftsMenuItemDelegate:
         data_item.metadata = copy.deepcopy(input_di.xdata.metadata)
         result_data_item = self.__api._new_api_object(data_item)
 
-        shift_axis_structure = DataStructure.DataStructure(structure_type=shift_axis)
-        self.__api.library._document_model.append_data_structure(shift_axis_structure)
-        shift_axis_structure.source = result_data_item._data_item
+        # shift_axis_structure = DataStructure.DataStructure(structure_type=shift_axis)
+        # self.__api.library._document_model.append_data_structure(shift_axis_structure)
+        # shift_axis_structure.source = result_data_item._data_item
 
-        inputs = {"input_data_item": input_di,
-                  "shifts_data_item": shifts_di,
-                  "shift_axis": self.__api._new_api_object(shift_axis_structure)
+        inputs = {"input_data_item": {"object": input_di, "type": "data_source"},
+                  "shifts_data_item": {"object": shifts_di, "type": "data_source"},
+                  "axes_description": shift_axis
                   }
 
         computation = self.__api.library.create_computation("nion.apply_shifts",
@@ -721,37 +758,23 @@ class IntegrateAlongAxisMenuItemDelegate:
         if selected_data_item.display.selected_graphics:
             integrate_graphic = selected_data_item.display.selected_graphics[0]
 
-        # If we have an integrate graphic we probably want to integrate the displayed dimensions
-        if integrate_graphic:
-            # For collections with 1D data we see the collection dimensions
-            if selected_data_item.xdata.is_collection and selected_data_item.xdata.datum_dimension_count == 1:
-                integration_axes = "collection"
-            # Otherwise we see the data dimensions
-            else:
-                integration_axes = "data"
-        # If not, use some generic rules
-        else:
-            if selected_data_item.xdata.is_sequence:
-                integration_axes = "sequence"
-            elif selected_data_item.xdata.is_collection and selected_data_item.xdata.datum_dimension_count == 1:
-                integration_axes = "collection"
-            else:
-                integration_axes = "data"
+        integration_axes = IntegrateAlongAxis.guess_starting_axis(selected_data_item, graphic=integrate_graphic)
 
         # Make a result data item with 3 dimensions to ensure we get a large_format data item
         result_data_item = self.__api.library.create_data_item_from_data(numpy.zeros((1,1,1)), title="Integrated {}".format(selected_data_item.title))
 
-        integration_axes_structure = DataStructure.DataStructure(structure_type=integration_axes)
-        self.__api.library._document_model.append_data_structure(integration_axes_structure)
-        integration_axes_structure.source = result_data_item._data_item
+        # integration_axes_structure = DataStructure.DataStructure(structure_type=integration_axes)
+        # self.__api.library._document_model.append_data_structure(integration_axes_structure)
+        # integration_axes_structure.source = result_data_item._data_item
+        #
+        # integration_sub_axes_structure = DataStructure.DataStructure(structure_type="all")
+        # self.__api.library._document_model.append_data_structure(integration_sub_axes_structure)
+        # integration_sub_axes_structure.source = result_data_item._data_item
 
-        integration_sub_axes_structure = DataStructure.DataStructure(structure_type="all")
-        self.__api.library._document_model.append_data_structure(integration_sub_axes_structure)
-        integration_sub_axes_structure.source = result_data_item._data_item
-
-        inputs = {"input_data_item": selected_data_item,
-                  "integration_axes": self.__api._new_api_object(integration_axes_structure),
-                  "sub_integration_axes": self.__api._new_api_object(integration_sub_axes_structure),
+        inputs = {"input_data_item": {"object": selected_data_item, "type": "data_source"},
+                  "axes_description": integration_axes + "-all"
+                  # "integration_axes": self.__api._new_api_object(integration_axes_structure),
+                  # "sub_integration_axes": self.__api._new_api_object(integration_sub_axes_structure),
                   }
         if integrate_graphic:
             inputs["integration_graphic"] = integrate_graphic
@@ -766,7 +789,7 @@ class IntegrateAlongAxisMenuItemDelegate:
 class Crop:
     label = _("Crop")
     inputs = {"input_data_item": {"label": _("Input data item")},
-              "crop_axis": {"label": _("Crop along this axis"), "entity_id": "axis_choice"},
+              "axes_description": {"label": _("Crop along this axis")},
               "crop_graphic": {"label": _("Crop bounds")},
               "crop_bounds_left": {"label": _("Crop bound left")},
               "crop_bounds_right": {"label": _("Crop bound right")},
@@ -777,9 +800,28 @@ class Crop:
     def __init__(self, computation, **kwargs):
         self.computation = computation
 
-    def execute(self, input_data_item: API.DataItem, crop_axis: typing.Any, crop_graphic: typing.Optional[API.Graphic]=None, **kwargs):
+    @staticmethod
+    def guess_starting_axis(data_item, graphic) -> str:
+        # If we have a crop graphic we probably want to crop the displayed dimensions
+        if graphic:
+            # For collections with 1D data we see the collection dimensions
+            if data_item.xdata.is_collection and data_item.xdata.datum_dimension_count == 1:
+                crop_axes = "collection"
+            # Otherwise we see the data dimensions
+            else:
+                crop_axes = "data"
+        # If not, use some generic rules
+        else:
+            if data_item.xdata.is_collection and data_item.xdata.datum_dimension_count == 1:
+                crop_axes = "collection"
+            else:
+                crop_axes = "data"
+
+        return crop_axes
+
+    def execute(self, input_data_item: API.DataItem, axes_description: str, crop_graphic: typing.Optional[API.Graphic]=None, **kwargs):
         input_xdata: DataAndMetadata.DataAndMetadata = input_data_item.xdata
-        crop_axis = crop_axis._data_structure.entity.entity_type.entity_id
+        crop_axis = axes_description
         if crop_axis == "collection":
             assert input_xdata.is_collection
             crop_axis_indices = list(input_xdata.collection_dimension_indexes)
@@ -870,30 +912,17 @@ class CropMenuItemDelegate:
                     crop_graphic = graphic
                     break
 
-        # If we have a crop graphic we probably want to integrate the displayed dimensions
-        if crop_graphic:
-            # For collections with 1D data we see the collection dimensions
-            if selected_data_item.xdata.is_collection and selected_data_item.xdata.datum_dimension_count == 1:
-                crop_axes = "collection"
-            # Otherwise we see the data dimensions
-            else:
-                crop_axes = "data"
-        # If not, use some generic rules
-        else:
-            if selected_data_item.xdata.is_collection and selected_data_item.xdata.datum_dimension_count == 1:
-                crop_axes = "collection"
-            else:
-                crop_axes = "data"
+        crop_axes = Crop.guess_starting_axis(selected_data_item, crop_graphic)
 
         # Make a result data item with 3 dimensions to ensure we get a large_format data item
         result_data_item = self.__api.library.create_data_item_from_data(numpy.zeros((1,1,1)), title="Cropped {}".format(selected_data_item.title))
 
-        crop_axes_structure = DataStructure.DataStructure(structure_type=crop_axes)
-        self.__api.library._document_model.append_data_structure(crop_axes_structure)
-        crop_axes_structure.source = result_data_item._data_item
+        # crop_axes_structure = DataStructure.DataStructure(structure_type=crop_axes)
+        # self.__api.library._document_model.append_data_structure(crop_axes_structure)
+        # crop_axes_structure.source = result_data_item._data_item
 
-        inputs = {"input_data_item": selected_data_item,
-                  "crop_axis": self.__api._new_api_object(crop_axes_structure),
+        inputs = {"input_data_item": {"object": selected_data_item, "type": "data_source"},
+                  "axes_description": crop_axes
                   }
         if crop_graphic:
             inputs["crop_graphic"] = crop_graphic
@@ -957,7 +986,7 @@ class MakeTableauMenuItemDelegate:
             scale = min(1.0, max_result_pixels / (numpy.sqrt(numpy.prod(selected_data_item.xdata.sequence_dimension_shape)) *
                                                   numpy.sqrt(numpy.prod(selected_data_item.xdata.datum_dimension_shape))))
 
-        inputs = {"input_data_item": selected_data_item,
+        inputs = {"input_data_item": {"object": selected_data_item, "type": "data_source"},
                   "scale": scale}
 
         # Make a result data item with 3 dimensions to ensure we get a large_format data item
@@ -996,20 +1025,178 @@ class MultiDimensionalProcessingExtension:
         self.__tableau_menu_item_ref = None
 
 
+class AxisChoiceVariableHandler(Observable.Observable):
+    def __init__(self, computation: Symbolic.Computation, computation_variable: Symbolic.ComputationVariable, variable_model: Inspector.VariableValueModel, sub_axes_enabled: bool):
+        super().__init__()
+        self.computation = computation
+        self.computation_variable = computation_variable
+        self.variable_model = variable_model
+        self.sub_axes_enabled = sub_axes_enabled
+
+        self.__axes_index = 0
+        self.__sub_axes_visible = False
+        self.__sub_axes_index = 0
+
+        self.initialize()
+
+        u = Declarative.DeclarativeUI()
+        label = u.create_label(text="@binding(computation_variable.display_label)")
+        axes_combo_box = u.create_combo_box(items_ref="@binding(axes)", current_index="@binding(axes_index)")
+        sub_axes_combo_box = u.create_combo_box(items_ref="@binding(sub_axes)", current_index="@binding(sub_axes_index)", visible="@binding(sub_axes_visible)")
+        self.ui_view = u.create_column(label, u.create_row(axes_combo_box, sub_axes_combo_box, u.create_stretch(), spacing=8))
+
+        def handle_item_inserted(*args, **kwargs):
+            self.property_changed_event.fire("axes")
+            self.property_changed_event.fire("sub_axes")
+            input_data_item = self.computation.get_input("input_data_item")
+            new_value = None
+            if self.computation.processing_id == "nion.apply_shifts":
+                shifts_data_item = self.computation.get_input("shifts_data_item")
+                if input_data_item and shifts_data_item:
+                    compute_class = Symbolic._computation_types.get(self.computation.processing_id)
+                    if compute_class:
+                        new_value = compute_class.guess_starting_axis(input_data_item, shifts_data_item)
+            else:
+                if input_data_item:
+                    compute_class = Symbolic._computation_types.get(self.computation.processing_id)
+                    if compute_class:
+                        new_value = compute_class.guess_starting_axis(input_data_item)
+            if new_value is not None:
+                self.variable_model.value = new_value
+            self.initialize()
+
+        self.__item_inserted_listener = self.computation.item_inserted_event.listen(handle_item_inserted)
+
+    def initialize(self):
+        axes_description = self.variable_model.value
+        split_description = axes_description.split("-")
+        self.axes_index = self.__get_available_axis_choices().index(split_description[0])
+        choices = self.__get_available_sub_axis_choices(self.current_axis)
+        self.sub_axes_visible = bool(choices)
+        if choices and len(split_description) > 1:
+            self.sub_axes_index = choices.index(split_description[1])
+
+    def close(self):
+        self.__item_inserted_listener = typing.cast(typing.Any, None)
+
+    def update(self):
+        current_axis = self.current_axis
+        current_sub_axis = self.current_sub_axis
+        self.sub_axes_visible = bool(current_sub_axis)
+        axes_description = ""
+        if current_axis:
+            axes_description += current_axis
+            if current_sub_axis:
+                axes_description += "-" + current_sub_axis
+        self.variable_model.value = axes_description
+        self.property_changed_event.fire("sub_axes")
+
+    @property
+    def __axes_labels(self):
+        return {"sequence": _("Sequence"),
+                "collection": _("Collection"),
+                "data": _("Data")}
+
+    @property
+    def __sub_axes_labels(self):
+        return {"first": _("First"),
+                "second": _("Second"),
+                "all": _("All")}
+
+    def __get_available_axis_choices(self) -> typing.List[str]:
+        axis_choices = []
+        input_data_item = self.computation.get_input("input_data_item")
+        if input_data_item and input_data_item.xdata:
+            if input_data_item.xdata.is_sequence:
+                axis_choices.append("sequence")
+            if input_data_item.xdata.is_collection:
+                axis_choices.append("collection")
+            axis_choices.append("data")
+        return axis_choices
+
+    def __get_available_sub_axis_choices(self, axis: str) -> typing.List[str]:
+        sub_axis_choices = []
+        input_data_item = self.computation.get_input("input_data_item")
+        if axis and input_data_item and input_data_item.xdata:
+            dimension_count = 0
+            if axis == "collection":
+                dimension_count = input_data_item.xdata.collection_dimension_count
+            elif axis == "data":
+                dimension_count = input_data_item.xdata.datum_dimension_count
+            if dimension_count > 1:
+                sub_axis_choices = ["all", "first", "second"]
+        return sub_axis_choices
+
+    @property
+    def current_axis(self) -> typing.Optional[str]:
+        choices = self.__get_available_axis_choices()
+        if choices:
+            return choices[min(self.axes_index, len(choices) - 1)]
+
+    @property
+    def current_sub_axis(self) -> typing.Optional[str]:
+        choices = self.__get_available_sub_axis_choices(self.current_axis)
+        if choices:
+            return choices[min(self.sub_axes_index, len(choices) - 1)]
+
+    @property
+    def axes(self) -> typing.List[str]:
+        return [self.__axes_labels[entry] for entry in self.__get_available_axis_choices()]
+
+    @axes.setter
+    def axes(self, axes: typing.List[str]):
+        ...
+
+    @property
+    def sub_axes(self) -> typing.List[str]:
+        return self.__get_available_sub_axis_choices(self.current_axis)
+
+    @sub_axes.setter
+    def sub_axes(self, sub_axes: typing.List[str]):
+        ...
+
+    @property
+    def axes_index(self) -> int:
+        return self.__axes_index
+
+    @axes_index.setter
+    def axes_index(self, axes_index: int):
+        self.__axes_index = axes_index
+        self.update()
+        # self.property_changed_event.fire("axes_index")
+
+    @property
+    def sub_axes_index(self) -> int:
+        return self.__sub_axes_index
+
+    @sub_axes_index.setter
+    def sub_axes_index(self, sub_axes_index: int):
+        self.__sub_axes_index = sub_axes_index
+        self.update()
+        # self.property_changed_event.fire("sub_axes_index")
+
+    @property
+    def sub_axes_visible(self) -> bool:
+        return self.__sub_axes_visible
+
+    @sub_axes_visible.setter
+    def sub_axes_visible(self, visible: bool):
+        self.__sub_axes_visible = visible if self.sub_axes_enabled else False
+        self.property_changed_event.fire("sub_axes_visible")
+
+
+class AxisChoiceVariableHandlerFactory(Inspector.VariableHandlerComponentFactory):
+    def make_variable_handler(self, document_controller: DocumentController.DocumentController, computation: Symbolic.Computation, computation_variable: Symbolic.ComputationVariable, variable_model: Inspector.VariableValueModel) -> typing.Optional[Declarative.HandlerLike]:
+        if computation.processing_id == "nion.integrate_along_axis" and computation_variable.name == "axes_description":
+            return AxisChoiceVariableHandler(computation, computation_variable, variable_model, True)
+        if computation.processing_id in {"nion.measure_shifts", "nion.apply_shifts", "nion.crop_multi_dimensional"} and computation_variable.name == "axes_description":
+            return AxisChoiceVariableHandler(computation, computation_variable, variable_model, False)
+
+
+Registry.register_component(AxisChoiceVariableHandlerFactory(), {"variable-handler-component-factory"})
+
 Symbolic.register_computation_type("nion.integrate_along_axis", IntegrateAlongAxis)
 Symbolic.register_computation_type("nion.measure_shifts", MeasureShifts)
 Symbolic.register_computation_type("nion.apply_shifts", ApplyShifts)
 Symbolic.register_computation_type("nion.crop_multi_dimensional", Crop)
 Symbolic.register_computation_type("nion.make_tableau_image", MakeTableau)
-
-AxesChoice = Schema.entity("axis_choice", None, None, {})
-
-for choice_id, choice_name in [("collection", "Collection"), ("sequence", "Sequence"), ("data", "Data")]:
-    axis_choice_entity = Schema.entity(choice_id, AxesChoice, None, {})
-    DataStructure.DataStructure.register_entity(axis_choice_entity, entity_name=choice_name, entity_package_name=_("EELS Analysis"))
-
-SubAxesChoice = Schema.entity("sub_axis_choice", None, None, {})
-
-for choice_id, choice_name in [("all", "All"), ("first", "First"), ("second", "Second")]:
-    sub_axis_choice_entity = Schema.entity(choice_id, SubAxesChoice, None, {})
-    DataStructure.DataStructure.register_entity(sub_axis_choice_entity, entity_name=choice_name, entity_package_name=_("EELS Analysis"))
