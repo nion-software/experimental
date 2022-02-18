@@ -1,6 +1,10 @@
 Changelog (nionswift-experimental)
 ==================================
 
+0.7.6 (2022-02-18)
+------------------
+- Clean up computations and associated UI.
+
 0.7.5 (2021-12-13)
 ------------------
 - Add option for relative shifts and limited shift range to Multi-D measure shifts.
