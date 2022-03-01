@@ -469,9 +469,10 @@ class DriftCorrectionUIHandler:
             return
         display_scaling = self.__api.application.document_controllers[0]._document_window.display_scaling
         # We need to allow AS2 to set the foreground window, otherwise the popupedit will get closed again immediately
-        # or not work properly. Since this code only works on Windows, enclose it in a try...except block.
+        # or not work properly. Since this code only works on Windows, enclose it in a try...except block. We also
+        # need to disable typing because type checks will also fail on non-windows systems.
         try:
-            ctypes.windll.user32.AllowSetForegroundWindow(-1)
+            ctypes.windll.user32.AllowSetForegroundWindow(-1) # type: ignore
         except AttributeError:
             import traceback
             traceback.print_exc()
