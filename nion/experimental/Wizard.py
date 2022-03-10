@@ -29,8 +29,9 @@ class WizardStep:
         ...
 
 
-class WizardUIHandler:
-    def __init__(self, api: API, ui_view: Declarative.UIDescription, wizard_steps: typing.Sequence[WizardStep]):
+class WizardUIHandler(Declarative.Handler):
+    def __init__(self, api: API, ui_view: Declarative.UIDescription, wizard_steps: typing.Sequence[WizardStep]) -> None:
+        super().__init__()
         self.__wizard_steps = wizard_steps
         self.content_list: ListModel.ListModel[str] = ListModel.ListModel()
         self.__current_step = 0
@@ -147,6 +148,7 @@ class WizardUIHandler:
     def close(self) -> None:
         if callable(self.on_closed):
             self.on_closed()
+        super().close()
 
     def __set_up_ui_for_pre_wizard_step(self) -> None:
         self.canceled_ui_visible = False
