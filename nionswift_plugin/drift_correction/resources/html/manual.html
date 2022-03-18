@@ -1,0 +1,239 @@
+
+<!DOCTYPE html>
+
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="generator" content="Docutils 0.17.1: http://docutils.sourceforge.net/" />
+
+    <title>Main Window &#8212; Drift Correction  documentation</title>
+    <link rel="stylesheet" type="text/css" href="_static/pygments.css" />
+    <link rel="stylesheet" type="text/css" href="_static/nature.css" />
+    <script data-url_root="./" id="documentation_options" src="_static/documentation_options.js"></script>
+    <script src="_static/jquery.js"></script>
+    <script src="_static/underscore.js"></script>
+    <script src="_static/doctools.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" /> 
+  </head><body>
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="nav-item nav-item-0"><a href="index.html">Drift Correction  documentation</a> &#187;</li>
+        <li class="nav-item nav-item-this"><a href="">Main Window</a></li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <p>This plug-in implements online drift correction by periodically changing the beam shifters.</p>
+<p>It works bei either measuring the current drift rate, using the drift rate measured in tuning or using a drift rate
+entered manually by the user. While drift correction is enabled, the drift rate will be decreased exponentially with a
+time constant specified in the settings.</p>
+<section id="main-window">
+<h1>Main Window<a class="headerlink" href="#main-window" title="Permalink to this headline">¶</a></h1>
+<a class="reference internal image-reference" href="_images/drift_correction_main_window.png"><img alt="Drift correction main window" class="align-center" src="_images/drift_correction_main_window.png" style="width: 50%;" /></a>
+<p>The main window lets you control the drift correction. To get started you need to tell the plugin the current drift rate.
+This can either be done by measuring it with the integrated “Measure drift” button or by using the drift rate measured
+by tuning earlier. Alternatively you can switch “Mode” to “manual” and type a known drift rate into the “X”
+and “Y” fields (note that this is only possible when drift correction is disabled). “Auto” mode means the plugin uses
+drift rates stored in AS2, whereas “manual” just uses whatever is typed into the plugin UI.</p>
+<p>Another way to set the drift rate is to use the “Adjust” button next to the drift rate text fields. Clicking it brings up a
+control adjust box known fom adjusting AS2 controls. Note that this can be used while drift correction is active which is
+useful to manually fine-tune the drift rate until the live image stops moving.</p>
+<p>The “Axis” dropdown menu lets you select which axis is used for manual drift rate adjustment (including the live adjust
+functionality). Additionaly the selection of “Axis” affects how “Measure drift” behaves: When “TV” is selected, the drift
+rate will be measured using the ronchigram camera. Whereas when “Scan” is selected, the drift rate will be measured in
+the first active channel of the scan. In either case, you have to make sure that an image suitable for measuring the
+shift between two frames is visible on the respective device.</p>
+<p>After measuring the drift rate you need to apply it before it can be used. This may sound complicated, but is needed if
+you want to fine tune the measured drift rate by measuring the remaining drift while the correction is running.
+In order to use a measured drift rate you simply have to click “Use measured drift”. This can be done while drift correction
+is enabled or disabled and will update the “X” and “Y” fields in the UI.</p>
+<p>In order to use the drift rate measured by tuning simply click “Use tuning drift”. This can also be done while drift
+correction is enabled or disabled and will update the “X” and “Y” fields in the UI.
+Note that using the tuning drift rate does not clear the measured drift rate. So if you “Use tuning drift” and then
+“Use measured drift” which has been measured before, you could over correct the actual drift which will look like drift
+in the opposite direction.</p>
+<p>While drift correction is enabled the plugin will show the used shifter range in the progress bar at the bottom-right corner.
+It will also show how much time is left before reaching the maximum shifter range. If no time estimate is shown this means
+that you have “infinite” time available because the applied drift will vanish before reaching the maximum shifter range.
+If you plan to do a longer experiment it is a good idea to “Reset shifters” before starting the experiment if it would take
+longer than the remaining drift correction time. “Reset shifters” will compensate the beam shifter movement with the
+sample stage. While the stage is able to move very accurately, you will probably still have to manually move it a bit
+to get your area-of-interest back into the spot where you wanted it.</p>
+</section>
+<section id="settings-dialog">
+<h1>Settings Dialog<a class="headerlink" href="#settings-dialog" title="Permalink to this headline">¶</a></h1>
+<a class="reference internal image-reference" href="_images/drift_correction_settings_window.png"><img alt="Drift correction main window" class="align-center" src="_images/drift_correction_settings_window.png" style="width: 25%;" /></a>
+<p>The settings dialog allows you to customize the behavior of the drift correction plugin. The following settings are
+available in the UI:</p>
+<ul class="simple">
+<li><p><em>Shifter update interval:</em> Specifies how often the shifters will be updated. A shorter interval will result in a smoother
+movement for high drift rates but there is a limit for how fast this can be done. Defaults to 0.1 s.</p></li>
+<li><p><em>Measure drift wait time:</em> Time to wait between the two frames that are used to calculate the current drift rate when
+using the integrated “Measure Drift” tool. A longer time will lead to a more accurate measurement, but you need to make
+sure the same spot on the sample is still visible after the wait time or the measurement will fail. Defaults to 10 s.</p></li>
+<li><p><em>Drift time constant:</em> Time constant of the current drift. The applied drift rate will be decreased exponentially with
+this time constant to account for the fact that directional drift usually gets smaller over time. Defaults to 40 min.</p></li>
+<li><p><em>Maximum shifter range:</em> Maximum range on the probe shifters. This affects the remaining shifter time displayed in the
+UI and, together with “Auto stop threshold”, the point at which drift correction will be disabled automatically for
+safety reasons. Defaults to 100 nm.</p></li>
+<li><p><em>Auto stop threshold:</em> Drift correction will be stopped automatically after moving more than “Auto stop threshold” times
+“Maximum shifter range”. This is to ensure that the mircoscope will not get misaligned by attempting to do extremely
+large shifts with the beam shifters. A warning will always be displayed after using more than “Maximum shifter range”.
+Defaults to 2.</p></li>
+<li><p><em>Reset Shifters to opposite:</em> When enabled, clicking on “Reset shifters” in the main window will set the shifters to
+the opposite value of what they were instead of zeroing them. This will double the available range for drift correction
+after the first reset. Defaults to off.</p></li>
+</ul>
+</section>
+<section id="as2-setup-and-technical-details">
+<h1>AS2 setup and technical details<a class="headerlink" href="#as2-setup-and-technical-details" title="Permalink to this headline">¶</a></h1>
+<p>The measured drift rate and the current (i.e. already adjusted by the exponential decrease) drift rate are both stored
+in AS2. This has the advantage that one could use other software to measure drift and still use this plugin to apply the
+correction. The downside is that AS2 has to be set up correctly in order to have this plugin fully working. See below for
+the required AS2 setup:</p>
+<section id="required-as2-setup">
+<h2>Required AS2 setup<a class="headerlink" href="#required-as2-setup" title="Permalink to this headline">¶</a></h2>
+<p><strong>The following controls need to exist for the plugin to work correctly!</strong></p>
+<ul class="simple">
+<li><p><em>DriftRate</em>: This is used to store the measured drift rate when using the integrated “Measure Drift” tool. Also other
+sources may update the drift rate stored here. Must be a 2D control (native axis in “stage” coordinates makes sense).</p></li>
+<li><p><em>DriftCompensation</em>: This is the drift compensation rate that will be applied by the plugin. This means that it will
+be the negative “DriftRate”. To achieve this, “DriftRate” must drive “DriftCompensation” with a strength of 1! See
+for more details on this. Must be a 2D control (native axis in “stage” coordinates makes sense).</p></li>
+<li><p><em>CSH:</em> Beam shifter control. Must be a 2D control that is calibrated in m, otherwise drift correction will not work correctly.</p></li>
+<li><p><em>SShft:</em> Stage shifter control. Must be a 2D control that is calibrated in m, otherwise drift correction will not work correctly.</p></li>
+<li><p><em>Drift:</em>  Control that tuning uses to store the drift rate measured during tuning. If this doesn’t exist, drift correction
+will still work but you cannot use the tuning drift rate for correction.</p></li>
+</ul>
+</section>
+<section id="technical-details">
+<h2>Technical details<a class="headerlink" href="#technical-details" title="Permalink to this headline">¶</a></h2>
+<p>Similarly to other corrections (i.e. in tuning), drift correction also uses a measure-correct scheme enabled via AS2.
+This means that measuring drift should <em>inform</em> the control “DriftRate” to the measured drift rate. The drift correction
+plugin reads the correction it should apply from a second control “DriftCompensation”. If “DriftRate” and “DriftCompensation”
+are linked properly (i.e. “DriftRate” must drive “DriftCompensation” with strength 1), you can zero “DriftRate” in order
+to apply the correct compensation. Zeroing a previously measured “DriftRate” will cause “DriftCompensation” to be set to
+the negative “DriftRate” which is exactly what we need for a successful correction.</p>
+<p>Clicking the “Use measured drift” button in the plugin will zero “DriftRate” which will have the effect mentioned above.
+The button also ensures that the updates in AS2 don’t conflict with other updates taking place periodically in the plugin
+so it is always preferrable to used the UI buttons over changing things manually when drift correction is enabled.</p>
+<p>Clicking “Use tuning drift” will <em>not</em> change “DriftRate” but simply copy the drift rate measured in tuning over to
+“DriftCompensation” (and takes care of the sign).</p>
+<p>The reason for using this (slightly complicated) measure-correct scheme is that it can be used to fine-tune the measured
+drift rate. In practice you can measure drift while drift correction is running which will allow for a longer measure
+time and therefore a more accurate result. The newly measured drift will simply be written to “DriftRate” (via <em>inform</em>)
+and can then be added to the applied drift compensation via the “Use measured drift” button in the UI. A few iterations
+of this procedure should make the applied drift compensation very accurate. Also measuring drift can be done by other
+means than the integrated tool but the drift compensator will still be able to used this drift if put into the right
+place.</p>
+</section>
+<section id="optional-as2-controls-for-persistent-settings">
+<h2>Optional AS2 controls for persistent settings<a class="headerlink" href="#optional-as2-controls-for-persistent-settings" title="Permalink to this headline">¶</a></h2>
+<p>The settings in the settings dialog will typically be reset to its defaults when you restart Swift. In order to save
+the persitently, you have the option to create certain parameters in AS2 which will then be used to store the settings.
+There are also a few parameters that cannot be set in the UI but can be changed via AS2 if required.
+The table below lists which controls are used to save which setting:</p>
+<table class="docutils align-default">
+<colgroup>
+<col style="width: 51%" />
+<col style="width: 49%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Parameter</p></th>
+<th class="head"><p>AS2 Name</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>update_interval</p></td>
+<td><p>DriftCorrectionUpdateInterval</p></td>
+</tr>
+<tr class="row-odd"><td><p>measure_sleep_time</p></td>
+<td><p>DriftMeasureTime</p></td>
+</tr>
+<tr class="row-even"><td><p>ccorr_threshold</p></td>
+<td><p>DriftCcorrThreshold</p></td>
+</tr>
+<tr class="row-odd"><td><p>drift_time_constant</p></td>
+<td><p>DriftTimeConstant</p></td>
+</tr>
+<tr class="row-even"><td><p>max_shifter_range</p></td>
+<td><p>MaxShifterRange</p></td>
+</tr>
+<tr class="row-odd"><td><p>auto_stop_threshold</p></td>
+<td><p>DiftAutoStopThreshold</p></td>
+</tr>
+<tr class="row-even"><td><p>reset_shifters_to_opposite</p></td>
+<td><p>ResetShiftersToOpposite</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+</section>
+
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper">
+  <div>
+    <h3><a href="index.html">Table of Contents</a></h3>
+    <ul>
+<li><a class="reference internal" href="#">Main Window</a></li>
+<li><a class="reference internal" href="#settings-dialog">Settings Dialog</a></li>
+<li><a class="reference internal" href="#as2-setup-and-technical-details">AS2 setup and technical details</a><ul>
+<li><a class="reference internal" href="#required-as2-setup">Required AS2 setup</a></li>
+<li><a class="reference internal" href="#technical-details">Technical details</a></li>
+<li><a class="reference internal" href="#optional-as2-controls-for-persistent-settings">Optional AS2 controls for persistent settings</a></li>
+</ul>
+</li>
+</ul>
+
+  </div>
+  <div role="note" aria-label="source link">
+    <h3>This Page</h3>
+    <ul class="this-page-menu">
+      <li><a href="_sources/manual.rst.txt"
+            rel="nofollow">Show Source</a></li>
+    </ul>
+   </div>
+<div id="searchbox" style="display: none" role="search">
+  <h3 id="searchlabel">Quick search</h3>
+    <div class="searchformwrapper">
+    <form class="search" action="search.html" method="get">
+      <input type="text" name="q" aria-labelledby="searchlabel" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"/>
+      <input type="submit" value="Go" />
+    </form>
+    </div>
+</div>
+<script>$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             >index</a></li>
+        <li class="nav-item nav-item-0"><a href="index.html">Drift Correction  documentation</a> &#187;</li>
+        <li class="nav-item nav-item-this"><a href="">Main Window</a></li> 
+      </ul>
+    </div>
+    <div class="footer" role="contentinfo">
+        &#169; Copyright 2021, Nion Co.
+      Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 4.4.0.
+    </div>
+  </body>
+</html>
