@@ -3,7 +3,10 @@ import gettext
 import copy
 import numpy
 import scipy.ndimage
+import time
+import multiprocessing
 import threading
+import logging
 
 from nion.data import Core
 from nion.data import DataAndMetadata
@@ -16,6 +19,13 @@ from nion.ui import Declarative
 from nion.utils import Registry
 from nion.utils import Observable
 from nion.typeshed import API_1_0 as API
+
+try:
+    import mkl
+except ModuleNotFoundError:
+    _has_mkl = False
+else:
+    _has_mkl = True
 
 _ = gettext.gettext
 
@@ -311,25 +321,50 @@ def function_measure_multi_dimensional_shifts(xdata: DataAndMetadata.DataAndMeta
         mask = _make_mask(max_shift, origin, data_shape)
 
     shifts = numpy.zeros(result_shape, dtype=numpy.float32)
-
     start_index = 0 if reference_index is not None else 1
-    end_index = numpy.prod(iteration_shape, dtype=numpy.int64)
-    for i in range(start_index, end_index):
-        coords = numpy.unravel_index(i, iteration_shape)
-        data_coords = coords[:shift_axis_indices[0]] + (...,) + coords[shift_axis_indices[0]:]
-        if reference_index is None:
-            coords_ref = numpy.unravel_index(i - 1, iteration_shape)
-            data_coords_ref = coords_ref[:shift_axis_indices[0]] + (...,) + coords_ref[shift_axis_indices[0]:]
-            reference_data = xdata.data[data_coords_ref]
-        elif max_shift is not None and i > start_index:
-            last_coords = numpy.unravel_index(i - 1, iteration_shape)
-            last_shift = shifts[last_coords]
-            data_shape = reference_data[register_slice].shape
-            if len(data_shape) == 2:
-                mask = _make_mask(max_shift, (origin[0] + round(last_shift[0]), origin[1] + round(last_shift[1])), data_shape)
-            else:
-                mask = _make_mask(max_shift, (origin[0] + round(last_shift[0]),), data_shape)
-        shifts[coords] = Core.function_register_template(reference_data[register_slice], xdata.data[data_coords][register_slice], ccorr_mask=mask)[1]
+    navigation_len = numpy.prod(iteration_shape, dtype=numpy.int64)
+    num_cpus = 8
+    try:
+        num_cpus = multiprocessing.cpu_count()
+    except NotImplementedError:
+        logging.warning('Could not determine the number of CPU cores. Defaulting to 8.')
+    finally:
+        num_threads = int(round(num_cpus * 0.6))
+    sections = list(range(start_index, navigation_len, max(1, navigation_len//num_threads)))
+    sections.append(navigation_len)
+    barrier = threading.Barrier(len(sections))
+
+    def run_on_thread(range_):
+        if _has_mkl:
+            mkl.set_num_threads_local(1)
+        local_mask = mask
+        try:
+            for i in range_:
+                coords = numpy.unravel_index(i, iteration_shape)
+                data_coords = coords[:shift_axis_indices[0]] + (...,) + coords[shift_axis_indices[0]:]
+                if reference_index is None:
+                    coords_ref = numpy.unravel_index(i - 1, iteration_shape)
+                    data_coords_ref = coords_ref[:shift_axis_indices[0]] + (...,) + coords_ref[shift_axis_indices[0]:]
+                    reference_data = xdata.data[data_coords_ref]
+                elif max_shift is not None and i > start_index:
+                    last_coords = numpy.unravel_index(i - 1, iteration_shape)
+                    last_shift = shifts[last_coords]
+                    data_shape = reference_data[register_slice].shape
+                    if len(data_shape) == 2:
+                        local_mask = _make_mask(max_shift, (origin[0] + round(last_shift[0]), origin[1] + round(last_shift[1])), data_shape)
+                    else:
+                        local_mask = _make_mask(max_shift, (origin[0] + round(last_shift[0]),), data_shape)
+                shifts[coords] = Core.function_register_template(reference_data[register_slice], xdata.data[data_coords][register_slice], ccorr_mask=local_mask)[1]
+        finally:
+            barrier.wait()
+
+    for i in range(len(sections) - 1):
+        threading.Thread(target=run_on_thread, args=(range(sections[i], sections[i+1]),)).start()
+    barrier.wait()
+
+    # For debugging it is helpful to run a non-threaded version of the code. Comment out the 3 lines above and uncomment
+    # the line below to do so. You also need to comment out "barrier.wait()" in the function running on the thread.
+    # run_on_thread(range(start_index, navigation_len))
 
     shifts = numpy.squeeze(shifts)
 
