@@ -329,7 +329,9 @@ def function_measure_multi_dimensional_shifts(xdata: DataAndMetadata.DataAndMeta
     except NotImplementedError:
         logging.warning('Could not determine the number of CPU cores. Defaulting to 8.')
     finally:
-        num_threads = int(round(num_cpus * 0.6))
+        # Use a little bit more than half the CPU cores, but not more than 20 because then we actually get a slowdown
+        # because of our HDF5 storage handler not being able to grant parallel access to the data
+        num_threads = min(int(round(num_cpus * 0.6)), 20)
     sections = list(range(start_index, navigation_len, max(1, navigation_len//num_threads)))
     sections.append(navigation_len)
     barrier = threading.Barrier(len(sections))
