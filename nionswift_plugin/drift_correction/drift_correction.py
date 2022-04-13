@@ -6,7 +6,6 @@ import gettext
 import threading
 import time
 import warnings
-import numpy
 import logging
 import asyncio
 import pkgutil
@@ -15,7 +14,10 @@ import subprocess
 import json
 import urllib.request
 import ctypes
-from scipy.ndimage import gaussian_filter
+
+import numpy
+import numpy.typing
+import scipy.ndimage
 
 from nion.utils import Registry
 from nion.utils import Event
@@ -72,8 +74,8 @@ def calculate_image_moments(image: _NDArray) -> typing.Tuple[float, float, float
     angle : float
             Angle of an ellipse with the same moments as the input image.
     """
-    coords_y = numpy.arange(image.shape[0], dtype=float)
-    coords_x = numpy.arange(image.shape[1], dtype=float)
+    coords_y: numpy.typing.NDArray[numpy.float_] = numpy.arange(image.shape[0], dtype=float)
+    coords_x: numpy.typing.NDArray[numpy.float_] = numpy.arange(image.shape[1], dtype=float)
 
     proj_y = numpy.sum(image, axis=1)
     proj_x = numpy.sum(image, axis=0)
@@ -90,7 +92,7 @@ def calculate_image_moments(image: _NDArray) -> typing.Tuple[float, float, float
     #nu40 = numpy.sum(coords[1]**4*image)/nu00
     # Find image orientation
     # Formula taken from https://en.wikipedia.org/wiki/Image_moment
-    covmat = numpy.array(((nu20, nu11), (nu11, nu02)))
+    covmat: numpy.typing.NDArray[numpy.float_] = numpy.array(((nu20, nu11), (nu11, nu02)))
     eigval, eigvec = numpy.linalg.eig(covmat) # type: ignore
     angle_vec = eigvec[:, numpy.argmax(eigval)]
     angle = numpy.arctan2(-1.0*angle_vec[1], angle_vec[0])
@@ -115,7 +117,7 @@ def make_binary_image(image: _NDArray, *, blur_radius: float=2, threshold: typin
     Returns a binary mask where brigth areas in the input image are marked with 1 and dark areas with 0.
     """
     if blur_radius > 0:
-        blurred_image = gaussian_filter(image, blur_radius)
+        blurred_image = scipy.ndimage.gaussian_filter(image, blur_radius)
     else:
         blurred_image = image
     if threshold is None:
@@ -123,7 +125,7 @@ def make_binary_image(image: _NDArray, *, blur_radius: float=2, threshold: typin
         threshold = Core.auto_threshold(blurred_image, **kwargs)
     # use int8 instead of uint8 because otherwise Swift goes crazy when displaying the mask
     # (because it expects rgb data)
-    binary_image = numpy.zeros(blurred_image.shape, dtype=numpy.int8)
+    binary_image: numpy.typing.NDArray[numpy.int8] = numpy.zeros(blurred_image.shape, dtype=numpy.int8)
     binary_image[blurred_image>=threshold] = 1
     return binary_image
 
@@ -201,9 +203,10 @@ class DriftCorrectionSettings:
                 setattr(self, key, result)
 
 
-class DriftCorrectionUIHandler:
+class DriftCorrectionUIHandler(Declarative.Handler):
 
     def __init__(self, api: API_1_0, drift_corrector: DriftCorrector, stem_controller: typing.Any, ui_view: typing.Mapping[str, typing.Any], event_loop: asyncio.AbstractEventLoop):
+        super().__init__()
         self.__api = api
         self.__event_loop = event_loop
         self.__drift_corrector = drift_corrector
@@ -252,6 +255,7 @@ class DriftCorrectionUIHandler:
         if self.__drift_corrector_progress_changed_event_listener:
             self.__drift_corrector_progress_changed_event_listener.close()
         self.__drift_corrector_progress_changed_event_listener = typing.cast(typing.Any, None)
+        super().close()
 
     @property
     def enabled(self) -> bool:
@@ -416,6 +420,7 @@ class DriftCorrectionUIHandler:
                                                                  title='Drift correction settings')
         setattr(ui_handler, 'drift_corrector_state_changed_event_listener', self.__drift_corrector.drift_corrector_state_changed_event.listen(ui_handler.update_ui))
 
+        assert ui_handler.ui_view is not None
         dialog = Declarative.construct(document_controller.ui, document_controller, ui_handler.ui_view, ui_handler)
 
         def wc(w: typing.Any) -> None:
@@ -565,7 +570,7 @@ class DriftCorrector:
 
         self.__last_as2_update = 0.0
         # This is interpreted in x, y order!
-        self.__drift_vector = numpy.array((0.0, 0.0))
+        self.__drift_vector: numpy.typing.NDArray[numpy.float_] = numpy.array((0.0, 0.0))
         self.__last_update = time.time()
         self.__drift_vector_backup: typing.Optional[_NDArray] = None
         self.__as2_update_rate_backup: typing.Optional[float] = None
