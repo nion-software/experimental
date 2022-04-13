@@ -7,4 +7,4 @@
 -e git+https://github.com/nion-software/nionui.git#egg=nionui
 -e git+https://github.com/nion-software/nionswift.git#egg=nionswift
 
-numpy==1.21.3
+numpy==1.22.3

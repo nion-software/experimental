@@ -7,8 +7,9 @@ from nion.swift.model import PlugInManager
 from nion.typeshed import API_1_0
 
 
-class SettingsUIHandler:
+class SettingsUIHandler(Declarative.Handler):
     def __init__(self, api: API_1_0.API, settings_object: typing.Any, stem_controller: typing.Any, ui_view: typing.Mapping[str, typing.Any]):
+        super().__init__()
         self.__api = api
         self.__stem_controller = stem_controller
         self.ui_view = ui_view
@@ -34,6 +35,7 @@ class SettingsUIHandler:
     def close(self) -> None:
         if callable(self.on_closed):
             self.on_closed()
+        super().close()
 
     def update_ui(self, result_dict: typing.Mapping[str, typing.Any]) -> None:
         if result_dict.get('state') == 'running':
