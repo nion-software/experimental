@@ -304,6 +304,7 @@ def function_measure_multi_dimensional_shifts(xdata: DataAndMetadata.DataAndMeta
         else:
             register_slice = slice(0, None)
 
+    reference_data = None
     if reference_index is not None:
         if numpy.isscalar(reference_index):
             coords = numpy.unravel_index(reference_index, iteration_shape)
@@ -340,6 +341,7 @@ def function_measure_multi_dimensional_shifts(xdata: DataAndMetadata.DataAndMeta
         if _has_mkl:
             mkl.set_num_threads_local(1)
         local_mask = mask
+        local_reference_data = reference_data
         try:
             for i in range_:
                 coords = numpy.unravel_index(i, iteration_shape)
@@ -347,16 +349,16 @@ def function_measure_multi_dimensional_shifts(xdata: DataAndMetadata.DataAndMeta
                 if reference_index is None:
                     coords_ref = numpy.unravel_index(i - 1, iteration_shape)
                     data_coords_ref = coords_ref[:shift_axis_indices[0]] + (...,) + coords_ref[shift_axis_indices[0]:]
-                    reference_data = xdata.data[data_coords_ref]
+                    local_reference_data = xdata.data[data_coords_ref]
                 elif max_shift is not None and i > start_index:
                     last_coords = numpy.unravel_index(i - 1, iteration_shape)
                     last_shift = shifts[last_coords]
-                    data_shape = reference_data[register_slice].shape
+                    data_shape = local_reference_data[register_slice].shape
                     if len(data_shape) == 2:
                         local_mask = _make_mask(max_shift, (origin[0] + round(last_shift[0]), origin[1] + round(last_shift[1])), data_shape)
                     else:
                         local_mask = _make_mask(max_shift, (origin[0] + round(last_shift[0]),), data_shape)
-                shifts[coords] = Core.function_register_template(reference_data[register_slice], xdata.data[data_coords][register_slice], ccorr_mask=local_mask)[1]
+                shifts[coords] = Core.function_register_template(local_reference_data[register_slice], xdata.data[data_coords][register_slice], ccorr_mask=local_mask)[1]
         finally:
             barrier.wait()
 
