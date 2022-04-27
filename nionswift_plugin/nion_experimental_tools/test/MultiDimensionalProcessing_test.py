@@ -303,7 +303,7 @@ class TestMultiDimensionalProcessing(unittest.TestCase):
             xdata = DataAndMetadata.new_data_and_metadata(data, data_descriptor=data_descriptor)
             shifts_xdata = DataAndMetadata.new_data_and_metadata(shifts)
 
-            shift_axis = MultiDimensionalProcessing.ApplyShiftsMenuItemDelegate.guess_shift_axis(shifts_xdata, xdata)
+            shift_axis = MultiDimensionalProcessing.ApplyShifts.guess_starting_axis(shifts_xdata, xdata)
 
             self.assertEqual(shift_axis, "collection")
 
@@ -315,7 +315,7 @@ class TestMultiDimensionalProcessing(unittest.TestCase):
             xdata = DataAndMetadata.new_data_and_metadata(data, data_descriptor=data_descriptor)
             shifts_xdata = DataAndMetadata.new_data_and_metadata(shifts)
 
-            shift_axis = MultiDimensionalProcessing.ApplyShiftsMenuItemDelegate.guess_shift_axis(shifts_xdata, xdata)
+            shift_axis = MultiDimensionalProcessing.ApplyShifts.guess_starting_axis(shifts_xdata, xdata)
 
             self.assertEqual(shift_axis, "data")
 
@@ -327,7 +327,7 @@ class TestMultiDimensionalProcessing(unittest.TestCase):
             xdata = DataAndMetadata.new_data_and_metadata(data, data_descriptor=data_descriptor)
             shifts_xdata = DataAndMetadata.new_data_and_metadata(shifts)
 
-            shift_axis = MultiDimensionalProcessing.ApplyShiftsMenuItemDelegate.guess_shift_axis(shifts_xdata, xdata)
+            shift_axis = MultiDimensionalProcessing.ApplyShifts.guess_starting_axis(shifts_xdata, xdata)
 
             self.assertEqual(shift_axis, "data")
 
@@ -339,7 +339,7 @@ class TestMultiDimensionalProcessing(unittest.TestCase):
             xdata = DataAndMetadata.new_data_and_metadata(data, data_descriptor=data_descriptor)
             shifts_xdata = DataAndMetadata.new_data_and_metadata(shifts)
 
-            shift_axis = MultiDimensionalProcessing.ApplyShiftsMenuItemDelegate.guess_shift_axis(shifts_xdata, xdata)
+            shift_axis = MultiDimensionalProcessing.ApplyShifts.guess_starting_axis(shifts_xdata, xdata)
 
             self.assertEqual(shift_axis, "collection")
 
@@ -351,7 +351,7 @@ class TestMultiDimensionalProcessing(unittest.TestCase):
             xdata = DataAndMetadata.new_data_and_metadata(data, data_descriptor=data_descriptor)
             shifts_xdata = DataAndMetadata.new_data_and_metadata(shifts)
 
-            shift_axis = MultiDimensionalProcessing.ApplyShiftsMenuItemDelegate.guess_shift_axis(shifts_xdata, xdata)
+            shift_axis = MultiDimensionalProcessing.ApplyShifts.guess_starting_axis(shifts_xdata, xdata)
 
             self.assertEqual(shift_axis, "data")
 
@@ -363,7 +363,7 @@ class TestMultiDimensionalProcessing(unittest.TestCase):
             xdata = DataAndMetadata.new_data_and_metadata(data, data_descriptor=data_descriptor)
             shifts_xdata = DataAndMetadata.new_data_and_metadata(shifts)
 
-            shift_axis = MultiDimensionalProcessing.ApplyShiftsMenuItemDelegate.guess_shift_axis(shifts_xdata, xdata)
+            shift_axis = MultiDimensionalProcessing.ApplyShifts.guess_starting_axis(shifts_xdata, xdata)
 
             self.assertEqual(shift_axis, "data")
 
@@ -375,6 +375,6 @@ class TestMultiDimensionalProcessing(unittest.TestCase):
             xdata = DataAndMetadata.new_data_and_metadata(data, data_descriptor=data_descriptor)
             shifts_xdata = DataAndMetadata.new_data_and_metadata(shifts)
 
-            shift_axis = MultiDimensionalProcessing.ApplyShiftsMenuItemDelegate.guess_shift_axis(shifts_xdata, xdata)
+            shift_axis = MultiDimensionalProcessing.ApplyShifts.guess_starting_axis(shifts_xdata, xdata)
 
             self.assertEqual(shift_axis, "data")

@@ -7,9 +7,10 @@ from nion.data import Core
 from nion.data import DataAndMetadata
 from nion.swift.model import Symbolic
 from nion.swift import Facade
-from nion.typeshed import API_1_0
+from nion.typeshed import API_1_0 as API
 from nion.utils import Event
 
+from . import MultiDimensionalProcessing
 
 _ = gettext.gettext
 
@@ -89,8 +90,8 @@ class AlignMultiSI:
         self.computation._computation.create_panel_widget = create_panel_widget
         self.computation._computation.progress_updated_event = self.progress_updated_event
 
-    def execute(self, si_sequence_data_item: API_1_0.DataItem, haadf_sequence_data_item: API_1_0.DataItem,
-                align_index: int, align_region: typing.Optional[API_1_0.Graphic]=None):
+    def execute(self, si_sequence_data_item: API.DataItem, haadf_sequence_data_item: API.DataItem,
+                align_index: int, align_region: typing.Optional[API.Graphic]=None):
         haadf_xdata = haadf_sequence_data_item.xdata
         si_xdata = si_sequence_data_item.xdata
         bounds = None
@@ -129,7 +130,45 @@ class AlignMultiSI:
         self.computation.set_referenced_xdata("aligned_si", self.__aligned_si_sequence)
 
 
-def align_multi_si(api: API_1_0.API, window: API_1_0.DocumentWindow):
+class AlignMultiSI2(Symbolic.ComputationHandlerLike):
+    label = _("Align and integrate")
+    inputs = {"haadf_data_item": {"label": _("HHADF data item")},
+              "si_data_item": {"label": _("SI data item")},
+              "reference_index": {"label": _("Reference index for shifts")},
+              "relative_shifts": {"label": _("Measure shifts relative to previous slice")},
+              "max_shift": {"label": _("Max shift between consecutive frames (in pixels, <= 0 to disable)")},
+              "bounds_graphic": {"label": _("Shift bounds")},
+              }
+    outputs = {"shifts": {"label": _("Shifts")},
+               "integrated_haadf": {"label": _("Integrated HAADF")},
+               "integrated_si": {"label": _("Integrated SI")},
+               }
+
+    def __init__(self, computation, **kwargs):
+        self.computation = computation
+
+    def execute(self, *, haadf_data_item: API.DataItem, si_data_item: API.DataItem, reference_index: typing.Union[None, int, typing.Sequence[int]]=None, relative_shifts: bool=True, max_shift: int=0, bounds_graphic: typing.Optional[API.Graphic]=None):
+        si_xdata = si_data_item.xdata
+        haadf_xdata = haadf_data_item.xdata
+        bounds = None
+        if bounds_graphic is not None:
+            bounds = bounds_graphic.bounds
+        max_shift_ = max_shift if max_shift > 0 else None
+        reference_index = reference_index if not relative_shifts else None
+        shifts_xdata = MultiDimensionalProcessing.function_measure_multi_dimensional_shifts(haadf_xdata, 'data', reference_index=reference_index, bounds=bounds, max_shift=max_shift_)
+        self.__shifts_xdata = Core.function_transpose_flip(shifts_xdata, transpose=True, flip_v=False, flip_h=False)
+        aligned_haadf_xdata = MultiDimensionalProcessing.function_apply_multi_dimensional_shifts(haadf_xdata, shifts_xdata.data, 'data')
+        self.__integrated_haadf_xdata = Core.function_sum(aligned_haadf_xdata, axis=0)
+        aligned_si_xdata = MultiDimensionalProcessing.function_apply_multi_dimensional_shifts(si_xdata, shifts_xdata.data, 'collection')
+        self.__integrated_si_xdata = Core.function_sum(aligned_si_xdata, axis=0)
+
+    def commit(self):
+        self.computation.set_referenced_xdata("shifts", self.__shifts_xdata)
+        self.computation.set_referenced_xdata("integrated_haadf", self.__integrated_haadf_xdata)
+        self.computation.set_referenced_xdata("integrated_si", self.__integrated_si_xdata)
+
+
+def align_multi_si(api: API, window: API.DocumentWindow):
     selected_display_items = window._document_controller._get_two_data_sources()
     error_msg = "Select a sequence of spectrum images and a sequence of scanned images in order to use this computation."
     assert selected_display_items[0][0] is not None, error_msg
@@ -166,7 +205,66 @@ def align_multi_si(api: API_1_0.API, window: API_1_0.DocumentWindow):
     window.display_data_item(aligned_haadf)
     window.display_data_item(aligned_si)
 
+
+def align_multi_si2(api: API, window: API.DocumentWindow):
+    selected_display_items = window._document_controller._get_two_data_sources()
+    error_msg = "Select a sequence of spectrum images and a sequence of scanned images in order to use this computation."
+    assert selected_display_items[0][0] is not None, error_msg
+    assert selected_display_items[1][0] is not None, error_msg
+    assert selected_display_items[0][0].data_item is not None, error_msg
+    assert selected_display_items[1][0].data_item is not None, error_msg
+    assert selected_display_items[0][0].data_item.is_sequence, error_msg
+    assert selected_display_items[1][0].data_item.is_sequence, error_msg
+    assert selected_display_items[1][0] != selected_display_items[0][0], error_msg
+
+    if selected_display_items[0][0].data_item.is_collection:
+        si_sequence_data_item = selected_display_items[0][0].data_item
+        haadf_sequence_data_item = selected_display_items[1][0].data_item
+        align_region = selected_display_items[1][1]
+    elif selected_display_items[1][0].data_item.is_collection:
+        si_sequence_data_item = selected_display_items[1][0].data_item
+        haadf_sequence_data_item = selected_display_items[0][0].data_item
+        align_region = selected_display_items[0][1]
+    else:
+        raise ValueError(error_msg)
+
+    bounds_graphic = None
+    if align_region:
+        graphic = api._new_api_object(align_region)
+        if graphic.graphic_type == "rect-graphic":
+            bounds_graphic = graphic
+
+    aligned_haadf = api.library.create_data_item(title=f"{haadf_sequence_data_item.title} aligned and integrated")
+    # Make a result data item with 3 dimensions to ensure we get a large_format data item
+    aligned_si = api.library.create_data_item_from_data(numpy.zeros((1,1,1)), title=f"{si_sequence_data_item.title} aligned and integrated")
+    shifts = api.library.create_data_item_from_data(numpy.zeros((2, 2)), title=f"{haadf_sequence_data_item.title} measured shifts")
+
+    inputs = {"haadf_data_item": {"object": api._new_api_object(haadf_sequence_data_item), "type": "data_source"},
+              "si_data_item": {"object": api._new_api_object(si_sequence_data_item), "type": "data_source"},
+              "reference_index": 0,
+              "relative_shifts": True,
+              "max_shift": 0,
+              }
+    if bounds_graphic:
+        inputs["bounds_graphic"] = bounds_graphic
+
+    api.library.create_computation("eels.align_multi_si2",
+                                   inputs=inputs,
+                                   outputs={"shifts": shifts,
+                                            "integrated_haadf": aligned_haadf,
+                                            "integrated_si": aligned_si})
+    window.display_data_item(aligned_haadf)
+    window.display_data_item(aligned_si)
+    window.display_data_item(shifts)
+
+    display_item = api.library._document_model.get_display_item_for_data_item(shifts._data_item)
+    display_item.display_type = "line_plot"
+    display_item._set_display_layer_properties(0, stroke_color='#1E90FF', stroke_width=2, fill_color=None, label="y")
+    display_item._set_display_layer_properties(1, stroke_color='#F00', stroke_width=2, fill_color=None, label="x")
+
+
 Symbolic.register_computation_type("eels.align_multi_si", AlignMultiSI)
+Symbolic.register_computation_type("eels.align_multi_si2", AlignMultiSI2)
 
 
 class AlignMultiSIMenuItemDelegate:
@@ -176,10 +274,16 @@ class AlignMultiSIMenuItemDelegate:
         self.menu_id = "eels_menu"  # required, specify menu_id where this item will go
         self.menu_name = _("EELS")  # optional, specify default name if not a standard menu
         self.menu_before_id = "window_menu"  # optional, specify before menu_id if not a standard menu
-        self.menu_item_name = _("Align sequence of spectrum images")  # menu item name
+        self.menu_item_name = _("[EXPERIMENTAL] Align SI sequence")  # menu item name
 
     def menu_item_execute(self, window):
-        align_multi_si(self.__api, window)
+        try:
+            align_multi_si2(self.__api, window)
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            from nion.swift.model import Notification
+            Notification.notify(Notification.Notification("nion.computation.error", "\N{WARNING SIGN} Computation", "Align sequence of SI failed", str(e)))
 
 
 class AlignMultiSIExtension:

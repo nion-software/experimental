@@ -280,7 +280,7 @@ def function_measure_multi_dimensional_shifts(xdata: DataAndMetadata.DataAndMeta
             iteration_shape += (xdata.data_shape[i],)
             dimensional_calibrations.append(xdata.dimensional_calibrations[i])
         else:
-            intensity_calibration = xdata.dimensional_calibrations[i]
+            intensity_calibration = Calibration.Calibration(scale=xdata.dimensional_calibrations[i].scale, units=xdata.dimensional_calibrations[i].units)
 
     shape: typing.Tuple[int, ...]
     register_slice: typing.Union[slice, typing.Tuple[slice, slice]]
@@ -333,8 +333,21 @@ def function_measure_multi_dimensional_shifts(xdata: DataAndMetadata.DataAndMeta
         # Use a little bit more than half the CPU cores, but not more than 20 because then we actually get a slowdown
         # because of our HDF5 storage handler not being able to grant parallel access to the data
         num_threads = min(int(round(num_cpus * 0.6)), 20)
-    sections = list(range(start_index, navigation_len, max(1, navigation_len//num_threads)))
-    sections.append(navigation_len)
+
+    # Unfortunately multi-threading cannot be used when we cross-correlate with the first frame and max_shift
+    # is not None because in order to create the mask for each frame we need the shift from the previous frame.
+    # This does not work for the "block boundaries" where the data is split between the frames, so we have to
+    # do a single-threaded calculation in this case.
+    # If the shifts reference is not the first or last frame in the sequence, we can actually use two threads, both
+    # starting from reference_index and iterating away from it.
+    if max_shift is not None and reference_index is not None:
+        if reference_index == 0 or reference_index == navigation_len - 1:
+            sections = [start_index, navigation_len]
+        else:
+            sections = [start_index, reference_index, navigation_len]
+    else:
+        sections = list(range(start_index, navigation_len, max(1, navigation_len//num_threads)))
+        sections.append(navigation_len)
     barrier = threading.Barrier(len(sections))
 
     def run_on_thread(range_):
@@ -347,11 +360,11 @@ def function_measure_multi_dimensional_shifts(xdata: DataAndMetadata.DataAndMeta
                 coords = numpy.unravel_index(i, iteration_shape)
                 data_coords = coords[:shift_axis_indices[0]] + (...,) + coords[shift_axis_indices[0]:]
                 if reference_index is None:
-                    coords_ref = numpy.unravel_index(i - 1, iteration_shape)
+                    coords_ref = numpy.unravel_index(i - range_.step, iteration_shape)
                     data_coords_ref = coords_ref[:shift_axis_indices[0]] + (...,) + coords_ref[shift_axis_indices[0]:]
                     local_reference_data = xdata.data[data_coords_ref]
-                elif max_shift is not None and i > start_index:
-                    last_coords = numpy.unravel_index(i - 1, iteration_shape)
+                elif max_shift is not None and i != range_.start:
+                    last_coords = numpy.unravel_index(i - range_.step, iteration_shape)
                     last_shift = shifts[last_coords]
                     data_shape = local_reference_data[register_slice].shape
                     if len(data_shape) == 2:
@@ -362,8 +375,23 @@ def function_measure_multi_dimensional_shifts(xdata: DataAndMetadata.DataAndMeta
         finally:
             barrier.wait()
 
-    for i in range(len(sections) - 1):
-        threading.Thread(target=run_on_thread, args=(range(sections[i], sections[i+1]),)).start()
+    if max_shift is not None and reference_index is not None:
+        # Set up the threads for the case with max_shift and reference index: As explained above, we need a special
+        # setup because the result relies on the previous shift.
+        if len(sections) == 2:
+            if reference_index == 0:
+                threading.Thread(target=run_on_thread, args=(range(sections[0], sections[1]),)).start()
+            # Reference index is the last frame, so go backwards from there
+            else:
+                threading.Thread(target=run_on_thread, args=(range(sections[1] - 1, sections[0] - 1, -1),)).start()
+        else:
+            # If the reference index is somewhere inside the sequence, we can use two threads, one going from
+            # reference_index to 0 (backwards) and one gaing from reference_index to the end.
+            threading.Thread(target=run_on_thread, args=(range(sections[1], sections[0] - 1, -1),)).start()
+            threading.Thread(target=run_on_thread, args=(range(sections[1], sections[2]),)).start()
+    else:
+        for i in range(len(sections) - 1):
+            threading.Thread(target=run_on_thread, args=(range(sections[i], sections[i+1]),)).start()
     barrier.wait()
 
     # For debugging it is helpful to run a non-threaded version of the code. Comment out the 3 lines above and uncomment
