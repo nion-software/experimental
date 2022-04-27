@@ -1,6 +1,12 @@
 Changelog (nionswift-experimental)
 ==================================
 
+0.7.7 (2022-04-20)
+------------------
+- Add drift corrector to experimental.
+- Use multithreading for measure shifts.
+- Minor error improvements during measure shifts.
+
 0.7.6 (2022-02-18)
 ------------------
 - Clean up computations and associated UI.
