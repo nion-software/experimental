@@ -1062,6 +1062,96 @@ class MakeTableauMenuItemDelegate:
         window.display_data_item(result_data_item)
 
 
+class AlignImageSequence(Symbolic.ComputationHandlerLike):
+    label = _("Align and integrate image sequence")
+    inputs = {"input_data_item": {"label": _("Input data item")},
+              "reference_index": {"label": _("Reference index for shifts")},
+              "relative_shifts": {"label": _("Measure shifts relative to previous slice")},
+              "max_shift": {"label": _("Max shift between consecutive frames (in pixels, <= 0 to disable)")},
+              "bounds_graphic": {"label": _("Shift bounds")},
+              }
+    outputs = {"shifts": {"label": _("Shifts")},
+               "integrated_sequence": {"label": _("Integrated sequence")},
+               }
+
+    def __init__(self, computation, **kwargs):
+        self.computation = computation
+
+    def execute(self, *, input_data_item: API.DataItem, reference_index: typing.Union[None, int, typing.Sequence[int]]=None, relative_shifts: bool=True, max_shift: int=0, bounds_graphic: typing.Optional[API.Graphic]=None):
+        input_xdata = input_data_item.xdata
+        bounds = None
+        if bounds_graphic is not None:
+            bounds = bounds_graphic.bounds
+        max_shift_ = max_shift if max_shift > 0 else None
+        reference_index = reference_index if not relative_shifts else None
+        shifts_xdata = function_measure_multi_dimensional_shifts(input_xdata, 'data', reference_index=reference_index, bounds=bounds, max_shift=max_shift_)
+        self.__shifts_xdata = Core.function_transpose_flip(shifts_xdata, transpose=True, flip_v=False, flip_h=False)
+        aligned_input_xdata = function_apply_multi_dimensional_shifts(input_xdata, shifts_xdata.data, 'data')
+        self.__integrated_input_xdata = Core.function_sum(aligned_input_xdata, axis=0)
+
+    def commit(self):
+        self.computation.set_referenced_xdata("shifts", self.__shifts_xdata)
+        self.computation.set_referenced_xdata("integrated_sequence", self.__integrated_input_xdata)
+
+
+class AlignImageSequenceMenuItemDelegate:
+
+    def __init__(self, api):
+        self.__api = api
+        self.menu_id = "processing_menu"  # required, specify menu_id where this item will go
+        self.menu_name = _("Processing")  # optional, specify default name if not a standard menu
+        self.menu_before_id = "window_menu"  # optional, specify before menu_id if not a standard menu
+        self.menu_item_name = _("[EXPERIMENTAL] Align image sequence")  # menu item name
+
+    def menu_item_execute(self, window: API.DocumentWindow):
+        try:
+            selected_data_item = window.target_data_item
+            error_msg = "Select one data item that contains a sequence or 1D-collection of two-dimensional data."
+            assert selected_data_item is not None, error_msg
+            assert selected_data_item.xdata is not None, error_msg
+            assert selected_data_item.xdata.is_sequence or selected_data_item.xdata.is_collection, error_msg
+            assert not (selected_data_item.xdata.is_sequence and selected_data_item.xdata.is_collection), error_msg
+            if selected_data_item.xdata.is_collection:
+                assert selected_data_item.xdata.collection_dimension_count == 1, error_msg
+            assert selected_data_item.xdata.datum_dimension_count == 2, error_msg
+
+            bounds_graphic = None
+            if selected_data_item.display.selected_graphics:
+                for graphic in selected_data_item.display.selected_graphics:
+                    if graphic.graphic_type in {"rect-graphic", "interval-graphic"}:
+                        bounds_graphic = graphic
+
+            # Make a result data item with 3 dimensions to ensure we get a large_format data item
+            result_data_item = self.__api.library.create_data_item_from_data(numpy.zeros((1,1,1)), title=f"{selected_data_item.title} aligned and integrated")
+            shifts = self.__api.library.create_data_item_from_data(numpy.zeros((2, 2)), title=f"{selected_data_item.title} measured shifts")
+
+            inputs = {"input_data_item": {"object": selected_data_item, "type": "data_source"},
+                      "reference_index": 0,
+                      "relative_shifts": False,
+                      "max_shift": 0,
+                      }
+            if bounds_graphic:
+                inputs["bounds_graphic"] = bounds_graphic
+
+            self.__api.library.create_computation("nion.align_and_integrate_image_sequence",
+                                                  inputs=inputs,
+                                                  outputs={"shifts": shifts,
+                                                           "integrated_sequence": result_data_item})
+            window.display_data_item(result_data_item)
+            window.display_data_item(shifts)
+
+            display_item = self.__api.library._document_model.get_display_item_for_data_item(shifts._data_item)
+            display_item.display_type = "line_plot"
+            display_item._set_display_layer_properties(0, stroke_color='#1E90FF', stroke_width=2, fill_color=None, label="y")
+            display_item._set_display_layer_properties(1, stroke_color='#F00', stroke_width=2, fill_color=None, label="x")
+
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            from nion.swift.model import Notification
+            Notification.notify(Notification.Notification("nion.computation.error", "\N{WARNING SIGN} Computation", "Align sequence of images failed", str(e)))
+
+
 class MultiDimensionalProcessingExtension:
 
     extension_id = "nion.experimental.multi_dimensional_processing"
@@ -1073,6 +1163,7 @@ class MultiDimensionalProcessingExtension:
         self.__apply_shifts_menu_item_ref = api.create_menu_item(ApplyShiftsMenuItemDelegate(api))
         self.__crop_menu_item_ref = api.create_menu_item(CropMenuItemDelegate(api))
         self.__tableau_menu_item_ref = api.create_menu_item(MakeTableauMenuItemDelegate(api))
+        self.__align_image_sequence_menu_item_ref = api.create_menu_item(AlignImageSequenceMenuItemDelegate(api))
 
     def close(self):
         self.__integrate_menu_item_ref.close()
@@ -1085,6 +1176,8 @@ class MultiDimensionalProcessingExtension:
         self.__crop_menu_item_ref = None
         self.__tableau_menu_item_ref.close()
         self.__tableau_menu_item_ref = None
+        self.__align_image_sequence_menu_item_ref.close()
+        self.__align_image_sequence_menu_item_ref = None
 
 
 class AxisChoiceVariableHandler(Observable.Observable):
@@ -1262,3 +1355,4 @@ Symbolic.register_computation_type("nion.measure_shifts", MeasureShifts)
 Symbolic.register_computation_type("nion.apply_shifts", ApplyShifts)
 Symbolic.register_computation_type("nion.crop_multi_dimensional", Crop)
 Symbolic.register_computation_type("nion.make_tableau_image", MakeTableau)
+Symbolic.register_computation_type("nion.align_and_integrate_image_sequence", AlignImageSequence)

@@ -131,7 +131,7 @@ class AlignMultiSI:
 
 
 class AlignMultiSI2(Symbolic.ComputationHandlerLike):
-    label = _("Align and integrate")
+    label = _("Align and integrate SI sequence")
     inputs = {"haadf_data_item": {"label": _("HHADF data item")},
               "si_data_item": {"label": _("SI data item")},
               "reference_index": {"label": _("Reference index for shifts")},
@@ -241,9 +241,9 @@ def align_multi_si2(api: API, window: API.DocumentWindow):
 
     inputs = {"haadf_data_item": {"object": api._new_api_object(haadf_sequence_data_item), "type": "data_source"},
               "si_data_item": {"object": api._new_api_object(si_sequence_data_item), "type": "data_source"},
-              "reference_index": 0,
-              "relative_shifts": True,
-              "max_shift": 0,
+              "reference_index": haadf_sequence_data_item.xdata.sequence_dimension_shape[0] // 2,
+              "relative_shifts": False,
+              "max_shift": 3,
               }
     if bounds_graphic:
         inputs["bounds_graphic"] = bounds_graphic
