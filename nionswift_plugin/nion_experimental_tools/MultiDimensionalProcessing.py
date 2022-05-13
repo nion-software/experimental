@@ -885,7 +885,8 @@ class Crop:
 
     def execute(self, input_data_item: API.DataItem, axes_description: str, crop_graphic: typing.Optional[API.Graphic]=None, **kwargs):
         input_xdata: DataAndMetadata.DataAndMetadata = input_data_item.xdata
-        crop_axis = axes_description
+        split_description = axes_description.split("-")
+        crop_axis = split_description[0]
         if crop_axis == "collection":
             assert input_xdata.is_collection
             crop_axis_indices = list(input_xdata.collection_dimension_indexes)
