@@ -1,6 +1,13 @@
 Changelog (nionswift-experimental)
 ==================================
 
+0.7.8 (2022-05-28)
+------------------
+- Change defaults for SI align.
+- Add image sequence align computation.
+- Add align SI sequence computation.
+- Fix threading problem in measure shifts.
+
 0.7.7 (2022-04-20)
 ------------------
 - Add drift corrector to experimental.
