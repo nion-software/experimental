@@ -484,7 +484,7 @@ class DriftCorrectionUIHandler(Declarative.Handler):
         result, message = query(('ui', 'popupedit'), value={'Elements': [DRIFT_VECTOR_CONTROL + '.' + self.__drift_corrector.axis[0],
                                                                          DRIFT_VECTOR_CONTROL + '.' + self.__drift_corrector.axis[1]],
                                                             'Visible': True, 'X': widget_coords.x * display_scaling,
-                                                            'Y': widget_coords.y * display_scaling, 'Strength': 1e-10})
+                                                            'Y': widget_coords.y * display_scaling})
         if message:
             logging.error(message)
             self.__drift_corrector.end_manual_drift_adjustment()
