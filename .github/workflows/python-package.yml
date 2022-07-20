@@ -35,13 +35,13 @@ jobs:
     - name: Install Test Dependencies
       run: |
         pip install -r test-requirements.txt
-        python -m pip install mypy==0.942
+        python -m pip install mypy==0.960
         python -m pip install flake8
         mypy --version
     - name: Test
       run: |
         python -m unittest discover
-        mypy --namespace-packages --ignore-missing-imports --follow-imports=silent --strict --no-warn-unused-ignores --exclude '/test' --exclude '/docs' -p nionswift_plugin.drift_correction
+        mypy --namespace-packages --ignore-missing-imports --follow-imports=silent --strict --no-warn-redundant-casts --no-warn-unused-ignores --exclude '/test' --exclude '/docs' -p nionswift_plugin.drift_correction
     - name: Upload Artifacts
       uses: actions/upload-artifact@v2
       if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.8'
