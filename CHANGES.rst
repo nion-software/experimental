@@ -1,6 +1,11 @@
 Changelog (nionswift-experimental)
 ==================================
 
+0.7.9 (2022-07-26)
+------------------
+- Add I vs E square plot computation.
+- Fix multi-dimensional crop computation axis choice.
+
 0.7.8 (2022-05-28)
 ------------------
 - Change defaults for SI align.
