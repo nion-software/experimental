@@ -3,8 +3,8 @@
 # Use it like this:
 #   pip install -r test-requirements.txt
 
--e git+https://github.com/nion-software/nionutils.git#egg=nionutils
--e git+https://github.com/nion-software/nionui.git#egg=nionui
--e git+https://github.com/nion-software/nionswift.git#egg=nionswift
+git+https://github.com/nion-software/nionutils.git#egg=nionutils
+git+https://github.com/nion-software/nionui.git#egg=nionui
+git+https://github.com/nion-software/nionswift.git#egg=nionswift
 
-numpy==1.22.3
+numpy
