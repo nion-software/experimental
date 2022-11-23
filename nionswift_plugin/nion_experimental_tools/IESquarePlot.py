@@ -1,18 +1,21 @@
 import typing
 import gettext
-import numpy
 
 from nion.swift.model import DocumentModel
 from nion.swift import Facade as API
 
 _ = gettext.gettext
 
+
 processing_descriptions = {"nion.processing.i_e_square_plot":
                                {"title": _("I E^2 Plot"), "expression": "src.xdata * xd.axis_coordinates(src.xdata, -1)**2","sources": [{"name": "src", "label": _("Source")}]}
                            }
 
-
-DocumentModel.DocumentModel.register_processing_descriptions(processing_descriptions)
+# Seems to be needed for test because unittest loader loads this module multiple times.
+try:
+    DocumentModel.DocumentModel.register_processing_descriptions(processing_descriptions)
+except:
+    pass
 
 
 class IESquarePlotMenuItemDelegate:
@@ -21,7 +24,10 @@ class IESquarePlotMenuItemDelegate:
         self.menu_id = "eels_menu"
         self.menu_name = _("EELS")
         self.menu_before_id = "window_menu"
-        self.menu_item_name = _("[EXPERIMENTAL] I E^2 Plot")
+
+    @property
+    def menu_item_name(self) -> str:
+        return _("[EXPERIMENTAL] I E^2 Plot")
 
     def menu_item_execute(self, window: API.DocumentWindow):
         selected_display_item = window._document_window.selected_display_item
