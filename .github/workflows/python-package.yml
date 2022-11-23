@@ -40,7 +40,7 @@ jobs:
         mypy --version
     - name: Test
       run: |
-        python -m unittest discover -p "*_test.py" -s experimental/nionswift_plugin
+        python -m unittest discover -p "*_test.py" -s nionswift_plugin
         mypy --namespace-packages --ignore-missing-imports --follow-imports=silent --strict --no-warn-redundant-casts --no-warn-unused-ignores --exclude "/test" --exclude "/docs" -p nionswift_plugin.drift_correction
     - name: Upload Artifacts
       uses: actions/upload-artifact@v2
