@@ -1,16 +1,14 @@
 import typing
 import gettext
-import functools
 import numpy
 
 from nion.data import Core
 from nion.data import DataAndMetadata
+from nion.data import MultiDimensionalProcessing
 from nion.swift.model import Symbolic
-from nion.swift import Facade
 from nion.typeshed import API_1_0 as API
 from nion.utils import Event
 
-from . import MultiDimensionalProcessing
 
 _ = gettext.gettext
 
@@ -155,11 +153,13 @@ class AlignMultiSI2(Symbolic.ComputationHandlerLike):
             bounds = bounds_graphic.bounds
         max_shift_ = max_shift if max_shift > 0 else None
         reference_index = reference_index if not relative_shifts else None
-        shifts_xdata = MultiDimensionalProcessing.function_measure_multi_dimensional_shifts(haadf_xdata, 'data', reference_index=reference_index, bounds=bounds, max_shift=max_shift_)
+        shifts_axes = tuple(haadf_xdata.datum_dimension_indexes)
+        shifts_xdata = MultiDimensionalProcessing.function_measure_multi_dimensional_shifts(haadf_xdata, shifts_axes, reference_index=reference_index, bounds=bounds, max_shift=max_shift_)
         self.__shifts_xdata = Core.function_transpose_flip(shifts_xdata, transpose=True, flip_v=False, flip_h=False)
-        aligned_haadf_xdata = MultiDimensionalProcessing.function_apply_multi_dimensional_shifts(haadf_xdata, shifts_xdata.data, 'data')
+        aligned_haadf_xdata = MultiDimensionalProcessing.function_apply_multi_dimensional_shifts(haadf_xdata, shifts_xdata.data, shifts_axes)
         self.__integrated_haadf_xdata = Core.function_sum(aligned_haadf_xdata, axis=0)
-        aligned_si_xdata = MultiDimensionalProcessing.function_apply_multi_dimensional_shifts(si_xdata, shifts_xdata.data, 'collection')
+        shifts_axes = tuple(si_xdata.collection_dimension_indexes)
+        aligned_si_xdata = MultiDimensionalProcessing.function_apply_multi_dimensional_shifts(si_xdata, shifts_xdata.data, shifts_axes)
         self.__integrated_si_xdata = Core.function_sum(aligned_si_xdata, axis=0)
 
     def commit(self):

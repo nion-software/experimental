@@ -2,7 +2,6 @@ import gettext
 import unittest
 
 import numpy
-import scipy.ndimage
 
 # local libraries
 from nion.swift import Facade
@@ -10,7 +9,6 @@ from nion.data import DataAndMetadata
 from nion.swift.test import TestContext
 from nion.ui import TestUI
 from nion.swift import Application
-from nion.swift.model import DocumentModel
 
 from nionswift_plugin.nion_experimental_tools import MultiDimensionalProcessing
 
@@ -33,268 +31,29 @@ class TestMultiDimensionalProcessing(unittest.TestCase):
     def tearDown(self):
         pass
 
-    def test_function_apply_multi_dimensional_shifts_4d(self):
-        with self.subTest("Test for a sequence of SIs, shift collection dimensions along sequence axis"):
-            shape = (5, 2, 3, 4)
-            data = numpy.arange(numpy.prod(shape)).reshape(shape)
-            xdata = DataAndMetadata.new_data_and_metadata(data, data_descriptor=DataAndMetadata.DataDescriptor(True, 2, 1))
+    def test_function_crop_along_axis_3d(self):
+        with self.subTest("Test for a sequence of 2D images. Crop sequence axis."):
+            data = numpy.ones((5, 3, 4))
 
-            shifts = numpy.array([(0., 1.), (0., 2.), (0., 3.), (0., 4.), (0., 5.)])
+            data_descriptor = DataAndMetadata.DataDescriptor(True, 0, 2)
+            xdata = DataAndMetadata.new_data_and_metadata(data, data_descriptor=data_descriptor)
 
-            result = MultiDimensionalProcessing.function_apply_multi_dimensional_shifts(xdata, shifts, "collection")
+            cropped = MultiDimensionalProcessing.function_crop_along_axis(xdata, "sequence", crop_bounds_left=1, crop_bounds_right=3)
 
-            shifted = numpy.empty_like(data)
+            self.assertSequenceEqual(cropped.data_shape, (2, 3, 4))
 
-            for i in range(shape[0]):
-                shifted[i] = scipy.ndimage.shift(data[i], [shifts[i, 0], shifts[i, 1], 0.0], order=1)
+    def test_function_crop_along_axis_4d(self):
+        with self.subTest("Test for a 2D collection of 2D images. Crop data axis."):
+            data = numpy.ones((5, 3, 4, 6))
 
-            self.assertTrue(numpy.allclose(result.data, shifted))
+            data_descriptor = DataAndMetadata.DataDescriptor(False, 2, 2)
+            xdata = DataAndMetadata.new_data_and_metadata(data, data_descriptor=data_descriptor)
 
-        with self.subTest("Test for a sequence of 1D collections of 2D data, shift data dimensions along sequence axis"):
-            shape = (5, 2, 3, 4)
-            data = numpy.arange(numpy.prod(shape)).reshape(shape)
-            xdata = DataAndMetadata.new_data_and_metadata(data, data_descriptor=DataAndMetadata.DataDescriptor(True, 1, 2))
+            cropped = MultiDimensionalProcessing.function_crop_along_axis(xdata, "data", crop_bounds_left=3, crop_bounds_right=6, crop_bounds_top=1, crop_bounds_bottom=3)
 
-            shifts = numpy.array([(0., 1.), (0., 2.), (0., 3.), (0., 4.), (0., 5.)])
+            self.assertSequenceEqual(cropped.data_shape, (5, 3, 2, 3))
 
-            result = MultiDimensionalProcessing.function_apply_multi_dimensional_shifts(xdata, shifts, "data")
-
-            shifted = numpy.empty_like(data)
-
-            for i in range(shape[0]):
-                shifted[i] = scipy.ndimage.shift(data[i], [0.0, shifts[i, 0], shifts[i, 1]], order=1)
-
-            self.assertTrue(numpy.allclose(result.data, shifted))
-
-        with self.subTest("Test for a sequence of SIs, shift data dimensions along collection and sequence axis"):
-            shape = (5, 2, 3, 4)
-            data = numpy.arange(numpy.prod(shape)).reshape(shape)
-            xdata = DataAndMetadata.new_data_and_metadata(data, data_descriptor=DataAndMetadata.DataDescriptor(True, 2, 1))
-
-            shifts = numpy.linspace(0, 3, num=numpy.prod(shape[:-1])).reshape(shape[:-1])
-
-            result = MultiDimensionalProcessing.function_apply_multi_dimensional_shifts(xdata, shifts, "data")
-
-            shifted = numpy.empty_like(data)
-
-            for k in range(shape[0]):
-                for i in range(shape[1]):
-                    for j in range(shape[2]):
-                        shifted[k, i, j] = scipy.ndimage.shift(data[k, i, j], [shifts[k, i, j]], order=1)
-
-            self.assertTrue(numpy.allclose(result.data, shifted))
-
-        with self.subTest("Test for a sequence of 1D collections of 2D data, shift collection dimension along sequence axis"):
-            shape = (5, 2, 3, 4)
-            data = numpy.arange(numpy.prod(shape)).reshape(shape)
-            xdata = DataAndMetadata.new_data_and_metadata(data, data_descriptor=DataAndMetadata.DataDescriptor(True, 1, 2))
-
-            shifts = numpy.linspace(0, 1, num=5)
-
-            result = MultiDimensionalProcessing.function_apply_multi_dimensional_shifts(xdata, shifts, "collection")
-
-            shifted = numpy.empty_like(data)
-
-            for i in range(shape[0]):
-                shifted[i] = scipy.ndimage.shift(data[i], [shifts[i], 0.0, 0.0], order=1)
-
-            self.assertTrue(numpy.allclose(result.data, shifted))
-
-    def test_function_apply_multi_dimensional_shifts_5d(self):
-        with self.subTest("Test for a sequence of 4D images, shift collection dimensions along sequence axis"):
-            shape = (5, 2, 3, 4, 6)
-            data = numpy.arange(numpy.prod(shape)).reshape(shape)
-            xdata = DataAndMetadata.new_data_and_metadata(data, data_descriptor=DataAndMetadata.DataDescriptor(True, 2, 2))
-
-            shifts = numpy.array([(0., 1.), (0., 2.), (0., 3.), (0., 4.), (0., 5.)])
-
-            result = MultiDimensionalProcessing.function_apply_multi_dimensional_shifts(xdata, shifts, "collection")
-
-            shifted = numpy.empty_like(data)
-
-            for i in range(shape[0]):
-                shifted[i] = scipy.ndimage.shift(data[i], [shifts[i, 0], shifts[i, 1], 0.0, 0.0], order=1)
-
-            self.assertTrue(numpy.allclose(result.data, shifted))
-
-        with self.subTest("Test for a sequence of 4D images, shift data dimensions along sequence axis"):
-            shape = (5, 2, 3, 4, 6)
-            data = numpy.arange(numpy.prod(shape)).reshape(shape)
-            xdata = DataAndMetadata.new_data_and_metadata(data, data_descriptor=DataAndMetadata.DataDescriptor(True, 2, 2))
-
-            shifts = numpy.array([(0., 1.), (0., 2.), (0., 3.), (0., 4.), (0., 5.)])
-
-            result = MultiDimensionalProcessing.function_apply_multi_dimensional_shifts(xdata, shifts, "data")
-
-            shifted = numpy.empty_like(data)
-
-            for i in range(shape[0]):
-                shifted[i] = scipy.ndimage.shift(data[i], [0.0, 0.0, shifts[i, 0], shifts[i, 1]], order=1)
-
-            self.assertTrue(numpy.allclose(result.data, shifted))
-
-        with self.subTest("Test for a sequence of 4D images, shift sequence dimension along collection axis"):
-            shape = (5, 2, 3, 4, 6)
-            data = numpy.arange(numpy.prod(shape)).reshape(shape)
-            xdata = DataAndMetadata.new_data_and_metadata(data, data_descriptor=DataAndMetadata.DataDescriptor(True, 2, 2))
-
-            shifts = numpy.array([(1., 1.5, 2.),
-                                  (2.5, 3., 3.5)])
-
-            result = MultiDimensionalProcessing.function_apply_multi_dimensional_shifts(xdata, shifts, "sequence")
-
-            shifted = numpy.empty_like(data)
-
-            for k in range(shape[1]):
-                for i in range(shape[2]):
-                    shifted[:, k, i] = scipy.ndimage.shift(data[:, k, i], [shifts[k, i], 0., 0.], order=1)
-
-            self.assertTrue(numpy.allclose(result.data, shifted))
-
-    def test_function_measure_multi_dimensional_shifts_3d(self):
-        with self.subTest("Test for a sequence of 2D data, measure shift of data dimensions along sequence axis"):
-            shape = (5, 100, 100)
-            reference_index = 0
-            data = numpy.random.rand(*shape[1:])
-            data = scipy.ndimage.gaussian_filter(data, 3.0)
-            data = numpy.repeat(data[numpy.newaxis, ...], shape[0], axis=0)
-
-            shifts = numpy.array([(0., 2.), (0., 5.), (0., 10.), (0., 2.5), (0., 3.)])
-
-            shifted = numpy.empty_like(data)
-
-            for i in range(shape[0]):
-                shifted[i] = scipy.ndimage.shift(data[i], [shifts[i, 0], shifts[i, 1]], order=1, cval=numpy.mean(data))
-
-            shifted_xdata = DataAndMetadata.new_data_and_metadata(shifted, data_descriptor=DataAndMetadata.DataDescriptor(True, 0, 2))
-
-            result = MultiDimensionalProcessing.function_measure_multi_dimensional_shifts(shifted_xdata,
-                                                                                          "data",
-                                                                                          reference_index=reference_index)
-
-            self.assertTrue(numpy.allclose(result.data, -1.0 * (shifts - shifts[reference_index]), atol=0.5))
-
-        with self.subTest("Test for a 2D collection of 1D data, measure shift of data dimensions along collection axis"):
-            shape = (5, 5, 100)
-            reference_index = 0
-            data = numpy.random.rand(*shape[2:])
-            data = scipy.ndimage.gaussian_filter(data, 3.0)
-            data = numpy.repeat(numpy.repeat(data[numpy.newaxis, ...], shape[1], axis=0)[numpy.newaxis, ...], shape[0], axis=0)
-
-            shifts = numpy.random.rand(*shape[:2]) * 10.0
-
-            shifted = numpy.empty_like(data)
-
-            for i in range(shape[0]):
-                for j in range(shape[1]):
-                    shifted[i, j] = scipy.ndimage.shift(data[i, j], [shifts[i, j]], order=1, cval=numpy.mean(data))
-
-            shifted_xdata = DataAndMetadata.new_data_and_metadata(shifted, data_descriptor=DataAndMetadata.DataDescriptor(False, 2, 1))
-
-            result = MultiDimensionalProcessing.function_measure_multi_dimensional_shifts(shifted_xdata,
-                                                                                          "data",
-                                                                                          reference_index=reference_index)
-            self.assertTrue(numpy.allclose(result.data, -1.0 * (shifts - shifts[numpy.unravel_index(reference_index, shifts.shape)]), atol=0.5))
-
-        with self.subTest("Test for a sequence of 2D data, measure shift of data dimensions along sequence axis relative to previous slice"):
-            shape = (5, 100, 100)
-            data = numpy.random.rand(*shape[1:])
-            data = scipy.ndimage.gaussian_filter(data, 3.0)
-            data = numpy.repeat(data[numpy.newaxis, ...], shape[0], axis=0)
-
-            shifts = numpy.array([(0., 2.), (0., 5.), (0., 10.), (0., 2.5), (0., 3.)])
-
-            shifted = numpy.empty_like(data)
-
-            for i in range(shape[0]):
-                shifted[i] = scipy.ndimage.shift(data[i], [shifts[i, 0], shifts[i, 1]], order=1, cval=numpy.mean(data))
-
-            shifted_xdata = DataAndMetadata.new_data_and_metadata(shifted, data_descriptor=DataAndMetadata.DataDescriptor(True, 0, 2))
-
-            result = MultiDimensionalProcessing.function_measure_multi_dimensional_shifts(shifted_xdata,
-                                                                                          "data",
-                                                                                          reference_index=None)
-            expected_res = -1.0 * (shifts[1:] - shifts[:-1])
-            expected_res = numpy.append(numpy.zeros((1, 2)), expected_res, axis=0)
-            expected_res = numpy.cumsum(expected_res, axis=0)
-
-            self.assertTrue(numpy.allclose(result.data, expected_res, atol=0.5))
-
-    def test_function_measure_multi_dimensional_shifts_3d_works_with_non_integer_bounds(self):
-        with self.subTest("Test for a sequence of 2D data, measure shift of data dimensions along sequence axis (relative shifts)"):
-            shape = (10, 100, 100)
-            reference_index = None
-            data = numpy.random.rand(*shape[1:])
-            data = scipy.ndimage.gaussian_filter(data, 3.0)
-            data = numpy.repeat(data[numpy.newaxis, ...], shape[0], axis=0)
-            bounds = [[0.0584, 0.0622], [0.9161, 0.8775]]
-            # bounds = [[0.05, 0.06], [0.9, 0.9]]
-
-            shifts = numpy.array([(0., 0.), (0., 5.), (0., 10.), (0., 2.5), (0., 3.), (0.5, 2.), (1.8, 5.), (2.5, 10.), (6.1, 2.5), (3.5, 3.)])
-
-            shifted = numpy.empty_like(data)
-
-            for i in range(shape[0]):
-                shifted[i] = scipy.ndimage.shift(data[i], [shifts[i, 0], shifts[i, 1]], order=5, cval=numpy.mean(data))
-
-            shifted_xdata = DataAndMetadata.new_data_and_metadata(shifted, data_descriptor=DataAndMetadata.DataDescriptor(True, 0, 2))
-
-            result = MultiDimensionalProcessing.function_measure_multi_dimensional_shifts(shifted_xdata,
-                                                                                          "data",
-                                                                                          reference_index=reference_index,
-                                                                                          bounds=bounds)
-            self.assertTrue(numpy.allclose(result.data, -1.0 * shifts, atol=1.5))
-
-    def test_function_measure_multi_dimensional_shifts_4d(self):
-        with self.subTest("Test for a 2D collection of 2D data, measure shift of data dimensions along collection axis"):
-            shape = (5, 5, 100, 100)
-            reference_index = 0
-            data = numpy.random.rand(*shape[2:])
-            data = scipy.ndimage.gaussian_filter(data, 3.0)
-            data = numpy.repeat(numpy.repeat(data[numpy.newaxis, ...], shape[1], axis=0)[numpy.newaxis, ...], shape[0], axis=0)
-
-            shifts = numpy.random.rand(*shape[:2], 2) * 10.0
-
-            shifted = numpy.empty_like(data)
-
-            for i in range(shape[0]):
-                for j in range(shape[1]):
-                    shifted[i, j] = scipy.ndimage.shift(data[i, j], [shifts[i, j, 0], shifts[i, j, 1]], order=1, cval=numpy.mean(data))
-
-            shifted_xdata = DataAndMetadata.new_data_and_metadata(shifted, data_descriptor=DataAndMetadata.DataDescriptor(False, 2, 2))
-
-            result = MultiDimensionalProcessing.function_measure_multi_dimensional_shifts(shifted_xdata,
-                                                                                          "data",
-                                                                                          reference_index=reference_index)
-
-            self.assertTrue(numpy.allclose(result.data, -1.0 * (shifts - shifts[numpy.unravel_index(reference_index, shifts.shape[:-1])]), atol=0.5))
-
-        with self.subTest("Test for a 2D collection of 2D data, measure shift of collection dimensions along data axis"):
-            shape = (5, 5, 100, 100)
-            reference_index = 0
-            data = numpy.random.rand(*shape[2:])
-            data = scipy.ndimage.gaussian_filter(data, 3.0)
-            data = numpy.repeat(numpy.repeat(data[numpy.newaxis, ...], shape[1], axis=0)[numpy.newaxis, ...], shape[0], axis=0)
-
-            shifts = numpy.random.rand(*shape[:2], 2) * 10.0
-
-            shifted = numpy.empty_like(data)
-
-            for i in range(shape[0]):
-                for j in range(shape[1]):
-                    shifted[i, j] = scipy.ndimage.shift(data[i, j], [shifts[i, j, 0], shifts[i, j, 1]], order=1, cval=numpy.mean(data))
-
-            shifted = numpy.moveaxis(shifted, (2, 3), (0, 1))
-
-            shifted_xdata = DataAndMetadata.new_data_and_metadata(shifted, data_descriptor=DataAndMetadata.DataDescriptor(False, 2, 2))
-
-            result = MultiDimensionalProcessing.function_measure_multi_dimensional_shifts(shifted_xdata,
-                                                                                          "collection",
-                                                                                          reference_index=reference_index)
-
-            self.assertTrue(numpy.allclose(result.data, -1.0 * (shifts - shifts[numpy.unravel_index(reference_index, shifts.shape[:-1])]), atol=0.5))
-
-    def test_apply_shifts_guesses_correct_shift_axis(self):
+    def test_apply_shifts_guesses_correct_shift_axis(self) -> None:
         with self.subTest("Test sequence of SIs, shift sequence dimension along collection axis."):
             data = numpy.zeros((5, 3, 3, 7))
             shifts = numpy.zeros((5, 2))
@@ -303,7 +62,7 @@ class TestMultiDimensionalProcessing(unittest.TestCase):
             xdata = DataAndMetadata.new_data_and_metadata(data, data_descriptor=data_descriptor)
             shifts_xdata = DataAndMetadata.new_data_and_metadata(shifts)
 
-            shift_axis = MultiDimensionalProcessing.ApplyShifts.guess_starting_axis(shifts_xdata, xdata)
+            shift_axis = MultiDimensionalProcessing.ApplyShifts.guess_starting_axis(xdata, shifts_xdata=shifts_xdata)
 
             self.assertEqual(shift_axis, "collection")
 
@@ -315,7 +74,7 @@ class TestMultiDimensionalProcessing(unittest.TestCase):
             xdata = DataAndMetadata.new_data_and_metadata(data, data_descriptor=data_descriptor)
             shifts_xdata = DataAndMetadata.new_data_and_metadata(shifts)
 
-            shift_axis = MultiDimensionalProcessing.ApplyShifts.guess_starting_axis(shifts_xdata, xdata)
+            shift_axis = MultiDimensionalProcessing.ApplyShifts.guess_starting_axis(xdata, shifts_xdata=shifts_xdata)
 
             self.assertEqual(shift_axis, "data")
 
@@ -327,7 +86,7 @@ class TestMultiDimensionalProcessing(unittest.TestCase):
             xdata = DataAndMetadata.new_data_and_metadata(data, data_descriptor=data_descriptor)
             shifts_xdata = DataAndMetadata.new_data_and_metadata(shifts)
 
-            shift_axis = MultiDimensionalProcessing.ApplyShifts.guess_starting_axis(shifts_xdata, xdata)
+            shift_axis = MultiDimensionalProcessing.ApplyShifts.guess_starting_axis(xdata, shifts_xdata=shifts_xdata)
 
             self.assertEqual(shift_axis, "data")
 
@@ -339,7 +98,7 @@ class TestMultiDimensionalProcessing(unittest.TestCase):
             xdata = DataAndMetadata.new_data_and_metadata(data, data_descriptor=data_descriptor)
             shifts_xdata = DataAndMetadata.new_data_and_metadata(shifts)
 
-            shift_axis = MultiDimensionalProcessing.ApplyShifts.guess_starting_axis(shifts_xdata, xdata)
+            shift_axis = MultiDimensionalProcessing.ApplyShifts.guess_starting_axis(xdata, shifts_xdata=shifts_xdata)
 
             self.assertEqual(shift_axis, "collection")
 
@@ -351,7 +110,7 @@ class TestMultiDimensionalProcessing(unittest.TestCase):
             xdata = DataAndMetadata.new_data_and_metadata(data, data_descriptor=data_descriptor)
             shifts_xdata = DataAndMetadata.new_data_and_metadata(shifts)
 
-            shift_axis = MultiDimensionalProcessing.ApplyShifts.guess_starting_axis(shifts_xdata, xdata)
+            shift_axis = MultiDimensionalProcessing.ApplyShifts.guess_starting_axis(xdata, shifts_xdata=shifts_xdata)
 
             self.assertEqual(shift_axis, "data")
 
@@ -363,7 +122,7 @@ class TestMultiDimensionalProcessing(unittest.TestCase):
             xdata = DataAndMetadata.new_data_and_metadata(data, data_descriptor=data_descriptor)
             shifts_xdata = DataAndMetadata.new_data_and_metadata(shifts)
 
-            shift_axis = MultiDimensionalProcessing.ApplyShifts.guess_starting_axis(shifts_xdata, xdata)
+            shift_axis = MultiDimensionalProcessing.ApplyShifts.guess_starting_axis(xdata, shifts_xdata=shifts_xdata)
 
             self.assertEqual(shift_axis, "data")
 
@@ -375,6 +134,58 @@ class TestMultiDimensionalProcessing(unittest.TestCase):
             xdata = DataAndMetadata.new_data_and_metadata(data, data_descriptor=data_descriptor)
             shifts_xdata = DataAndMetadata.new_data_and_metadata(shifts)
 
-            shift_axis = MultiDimensionalProcessing.ApplyShifts.guess_starting_axis(shifts_xdata, xdata)
+            shift_axis = MultiDimensionalProcessing.ApplyShifts.guess_starting_axis(xdata, shifts_xdata=shifts_xdata)
 
             self.assertEqual(shift_axis, "data")
+
+    def test_integrate_along_axis_menu_item(self):
+        with create_memory_profile_context() as test_context:
+            document_controller = test_context.create_document_controller_with_application()
+            api = Facade.get_api("~1.0", "~1.0")
+            document_model = document_controller.document_model
+
+            data = numpy.ones((5, 3, 4))
+
+            data_descriptor = DataAndMetadata.DataDescriptor(True, 0, 2)
+            xdata = DataAndMetadata.new_data_and_metadata(data, data_descriptor=data_descriptor)
+
+            source_data_item = api.library.create_data_item_from_data_and_metadata(xdata)
+            document_controller.selected_display_panel = None
+            document_controller.selection.set(0)
+
+            menu_item_delegate = MultiDimensionalProcessing.IntegrateAlongAxisMenuItemDelegate(api)
+            menu_item_delegate.menu_item_execute(api.application.document_windows[0])
+
+            document_model.recompute_all()
+
+            self.assertEqual(len(document_model.data_items), 2)
+            integrated = document_model.data_items[1].xdata
+            self.assertSequenceEqual(integrated.data_shape, (3, 4))
+            self.assertTrue(numpy.allclose(integrated.data, 5.0))
+
+    def test_integrate_along_axis_menu_item_with_graphic(self):
+        with create_memory_profile_context() as test_context:
+            document_controller = test_context.create_document_controller_with_application()
+            api = Facade.get_api("~1.0", "~1.0")
+            document_model = document_controller.document_model
+
+            data = numpy.ones((5, 3, 4))
+
+            data_descriptor = DataAndMetadata.DataDescriptor(True, 0, 2)
+            xdata = DataAndMetadata.new_data_and_metadata(data, data_descriptor=data_descriptor)
+
+            source_data_item = api.library.create_data_item_from_data_and_metadata(xdata)
+            source_data_item.add_rectangle_region(0.5, 0.5, 0.5, 0.5)
+            document_controller.selected_display_panel = None
+            document_controller.selection.set(0)
+            source_data_item.display._display_item.graphic_selection.set(0)
+
+            menu_item_delegate = MultiDimensionalProcessing.IntegrateAlongAxisMenuItemDelegate(api)
+            menu_item_delegate.menu_item_execute(api.application.document_windows[0])
+
+            document_model.recompute_all()
+
+            self.assertEqual(len(document_model.data_items), 2)
+            integrated = document_model.data_items[1].xdata
+            self.assertSequenceEqual(integrated.data_shape, (5,))
+            self.assertTrue(numpy.allclose(integrated.data, 6.0))

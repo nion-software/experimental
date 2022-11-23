@@ -41,7 +41,7 @@ jobs:
     - name: Test
       run: |
         python -m unittest discover
-        mypy --namespace-packages --ignore-missing-imports --follow-imports=silent --strict --no-warn-redundant-casts --no-warn-unused-ignores --exclude '/test' --exclude '/docs' -p nionswift_plugin.drift_correction
+        mypy --namespace-packages --ignore-missing-imports --follow-imports=silent --strict --no-warn-redundant-casts --no-warn-unused-ignores --exclude "/test" --exclude "/docs" -p nionswift_plugin.drift_correction
     - name: Upload Artifacts
       uses: actions/upload-artifact@v2
       if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.8'
