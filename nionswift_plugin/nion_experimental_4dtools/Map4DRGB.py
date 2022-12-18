@@ -1,34 +1,38 @@
 # system imports
 import gettext
+import typing
 
 import numpy as np
 
 # local libraries
-from nion.typeshed import API_1_0 as API
+from nion.data import DataAndMetadata
 from nion.swift import Facade
+from nion.swift.model import DisplayItem
 from nion.swift.model import Graphics
 from nion.swift.model import Symbolic
+from nion.ui import UserInterface
 
 from .DataCache import DataCache
 
 _ = gettext.gettext
 
+_DataArrayType = np.typing.NDArray[typing.Any]
+
 
 class Map4DRGB:
     attributes = {"connection_type": "map"}
 
-    def __init__(self, computation, **kwargs):
+    def __init__(self, computation: Facade.Computation, **kwargs: typing.Any) -> None:
         self.computation = computation
-        self.__api = computation.api
         if not hasattr(computation, 'data_cache'):
-            def modify_data_fn(data):
+            def modify_data_fn(data: _DataArrayType) -> _DataArrayType:
                 new_shape = data.shape[:2] + (-1,)
                 return np.reshape(data, new_shape)
-            computation.data_cache = DataCache(modify_data_fn=modify_data_fn)
+            typing.cast(typing.Any, computation).data_cache = DataCache(modify_data_fn=modify_data_fn)
 
-        def create_panel_widget(ui, document_controller):
-            def select_button_clicked(channel):
-                graphics = document_controller.target_display.selected_graphics
+        def create_panel_widget(ui: Facade.UserInterface, document_controller: Facade.DocumentWindow) -> Facade.ColumnWidget:
+            def select_button_clicked(channel: str) -> None:
+                graphics = document_controller.target_display.selected_graphics if document_controller.target_display else None
                 if not graphics:
                     return
                 try:
@@ -44,46 +48,48 @@ class Map4DRGB:
                         title += title_suffix
                         graphic.label = title
 
-            def gamma_changed(channel, value):
+            def gamma_changed(channel: str, value_str: str) -> None:
                 try:
-                    value = float(value)
+                    value = float(value_str)
                 except ValueError:
                     return
                 gamma_variable = self.computation._computation._get_variable('gamma_' + channel)
-                if gamma_variable.value != value:
-                    gamma_variable.value = value
+                if gamma_variable:
+                    if gamma_variable.value != value:
+                        gamma_variable.value = value
 
-            def enabled_changed(channel, check_state):
+            def enabled_changed(channel: str, check_state: str) -> None:
                 enabled_variable = self.computation._computation._get_variable('enabled_' + channel)
                 enabled = check_state == 'checked'
-                if enabled_variable.value != enabled:
-                    enabled_variable.value = enabled
+                if enabled_variable:
+                    if enabled_variable.value != enabled:
+                        enabled_variable.value = enabled
 
-            def select_red_channel_button_clicked():
+            def select_red_channel_button_clicked() -> None:
                 select_button_clicked('r')
 
-            def select_green_channel_button_clicked():
+            def select_green_channel_button_clicked() -> None:
                 select_button_clicked('g')
 
-            def select_blue_channel_button_clicked():
+            def select_blue_channel_button_clicked() -> None:
                 select_button_clicked('b')
 
-            def gamma_red_finished(text):
+            def gamma_red_finished(text: str) -> None:
                 gamma_changed('r', text)
 
-            def gamma_green_finished(text):
+            def gamma_green_finished(text: str) -> None:
                 gamma_changed('g', text)
 
-            def gamma_blue_finished(text):
+            def gamma_blue_finished(text: str) -> None:
                 gamma_changed('b', text)
 
-            def enabled_red_changed(check_state):
+            def enabled_red_changed(check_state: str) -> None:
                 enabled_changed('r', check_state)
 
-            def enabled_green_changed(check_state):
+            def enabled_green_changed(check_state: str) -> None:
                 enabled_changed('g', check_state)
 
-            def enabled_blue_changed(check_state):
+            def enabled_blue_changed(check_state: str) -> None:
                 enabled_changed('b', check_state)
 
             column = ui.create_column_widget()
@@ -100,17 +106,29 @@ class Map4DRGB:
             gamma_green_field = ui.create_line_edit_widget()
             gamma_blue_field = ui.create_line_edit_widget()
 
-            gamma_red_field.text = self.computation._computation._get_variable('gamma_r').value
-            gamma_green_field.text = self.computation._computation._get_variable('gamma_g').value
-            gamma_blue_field.text = self.computation._computation._get_variable('gamma_b').value
+            gamma_r_variable = self.computation._computation._get_variable('gamma_r')
+            gamma_g_variable = self.computation._computation._get_variable('gamma_g')
+            gamma_b_variable = self.computation._computation._get_variable('gamma_b')
+
+            assert gamma_r_variable and gamma_g_variable and gamma_b_variable
+
+            gamma_red_field.text = gamma_r_variable.value
+            gamma_green_field.text = gamma_g_variable.value
+            gamma_blue_field.text = gamma_b_variable.value
 
             enabled_red = ui.create_check_box_widget('Enabled')
             enabled_green = ui.create_check_box_widget('Enabled')
             enabled_blue = ui.create_check_box_widget('Enabled')
 
-            enabled_red.checked = self.computation._computation._get_variable('enabled_r').value
-            enabled_green.checked = self.computation._computation._get_variable('enabled_g').value
-            enabled_blue.checked = self.computation._computation._get_variable('enabled_b').value
+            enabled_r_variable = self.computation._computation._get_variable('enabled_r')
+            enabled_g_variable = self.computation._computation._get_variable('enabled_g')
+            enabled_b_variable = self.computation._computation._get_variable('enabled_b')
+
+            assert enabled_r_variable and enabled_g_variable and enabled_b_variable
+
+            enabled_red.checked = enabled_r_variable.value
+            enabled_green.checked = enabled_g_variable.value
+            enabled_blue.checked = enabled_b_variable.value
 
             row0.add_spacing(10)
             row0.add(ui.create_label_widget('Select map graphic(s) for channel:'))
@@ -171,20 +189,35 @@ class Map4DRGB:
 
             return column
 
-        self.computation._computation.create_panel_widget = create_panel_widget
+        typing.cast(typing.Any, self.computation._computation).create_panel_widget = create_panel_widget
 
-    def convert_to_8_bit(self, data, gamma=1.0):
+    def convert_to_8_bit(self, data: _DataArrayType, gamma: float = 1.0) -> _DataArrayType:
         data = data - np.amin(data)
         max_ = np.amax(data)
         data = data / (max_ if max_ != 0 else 1)
         data = 255*data**gamma
-        return np.rint(data).astype(np.uint8)
+        return np.rint(data).astype(np.uint8)  # type: ignore
 
-    def execute(self, src, map_regions_r, map_regions_g, map_regions_b, gamma_r, gamma_g, gamma_b, enabled_r,
-                enabled_g, enabled_b):
+    def execute(self, src: typing.Optional[Facade.DataSource] = None,
+                map_regions_r: typing.Optional[typing.Sequence[Graphics.Graphic]] = None,
+                map_regions_g: typing.Optional[typing.Sequence[Graphics.Graphic]] = None,
+                map_regions_b: typing.Optional[typing.Sequence[Graphics.Graphic]] = None,
+                gamma_r: float = 1.0,
+                gamma_g: float = 1.0,
+                gamma_b: float = 1.0,
+                enabled_r: bool = True,
+                enabled_g: bool = True,
+                enabled_b: bool = True,
+                **kwargs: typing.Any) -> None:
+        assert src
+        assert map_regions_r is not None
+        assert map_regions_g is not None
+        assert map_regions_b is not None
         try:
             src_data_item = src.data_item
-            data = self.computation.data_cache.get_cached_data(src_data_item)
+            assert src_data_item.xdata
+            assert src_data_item.metadata is not None
+            data = typing.cast(DataCache, typing.cast(typing.Any, self.computation).data_cache).get_cached_data(src_data_item)
             rgb_data = np.zeros(src_data_item.xdata.data_shape[:2] + (3,), dtype=np.uint8)
             map_regions_rgb = (map_regions_b, map_regions_g, map_regions_r)
             channels_enabled = (enabled_b, enabled_g, enabled_r)
@@ -192,8 +225,9 @@ class Map4DRGB:
             for i in range(len(map_regions_rgb)):
                 if not channels_enabled[i]:
                     continue
+                assert data is not None
                 map_regions = map_regions_rgb[i]
-                mask_data = np.zeros(src_data_item.xdata.data_shape[2:], dtype=np.bool)
+                mask_data = np.zeros(src_data_item.xdata.data_shape[2:], dtype=np.bool_)
                 for region in map_regions:
                     mask_data = np.logical_or(mask_data, region.get_mask(src_data_item.xdata.data_shape[2:]))
                 if mask_data.any():
@@ -207,10 +241,10 @@ class Map4DRGB:
                 else:
                     rgb_data[..., i] = self.convert_to_8_bit(np.sum(data, axis=-1), gammas[i])
 
-            self.__new_xdata = self.__api.create_data_and_metadata(rgb_data,
-                                                                   dimensional_calibrations=src_data_item.dimensional_calibrations[:2],
-                                                                   intensity_calibration=src_data_item.intensity_calibration)
-            metadata = src_data_item.metadata.copy()
+            self.__new_xdata = DataAndMetadata.new_data_and_metadata(rgb_data,
+                                                                     dimensional_calibrations=src_data_item.dimensional_calibrations[:2],
+                                                                     intensity_calibration=src_data_item.intensity_calibration)
+            metadata = dict(src_data_item.metadata).copy()
             metadata['nion.map_4d_rgb.parameters'] = {'src': src_data_item._data_item.write_to_dict(),
                                                       'map_regions_r': [region.write_to_dict() for region in map_regions_r],
                                                       'map_regions_g': [region.write_to_dict() for region in map_regions_g],
@@ -220,13 +254,15 @@ class Map4DRGB:
                                                       'gamma_b': gamma_b,
                                                       'channels_enabled': list(channels_enabled)}
             metadata['nion.map_4d_rgb.parameters']['channels_enabled'].reverse()
-            self.__new_xdata.metadata.update(metadata)
+            new_metadata = dict(self.__new_xdata.metadata).copy()
+            new_metadata.update(metadata)
+            self.__new_xdata._set_metadata(new_metadata)
         except Exception as e:
             print(str(e))
             import traceback
             traceback.print_exc()
 
-    def commit(self):
+    def commit(self) -> None:
         self.computation.set_referenced_xdata('target', self.__new_xdata)
 
 
@@ -237,21 +273,21 @@ class Map4DRGBMenuItem:
     menu_before_id = "window_menu" # optional, specify before menu_id if not a standard menu
     menu_item_name = _("Map 4D RGB")  # menu item name
 
-    def __init__(self, api):
+    def __init__(self, api: Facade.API_1) -> None:
         self.__api = api
-        self.__computation_data_items = dict()
-        self.__tool_tip_boxes = list()
+        self.__computation_data_items: typing.Dict[str, str] = dict()
+        self.__tool_tip_boxes: typing.List[UserInterface.BoxWidget] = list()
 
-    def __display_item_changed(self, display_item):
+    def __display_item_changed(self, display_item: DisplayItem.DisplayItem) -> None:
         data_item = display_item.data_item if display_item else None
         if data_item:
             tip_id = self.__computation_data_items.get(str(data_item.uuid))
             if tip_id:
                 self.__show_tool_tips(tip_id)
 
-    def __show_tool_tips(self, tip_id='source', timeout=30):
+    def __show_tool_tips(self, tip_id: str = 'source', timeout: float = 30.0) -> None:
         for box in self.__tool_tip_boxes:
-            box.remove_now()
+            typing.cast(typing.Any, box).remove_now()
         self.__tool_tip_boxes = list()
         if tip_id == 'source':
             text = ('Select one or multiple graphic(s) on the source data item per channel and click "Select" in the '
@@ -265,11 +301,13 @@ class Map4DRGBMenuItem:
             return
         document_controller = self.__api.application.document_windows[0]
         workspace = document_controller._document_controller.workspace_controller
-        box = workspace.pose_tool_tip_box(text, timeout)
-        #box = document_controller.show_tool_tip_box(text, timeout)
-        self.__tool_tip_boxes.append(box)
+        assert workspace
+        tool_tip_box = workspace.pose_tool_tip_box(text, timeout)
+        if tool_tip_box:
+            #box = document_controller.show_tool_tip_box(text, timeout)
+            self.__tool_tip_boxes.append(tool_tip_box)
 
-    def menu_item_execute(self, window: API.DocumentWindow) -> None:
+    def menu_item_execute(self, window: Facade.DocumentWindow) -> None:
         document_controller = window._document_controller
         selected_display_item = document_controller.selected_display_item
         data_item = (selected_display_item.data_items[0] if
@@ -277,13 +315,17 @@ class Map4DRGBMenuItem:
 
         if data_item:
             api_data_item = Facade.DataItem(data_item)
-            if not api_data_item.xdata.is_data_4d:
+            if not (api_data_item.xdata and api_data_item.xdata.is_data_4d):
                 self.__show_tool_tips('wrong_shape')
                 return
             map_data_item = self.__api.library.create_data_item(title='Map 4D (RGB) of ' + data_item.title)
             # the following uses internal API and should not be used as example code.
             computation = document_controller.document_model.create_computation()
-            computation.create_input_item("src", Symbolic.make_item(selected_display_item.get_display_data_channel_for_data_item(data_item)))
+            assert selected_display_item
+            display_data_channel = selected_display_item.get_display_data_channel_for_data_item(data_item)
+            assert display_data_channel
+            # note: display_data_channel gets passed to execute as a Facade.DataSource. see DataStructure.get_object_specifier
+            computation.create_input_item("src", Symbolic.make_item(display_data_channel))
             computation.create_input_item("map_regions_r", Symbolic.make_item_list([]))
             computation.create_input_item("map_regions_g", Symbolic.make_item_list([]))
             computation.create_input_item("map_regions_b", Symbolic.make_item_list([]))
@@ -296,6 +338,7 @@ class Map4DRGBMenuItem:
             computation.processing_id = "nion.map_4d_rgb.2"
             document_controller.document_model.set_data_item_computation(map_data_item._data_item, computation)
             map_display_item = document_controller.document_model.get_display_item_for_data_item(map_data_item._data_item)
+            assert map_display_item
             document_controller.show_display_item(map_display_item)
             graphic = Graphics.PointGraphic()
             graphic.label = "Pick"
@@ -314,13 +357,13 @@ class Map4DExtension:
     # required for Swift to recognize this as an extension class.
     extension_id = "nion.extension.map_4d_rgb"
 
-    def __init__(self, api_broker):
+    def __init__(self, api_broker: typing.Any) -> None:
         # grab the api object.
         api = api_broker.get_api(version="1", ui_version="1")
         # be sure to keep a reference or it will be closed immediately.
         self.__menu_item_ref = api.create_menu_item(Map4DRGBMenuItem(api))
 
-    def close(self):
+    def close(self) -> None:
         self.__menu_item_ref.close()
 
 Symbolic.register_computation_type('nion.map_4d_rgb.2', Map4DRGB)

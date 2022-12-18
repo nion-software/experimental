@@ -1,5 +1,6 @@
 # system imports
 import gettext
+import typing
 
 # local libraries
 from nion.typeshed import API_1_0 as API
@@ -30,11 +31,11 @@ class GraphicsToolsExtension:
     # required for Swift to recognize this as an extension class.
     extension_id = "nionswift.graphics_tools"
 
-    def __init__(self, api_broker):
+    def __init__(self, api_broker: typing.Any) -> None:
         # grab the api object.
         api = api_broker.get_api(version="1", ui_version="1")
         # be sure to keep a reference or it will be closed immediately.
         self.__menu_item_ref = api.create_menu_item(AlignToCenterMenuItem())
 
-    def close(self):
+    def close(self) -> None:
         self.__menu_item_ref.close()

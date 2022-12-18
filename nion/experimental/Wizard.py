@@ -20,13 +20,13 @@ class WizardStep:
 
     @staticmethod
     def get_ui_description(ui: Declarative.DeclarativeUI) -> Declarative.UIDescription:
-        ...
+        raise NotImplementedError()
 
     def run(self) -> int:
-        ...
+        raise NotImplementedError()
 
     def cancel(self) -> None:
-        ...
+        raise NotImplementedError()
 
 
 class WizardUIHandler(Declarative.Handler):

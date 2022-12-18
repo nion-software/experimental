@@ -1,9 +1,10 @@
+from __future__ import annotations
+
 import typing
 import gettext
 import copy
 import numpy
 import scipy.ndimage
-import time
 import multiprocessing
 import threading
 import logging
@@ -13,6 +14,7 @@ from nion.data import DataAndMetadata
 from nion.data import Calibration
 from nion.swift.model import Symbolic
 from nion.swift.model import DataItem
+from nion.swift import Facade
 from nion.swift import Inspector
 from nion.swift import DocumentController
 from nion.ui import Declarative
@@ -29,6 +31,8 @@ else:
 
 _ = gettext.gettext
 
+_DataArrayType = numpy.typing.NDArray[typing.Any]
+
 
 class IntegrateAlongAxis(Symbolic.ComputationHandlerLike):
     label = _("Integrate")
@@ -40,7 +44,7 @@ class IntegrateAlongAxis(Symbolic.ComputationHandlerLike):
     outputs = {"integrated": {"label": _("Integrated")},
                }
 
-    def __init__(self, computation, **kwargs):
+    def __init__(self, computation: Facade.Computation, **kwargs: typing.Any) -> None:
         self.computation = computation
 
     @staticmethod
@@ -48,6 +52,7 @@ class IntegrateAlongAxis(Symbolic.ComputationHandlerLike):
         # If we have an integrate graphic we probably want to integrate the displayed dimensions
         if graphic:
             # For collections with 1D data we see the collection dimensions
+            assert data_item.xdata
             if data_item.xdata.is_collection and data_item.xdata.datum_dimension_count == 1:
                 integration_axes = "collection"
             # Otherwise we see the data dimensions
@@ -55,6 +60,7 @@ class IntegrateAlongAxis(Symbolic.ComputationHandlerLike):
                 integration_axes = "data"
         # If not, use some generic rules
         else:
+            assert data_item.xdata
             if data_item.xdata.is_sequence:
                 integration_axes = "sequence"
             elif data_item.xdata.is_collection and data_item.xdata.datum_dimension_count == 1:
@@ -64,7 +70,11 @@ class IntegrateAlongAxis(Symbolic.ComputationHandlerLike):
 
         return integration_axes
 
-    def execute(self, input_data_item: API.DataItem, axes_description: str, integration_graphic: typing.Optional[API.Graphic]=None):
+    def execute(self, *, input_data_item: typing.Optional[API.DataItem] = None,
+                axes_description: typing.Optional[str] = None,
+                integration_graphic: typing.Optional[API.Graphic] = None, **kwargs: typing.Any) -> None:
+        assert input_data_item
+        assert axes_description
         input_xdata: DataAndMetadata.DataAndMetadata = input_data_item.xdata
         split_description = axes_description.split("-")
         integration_axes = split_description[0]
@@ -80,7 +90,7 @@ class IntegrateAlongAxis(Symbolic.ComputationHandlerLike):
                 integration_axis_shape = (integration_axis_shape[index],)
                 result_data_descriptor = DataAndMetadata.DataDescriptor(input_xdata.is_sequence, input_xdata.collection_dimension_count - 1, input_xdata.datum_dimension_count)
         elif integration_axes == "sequence":
-            assert input_xdata.is_sequence
+            assert input_xdata.is_sequence and input_xdata.sequence_dimension_index is not None
             integration_axis_indices = [input_xdata.sequence_dimension_index]
             integration_axis_shape = input_xdata.sequence_dimension_shape
             result_data_descriptor = DataAndMetadata.DataDescriptor(False, input_xdata.collection_dimension_count, input_xdata.datum_dimension_count)
@@ -121,7 +131,7 @@ class IntegrateAlongAxis(Symbolic.ComputationHandlerLike):
         # chr(97) == 'a' so we get letters in alphabetic order here (a, b, c, d, ...)
         sum_str = ''.join([chr(i + 97) for i in range(len(integration_axis_shape))])
         operands = [input_xdata.data]
-        if integration_graphic is not None:
+        if integration_graphic:
             mask = integration_graphic.mask_xdata_with_shape(integration_axis_shape)
             operands.append(mask)
             sum_str = data_str + ',' + mask_str
@@ -166,11 +176,11 @@ class IntegrateAlongAxis(Symbolic.ComputationHandlerLike):
                                                                     dimensional_calibrations=result_dimensional_calibrations,
                                                                     data_descriptor=result_data_descriptor)
 
-    def commit(self):
+    def commit(self) -> None:
         self.computation.set_referenced_xdata("integrated", self.__result_xdata)
 
 
-def ellipse_radius(polar_angle: typing.Union[float, numpy.ndarray], a: float, b: float, rotation: float) -> typing.Union[float, numpy.ndarray]:
+def ellipse_radius(polar_angle: typing.Union[float, _DataArrayType], a: float, b: float, rotation: float) -> typing.Union[float, _DataArrayType]:
     """
     Returns the radius of a point lying on an ellipse with the given parameters. The ellipse is described in polar
     coordinates here, which makes it easy to incorporate a rotation.
@@ -189,10 +199,10 @@ def ellipse_radius(polar_angle: typing.Union[float, numpy.ndarray], a: float, b:
              Radius of a point lying on an ellipse with the given parameters.
     """
 
-    return a*b/numpy.sqrt((b*numpy.cos(polar_angle+rotation))**2+(a*numpy.sin(polar_angle+rotation))**2)
+    return a * b / numpy.sqrt((b * numpy.cos(polar_angle + rotation)) ** 2 + (a * numpy.sin(polar_angle + rotation)) ** 2)
 
 
-def draw_ellipse(image: numpy.ndarray, ellipse: typing.Tuple[float, float, float, float, float], *,
+def draw_ellipse(image: _DataArrayType, ellipse: typing.Tuple[float, float, float, float, float], *,
                  color: typing.Any=1.0) -> None:
     """
     Draws an ellipse on a 2D-array.
@@ -228,15 +238,15 @@ def draw_ellipse(image: numpy.ndarray, ellipse: typing.Tuple[float, float, float
     image[top:bottom, left:right][radii<ellipse_radii] = color
 
 
-def _make_mask(max_shift: int, origin: typing.Tuple[int, ...], data_shape: typing.Tuple[int, ...]) -> numpy.ndarray:
+def _make_mask(max_shift: int, origin: typing.Tuple[int, ...], data_shape: typing.Tuple[int, ...]) -> _DataArrayType:
     mask = numpy.zeros(data_shape, dtype=bool)
     if len(data_shape) == 2:
         half_shape = (data_shape[0] // 2, data_shape[1] // 2)
         offset = (origin[0] + half_shape[0], origin[1] + half_shape[1])
         draw_ellipse(mask, offset + (max_shift, max_shift, 0))
     elif len(data_shape) == 1:
-        half_shape = data_shape[0] // 2
-        mask[max(0, origin[0] + half_shape - max_shift):min(data_shape[0], origin[0] + half_shape + max_shift + 1)] = True
+        half_len = data_shape[0] // 2
+        mask[max(0, origin[0] + half_len - max_shift):min(data_shape[0], origin[0] + half_len + max_shift + 1)] = True
     else:
         raise ValueError('Only data of 1 or 2 dimensions is allowed.')
     return mask
@@ -244,8 +254,8 @@ def _make_mask(max_shift: int, origin: typing.Tuple[int, ...], data_shape: typin
 
 def function_measure_multi_dimensional_shifts(xdata: DataAndMetadata.DataAndMetadata,
                                               shift_axis: str,
-                                              reference_index: typing.Union[None, int, typing.Sequence[int]]=None,
-                                              bounds: typing.Any=None,
+                                              reference_index: typing.Union[None, int, typing.Sequence[int]] = None,
+                                              bounds: typing.Any = None,
                                               max_shift: typing.Optional[int] = None,
                                               origin: typing.Tuple[int, ...] = (0, 0)) -> DataAndMetadata.DataAndMetadata:
     """
@@ -260,7 +270,7 @@ def function_measure_multi_dimensional_shifts(xdata: DataAndMetadata.DataAndMeta
             shifts_ndim = 0
         shift_axis_indices = list(xdata.collection_dimension_indexes)
     elif shift_axis == "sequence":
-        assert xdata.is_sequence
+        assert xdata.is_sequence and xdata.sequence_dimension_index is not None
         shifts_ndim = 0
         shift_axis_indices = [xdata.sequence_dimension_index]
     elif shift_axis == "data":
@@ -304,12 +314,13 @@ def function_measure_multi_dimensional_shifts(xdata: DataAndMetadata.DataAndMeta
         else:
             register_slice = slice(0, None)
 
-    reference_data = None
+    coords: typing.Tuple[typing.Any, ...]
+    reference_data: typing.Optional[_DataArrayType] = None
     if reference_index is not None:
         if numpy.isscalar(reference_index):
-            coords = numpy.unravel_index(reference_index, iteration_shape)
+            coords = numpy.unravel_index(numpy.array(reference_index).item(), iteration_shape)
         else:
-            coords = reference_index
+            coords = typing.cast(typing.Tuple[typing.Any, ...], reference_index)
         data_coords = coords[:shift_axis_indices[0]] + (...,) + coords[shift_axis_indices[0]:]
         reference_data = xdata.data[data_coords]
 
@@ -323,7 +334,7 @@ def function_measure_multi_dimensional_shifts(xdata: DataAndMetadata.DataAndMeta
 
     shifts = numpy.zeros(result_shape, dtype=numpy.float32)
     start_index = 0 if reference_index is not None else 1
-    navigation_len = numpy.prod(iteration_shape, dtype=numpy.int64)
+    navigation_len = numpy.prod(iteration_shape, dtype=numpy.int64).item()
     num_cpus = 8
     try:
         num_cpus = multiprocessing.cpu_count()
@@ -344,13 +355,13 @@ def function_measure_multi_dimensional_shifts(xdata: DataAndMetadata.DataAndMeta
         if reference_index == 0 or reference_index == navigation_len - 1:
             sections = [start_index, navigation_len]
         else:
-            sections = [start_index, reference_index, navigation_len]
+            sections = [start_index, numpy.array(reference_index).item(), navigation_len]
     else:
-        sections = list(range(start_index, navigation_len, max(1, navigation_len//num_threads)))
+        sections = list(range(start_index, navigation_len, int(max(1, navigation_len // num_threads))))
         sections.append(navigation_len)
     barrier = threading.Barrier(len(sections))
 
-    def run_on_thread(range_):
+    def run_on_thread(range_: range) -> None:
         if _has_mkl:
             mkl.set_num_threads_local(1)
         local_mask = mask
@@ -366,11 +377,13 @@ def function_measure_multi_dimensional_shifts(xdata: DataAndMetadata.DataAndMeta
                 elif max_shift is not None and i != range_.start:
                     last_coords = numpy.unravel_index(i - range_.step, iteration_shape)
                     last_shift = shifts[last_coords]
+                    assert local_reference_data is not None
                     data_shape = local_reference_data[register_slice].shape
                     if len(data_shape) == 2:
                         local_mask = _make_mask(max_shift, (origin[0] + round(last_shift[0]), origin[1] + round(last_shift[1])), data_shape)
                     else:
                         local_mask = _make_mask(max_shift, (origin[0] + round(last_shift[0]),), data_shape)
+                assert local_reference_data is not None
                 shifts[coords] = Core.function_register_template(local_reference_data[register_slice], xdata.data[data_coords][register_slice], ccorr_mask=local_mask)[1]
         finally:
             barrier.wait()
@@ -411,7 +424,7 @@ def function_measure_multi_dimensional_shifts(xdata: DataAndMetadata.DataAndMeta
 
 
 def function_apply_multi_dimensional_shifts(xdata: DataAndMetadata.DataAndMetadata,
-                                            shifts: numpy.ndarray,
+                                            shifts: _DataArrayType,
                                             shift_axis: str,
                                             out: typing.Optional[DataAndMetadata.DataAndMetadata] = None) -> typing.Optional[DataAndMetadata.DataAndMetadata]:
     if shift_axis == "collection":
@@ -423,7 +436,7 @@ def function_apply_multi_dimensional_shifts(xdata: DataAndMetadata.DataAndMetada
             shifts_shape = shifts.shape
         shift_axis_indices = list(xdata.collection_dimension_indexes)
     elif shift_axis == "sequence":
-        assert xdata.is_sequence
+        assert xdata.is_sequence and xdata.sequence_dimension_index is not None
         shifts_shape = shifts.shape
         shift_axis_indices = [xdata.sequence_dimension_index]
     elif shift_axis == "data":
@@ -475,12 +488,12 @@ def function_apply_multi_dimensional_shifts(xdata: DataAndMetadata.DataAndMetada
     #         shifts_array[ind - len(squeezed_iteration_shape)] = shifts[coords][i]
     #     result[coords] = scipy.ndimage.shift(xdata.data[coords], shifts_array, order=1)
 
-    navigation_len = numpy.prod(squeezed_iteration_shape, dtype=numpy.int64)
+    navigation_len = numpy.prod(squeezed_iteration_shape, dtype=numpy.int64).item()
     sections = list(range(0, navigation_len, max(1, navigation_len//8)))
     sections.append(navigation_len)
     barrier = threading.Barrier(len(sections))
 
-    def run_on_thread(range_):
+    def run_on_thread(range_: range) -> None:
         try:
             shifts_array = numpy.zeros(len(shift_axis_indices) + (len(iteration_shape) - len(squeezed_iteration_shape)))
             if shifts_end_axis < len(shifts.shape):
@@ -498,9 +511,9 @@ def function_apply_multi_dimensional_shifts(xdata: DataAndMetadata.DataAndMetada
                 offset_slices = tuple([slice(None) for _ in range(iteration_shape_offset)])
                 for i in range_:
                     shift_coords = numpy.unravel_index(i, squeezed_iteration_shape)
-                    coords = offset_slices + shift_coords
+                    coords2 = offset_slices + shift_coords
                     shifts_array[0] = shifts[shift_coords]
-                    result[coords] = scipy.ndimage.shift(xdata.data[coords], shifts_array, order=1)
+                    result[coords2] = scipy.ndimage.shift(xdata.data[coords2], shifts_array, order=1)
             else:
                 for i in range_:
                     coords = numpy.unravel_index(i, squeezed_iteration_shape)
@@ -522,6 +535,7 @@ def function_apply_multi_dimensional_shifts(xdata: DataAndMetadata.DataAndMetada
                                                      dimensional_calibrations=xdata.dimensional_calibrations,
                                                      metadata=xdata.metadata,
                                                      data_descriptor=xdata.data_descriptor)
+    return None
 
 
 def function_make_tableau_image(xdata: DataAndMetadata.DataAndMetadata,
@@ -536,7 +550,7 @@ def function_make_tableau_image(xdata: DataAndMetadata.DataAndMetadata,
         iteration_shape = tuple([xdata.data.shape[index] for index in xdata.collection_dimension_indexes])
         iteration_start_index = xdata.collection_dimension_indexes[0]
         data_descriptor = DataAndMetadata.DataDescriptor(xdata.is_sequence, 0, 2)
-    elif xdata.is_sequence:
+    elif xdata.is_sequence and xdata.sequence_dimension_index is not None:
         iteration_shape = (xdata.data.shape[xdata.sequence_dimension_index],)
         iteration_start_index = xdata.sequence_dimension_index
         data_descriptor = DataAndMetadata.DataDescriptor(False, 0, 2)
@@ -546,7 +560,7 @@ def function_make_tableau_image(xdata: DataAndMetadata.DataAndMetadata,
     tableau_width = int(numpy.ceil(numpy.prod(iteration_shape, dtype=numpy.int64) / tableau_height))
     tableau_shape = (tableau_height, tableau_width)
 
-    result = typing.cast(None, numpy.ndarray)
+    result = typing.cast(_DataArrayType, None)
     for i in range(numpy.prod(iteration_shape, dtype=numpy.int64)):
         coords = numpy.unravel_index(i, iteration_shape)
         data_coords = tuple([slice(None) for k in range(iteration_start_index)]) + coords
@@ -585,7 +599,7 @@ class MeasureShifts(Symbolic.ComputationHandlerLike):
     outputs = {"shifts": {"label": _("Shifts")},
                }
 
-    def __init__(self, computation, **kwargs):
+    def __init__(self, computation: Facade.Computation, **kwargs: typing.Any) -> None:
         self.computation = computation
 
     @staticmethod
@@ -593,7 +607,7 @@ class MeasureShifts(Symbolic.ComputationHandlerLike):
         # If we have a bound graphic we probably want to align the displayed dimensions
         if graphic:
             # For collections with 1D data we see the collection dimensions
-            if data_item.xdata.is_collection and data_item.xdata.datum_dimension_count == 1:
+            if data_item.xdata and data_item.xdata.is_collection and data_item.xdata.datum_dimension_count == 1:
                 shift_axis = 'collection'
             # Otherwise we see the data dimensions
             else:
@@ -602,12 +616,20 @@ class MeasureShifts(Symbolic.ComputationHandlerLike):
         else:
             shift_axis = 'data'
 
-            if data_item.xdata.is_collection and data_item.xdata.datum_dimension_count == 1:
+            if data_item.xdata and data_item.xdata.is_collection and data_item.xdata.datum_dimension_count == 1:
                 shift_axis = 'collection'
 
         return shift_axis
 
-    def execute(self, input_data_item: API.DataItem, axes_description: str, reference_index: typing.Union[None, int, typing.Sequence[int]]=None, relative_shifts: bool=True, max_shift: int=0, bounds_graphic: typing.Optional[API.Graphic]=None):
+    def execute(self, input_data_item: typing.Optional[API.DataItem] = None,
+                axes_description: typing.Optional[str] = None,
+                reference_index: typing.Union[None, int, typing.Sequence[int]] = None,
+                relative_shifts: bool = True,
+                max_shift: int = 0,
+                bounds_graphic: typing.Optional[API.Graphic] = None,
+                **kwargs: typing.Any) -> None:
+        assert input_data_item
+        assert axes_description is not None
         input_xdata = input_data_item.xdata
         bounds = None
         if bounds_graphic is not None:
@@ -621,7 +643,7 @@ class MeasureShifts(Symbolic.ComputationHandlerLike):
         reference_index = reference_index if not relative_shifts else None
         self.__shifts_xdata = function_measure_multi_dimensional_shifts(input_xdata, shift_axis, reference_index=reference_index, bounds=bounds, max_shift=max_shift_)
 
-    def commit(self):
+    def commit(self) -> None:
         self.computation.set_referenced_xdata("shifts", self.__shifts_xdata)
 
 
@@ -633,7 +655,7 @@ class MeasureShiftsMenuItemDelegate:
         self.menu_before_id = "window_menu"
         self.menu_item_name = _("Measure shifts")
 
-    def menu_item_execute(self, window: API.DocumentWindow):
+    def menu_item_execute(self, window: API.DocumentWindow) -> None:
         selected_data_item = window.target_data_item
 
         if not selected_data_item or not selected_data_item.xdata:
@@ -678,7 +700,7 @@ class ApplyShifts(Symbolic.ComputationHandlerLike):
     outputs = {"shifted": {"label": _("Shifted")},
                }
 
-    def __init__(self, computation, **kwargs):
+    def __init__(self, computation: Facade.Computation, **kwargs: typing.Any) -> None:
         self.computation = computation
 
     @staticmethod
@@ -732,7 +754,10 @@ class ApplyShifts(Symbolic.ComputationHandlerLike):
 
         return shift_axis
 
-    def execute(self, input_data_item: API.DataItem, shifts_data_item: API.DataItem, axes_description: str):
+    def execute(self, input_data_item: typing.Optional[API.DataItem] = None, shifts_data_item: typing.Optional[API.DataItem] = None, axes_description: typing.Optional[str] = None, **kwargs: typing.Any) -> None:
+        assert input_data_item
+        assert shifts_data_item
+        assert axes_description is not None
         input_xdata = input_data_item.xdata
         shifts  = shifts_data_item.data
         split_description = axes_description.split("-")
@@ -742,7 +767,7 @@ class ApplyShifts(Symbolic.ComputationHandlerLike):
         function_apply_multi_dimensional_shifts(input_xdata, shifts, shift_axis, out=result_data_item.xdata)
         # self.__result_xdata = function_apply_multi_dimensional_shifts(input_xdata, shifts, shift_axis)
 
-    def commit(self):
+    def commit(self) -> None:
         # self.computation.set_referenced_xdata("shifted", self.__result_xdata)
         # self.__result_xdata = None
         # Still call "set_referenced_xdata" to notify Swift that the data has been updated.
@@ -757,7 +782,7 @@ class ApplyShiftsMenuItemDelegate:
         self.menu_before_id = "window_menu"
         self.menu_item_name = _("Apply shifts")
 
-    def menu_item_execute(self, window: API.DocumentWindow):
+    def menu_item_execute(self, window: API.DocumentWindow) -> None:
         selected_display_items = window._document_controller._get_two_data_sources()
         error_msg = "Select a multi-dimensional data item and another one that contains shifts that can be broadcast to the shape of the first one."
         assert selected_display_items[0][0] is not None, error_msg
@@ -813,7 +838,7 @@ class IntegrateAlongAxisMenuItemDelegate:
         self.menu_before_id = "window_menu"
         self.menu_item_name = _("Integrate axis")
 
-    def menu_item_execute(self, window: API.DocumentWindow):
+    def menu_item_execute(self, window: API.DocumentWindow) -> None:
         selected_data_item = window.target_data_item
 
         if not selected_data_item or not selected_data_item.xdata:
@@ -861,30 +886,33 @@ class Crop:
               "crop_bounds_bottom": {"label": _("Crop bound bottom")}}
     outputs = {"cropped": {"label": _("Cropped")}}
 
-    def __init__(self, computation, **kwargs):
+    def __init__(self, computation: Facade.Computation, **kwargs: typing.Any) -> None:
         self.computation = computation
 
     @staticmethod
-    def guess_starting_axis(data_item, graphic) -> str:
+    def guess_starting_axis(data_item: Facade.DataItem, graphic: typing.Optional[Facade.Graphic]) -> str:
         # If we have a crop graphic we probably want to crop the displayed dimensions
         if graphic:
             # For collections with 1D data we see the collection dimensions
-            if data_item.xdata.is_collection and data_item.xdata.datum_dimension_count == 1:
+            if data_item.xdata and data_item.xdata.is_collection and data_item.xdata.datum_dimension_count == 1:
                 crop_axes = "collection"
             # Otherwise we see the data dimensions
             else:
                 crop_axes = "data"
         # If not, use some generic rules
         else:
-            if data_item.xdata.is_collection and data_item.xdata.datum_dimension_count == 1:
+            if data_item.xdata and data_item.xdata.is_collection and data_item.xdata.datum_dimension_count == 1:
                 crop_axes = "collection"
             else:
                 crop_axes = "data"
 
         return crop_axes
 
-    def execute(self, input_data_item: API.DataItem, axes_description: str, crop_graphic: typing.Optional[API.Graphic]=None, **kwargs):
-        input_xdata: DataAndMetadata.DataAndMetadata = input_data_item.xdata
+    def execute(self, input_data_item: typing.Optional[API.DataItem] = None, axes_description: typing.Optional[str] = None,
+                crop_graphic: typing.Optional[API.Graphic] = None, **kwargs: typing.Any) -> None:
+        assert input_data_item and input_data_item.xdata
+        assert axes_description is not None
+        input_xdata = input_data_item.xdata
         split_description = axes_description.split("-")
         crop_axis = split_description[0]
         if crop_axis == "collection":
@@ -952,7 +980,7 @@ class Crop:
 
         self.__result_xdata = input_xdata[crop_slices]
 
-    def commit(self):
+    def commit(self) -> None:
         self.computation.set_referenced_xdata("cropped", self.__result_xdata)
 
 
@@ -964,7 +992,7 @@ class CropMenuItemDelegate:
         self.menu_before_id = "window_menu"
         self.menu_item_name = _("Crop")
 
-    def menu_item_execute(self, window: API.DocumentWindow):
+    def menu_item_execute(self, window: API.DocumentWindow) -> None:
         selected_data_item = window.target_data_item
 
         if not selected_data_item or not selected_data_item.xdata:
@@ -986,9 +1014,10 @@ class CropMenuItemDelegate:
         # self.__api.library._document_model.append_data_structure(crop_axes_structure)
         # crop_axes_structure.source = result_data_item._data_item
 
-        inputs = {"input_data_item": {"object": selected_data_item, "type": "data_source"},
-                  "axes_description": crop_axes
-                  }
+        inputs: typing.Dict[str, typing.Any] = {
+            "input_data_item": {"object": selected_data_item, "type": "data_source"},
+            "axes_description": crop_axes
+        }
         if crop_graphic:
             inputs["crop_graphic"] = crop_graphic
         else:
@@ -1009,10 +1038,12 @@ class MakeTableau:
               "scale": {"label": _("Scale")}}
     outputs = {"tableau": {"label": "Tableau"}}
 
-    def __init__(self, computation, **kwargs):
+    def __init__(self, computation: Facade.Computation, **kwargs: typing.Any) -> None:
         self.computation = computation
+        self.__result_xdata: typing.Optional[DataAndMetadata.DataAndMetadata] = None
 
-    def execute(self, input_data_item: API.DataItem, scale: float):
+    def execute(self, input_data_item: typing.Optional[API.DataItem] = None, scale: float = 1.0, **kwargs: typing.Any) -> None:
+        assert input_data_item
         try:
             self.__result_xdata = function_make_tableau_image(input_data_item.xdata, scale)
         except:
@@ -1020,9 +1051,10 @@ class MakeTableau:
             traceback.print_exc()
             raise
 
-    def commit(self):
-        self.computation.set_referenced_xdata("tableau", self.__result_xdata)
-        self.__result_xdata = None
+    def commit(self) -> None:
+        if self.__result_xdata:
+            self.computation.set_referenced_xdata("tableau", self.__result_xdata)
+            self.__result_xdata = None
 
 
 class MakeTableauMenuItemDelegate:
@@ -1033,7 +1065,7 @@ class MakeTableauMenuItemDelegate:
         self.menu_before_id = "window_menu"
         self.menu_item_name = _("Make tableau image")
 
-    def menu_item_execute(self, window: API.DocumentWindow):
+    def menu_item_execute(self, window: API.DocumentWindow) -> None:
         selected_data_item = window.target_data_item
         error_msg = "Select one data item that contains a sequence or collection of two-dimensional data."
         assert selected_data_item is not None, error_msg
@@ -1075,10 +1107,15 @@ class AlignImageSequence(Symbolic.ComputationHandlerLike):
                "integrated_sequence": {"label": _("Integrated sequence")},
                }
 
-    def __init__(self, computation, **kwargs):
+    def __init__(self, computation: Facade.Computation, **kwargs: typing.Any) -> None:
         self.computation = computation
+        self.__integrated_input_xdata: typing.Optional[DataAndMetadata.DataAndMetadata] = None
+        self.__shifts_xdata: typing.Optional[DataAndMetadata.DataAndMetadata] = None
 
-    def execute(self, *, input_data_item: API.DataItem, reference_index: typing.Union[None, int, typing.Sequence[int]]=None, relative_shifts: bool=True, max_shift: int=0, bounds_graphic: typing.Optional[API.Graphic]=None):
+    def execute(self, *, input_data_item: typing.Optional[API.DataItem] = None,
+                reference_index: typing.Union[None, int, typing.Sequence[int]] = None, relative_shifts: bool = True,
+                max_shift: int = 0, bounds_graphic: typing.Optional[API.Graphic] = None, **kwargs: typing.Any) -> None:
+        assert input_data_item and input_data_item.xdata
         input_xdata = input_data_item.xdata
         bounds = None
         if bounds_graphic is not None:
@@ -1088,23 +1125,25 @@ class AlignImageSequence(Symbolic.ComputationHandlerLike):
         shifts_xdata = function_measure_multi_dimensional_shifts(input_xdata, 'data', reference_index=reference_index, bounds=bounds, max_shift=max_shift_)
         self.__shifts_xdata = Core.function_transpose_flip(shifts_xdata, transpose=True, flip_v=False, flip_h=False)
         aligned_input_xdata = function_apply_multi_dimensional_shifts(input_xdata, shifts_xdata.data, 'data')
-        self.__integrated_input_xdata = Core.function_sum(aligned_input_xdata, axis=0)
+        if aligned_input_xdata:
+            self.__integrated_input_xdata = Core.function_sum(aligned_input_xdata, axis=0)
 
-    def commit(self):
-        self.computation.set_referenced_xdata("shifts", self.__shifts_xdata)
-        self.computation.set_referenced_xdata("integrated_sequence", self.__integrated_input_xdata)
+    def commit(self) -> None:
+        if self.__integrated_input_xdata and self.__shifts_xdata:
+            self.computation.set_referenced_xdata("shifts", self.__shifts_xdata)
+            self.computation.set_referenced_xdata("integrated_sequence", self.__integrated_input_xdata)
 
 
 class AlignImageSequenceMenuItemDelegate:
 
-    def __init__(self, api):
+    def __init__(self, api: Facade.API_1) -> None:
         self.__api = api
         self.menu_id = "processing_menu"  # required, specify menu_id where this item will go
         self.menu_name = _("Processing")  # optional, specify default name if not a standard menu
         self.menu_before_id = "window_menu"  # optional, specify before menu_id if not a standard menu
         self.menu_item_name = _("[EXPERIMENTAL] Align image sequence")  # menu item name
 
-    def menu_item_execute(self, window: API.DocumentWindow):
+    def menu_item_execute(self, window: API.DocumentWindow) -> None:
         try:
             selected_data_item = window.target_data_item
             error_msg = "Select one data item that contains a sequence or 1D-collection of two-dimensional data."
@@ -1142,9 +1181,10 @@ class AlignImageSequenceMenuItemDelegate:
             window.display_data_item(shifts)
 
             display_item = self.__api.library._document_model.get_display_item_for_data_item(shifts._data_item)
-            display_item.display_type = "line_plot"
-            display_item._set_display_layer_properties(0, stroke_color='#1E90FF', stroke_width=2, fill_color=None, label="y")
-            display_item._set_display_layer_properties(1, stroke_color='#F00', stroke_width=2, fill_color=None, label="x")
+            if display_item:
+                display_item.display_type = "line_plot"
+                display_item._set_display_layer_properties(0, stroke_color='#1E90FF', stroke_width=2, fill_color=None, label="y")
+                display_item._set_display_layer_properties(1, stroke_color='#F00', stroke_width=2, fill_color=None, label="x")
 
         except Exception as e:
             import traceback
@@ -1157,7 +1197,7 @@ class MultiDimensionalProcessingExtension:
 
     extension_id = "nion.experimental.multi_dimensional_processing"
 
-    def __init__(self, api_broker):
+    def __init__(self, api_broker: typing.Any) -> None:
         api = api_broker.get_api(version="~1.0")
         self.__integrate_menu_item_ref = api.create_menu_item(IntegrateAlongAxisMenuItemDelegate(api))
         self.__measure_shifts_menu_item_ref = api.create_menu_item(MeasureShiftsMenuItemDelegate(api))
@@ -1166,7 +1206,7 @@ class MultiDimensionalProcessingExtension:
         self.__tableau_menu_item_ref = api.create_menu_item(MakeTableauMenuItemDelegate(api))
         self.__align_image_sequence_menu_item_ref = api.create_menu_item(AlignImageSequenceMenuItemDelegate(api))
 
-    def close(self):
+    def close(self) -> None:
         self.__integrate_menu_item_ref.close()
         self.__integrate_menu_item_ref = None
         self.__measure_shifts_menu_item_ref.close()
@@ -1201,29 +1241,30 @@ class AxisChoiceVariableHandler(Observable.Observable):
         sub_axes_combo_box = u.create_combo_box(items_ref="@binding(sub_axes)", current_index="@binding(sub_axes_index)", visible="@binding(sub_axes_visible)")
         self.ui_view = u.create_column(label, u.create_row(axes_combo_box, sub_axes_combo_box, u.create_stretch(), spacing=8))
 
-        def handle_item_inserted(*args, **kwargs):
+        def handle_item_inserted(*args: typing.Any, **kwargs: typing.Any) -> None:
             self.property_changed_event.fire("axes")
             self.property_changed_event.fire("sub_axes")
             input_data_item = self.computation.get_input("input_data_item")
             new_value = None
-            if self.computation.processing_id == "nion.apply_shifts":
+            processing_id = self.computation.processing_id
+            if processing_id == "nion.apply_shifts":
                 shifts_data_item = self.computation.get_input("shifts_data_item")
                 if input_data_item and shifts_data_item:
-                    compute_class = Symbolic._computation_types.get(self.computation.processing_id)
+                    compute_class = Symbolic._computation_types.get(processing_id)
                     if compute_class:
-                        new_value = compute_class.guess_starting_axis(input_data_item, shifts_data_item)
+                        new_value = typing.cast(typing.Any, compute_class).guess_starting_axis(input_data_item, shifts_data_item)
             else:
-                if input_data_item:
-                    compute_class = Symbolic._computation_types.get(self.computation.processing_id)
+                if input_data_item and processing_id:
+                    compute_class = Symbolic._computation_types.get(processing_id)
                     if compute_class:
-                        new_value = compute_class.guess_starting_axis(input_data_item)
+                        new_value = typing.cast(typing.Any, compute_class).guess_starting_axis(input_data_item)
             if new_value is not None:
                 self.variable_model.value = new_value
             self.initialize()
 
         self.__item_inserted_listener = self.computation.item_inserted_event.listen(handle_item_inserted)
 
-    def initialize(self):
+    def initialize(self) -> None:
         axes_description = self.variable_model.value
         split_description = axes_description.split("-")
         self.axes_index = self.__get_available_axis_choices().index(split_description[0])
@@ -1232,10 +1273,10 @@ class AxisChoiceVariableHandler(Observable.Observable):
         if choices and len(split_description) > 1:
             self.sub_axes_index = choices.index(split_description[1])
 
-    def close(self):
+    def close(self) -> None:
         self.__item_inserted_listener = typing.cast(typing.Any, None)
 
-    def update(self):
+    def update(self) -> None:
         current_axis = self.current_axis
         current_sub_axis = self.current_sub_axis
         self.sub_axes_visible = bool(current_sub_axis)
@@ -1248,13 +1289,13 @@ class AxisChoiceVariableHandler(Observable.Observable):
         self.property_changed_event.fire("sub_axes")
 
     @property
-    def __axes_labels(self):
+    def __axes_labels(self) -> typing.Mapping[str, str]:
         return {"sequence": _("Sequence"),
                 "collection": _("Collection"),
                 "data": _("Data")}
 
     @property
-    def __sub_axes_labels(self):
+    def __sub_axes_labels(self) -> typing.Mapping[str, str]:
         return {"first": _("First"),
                 "second": _("Second"),
                 "all": _("All")}
@@ -1270,7 +1311,7 @@ class AxisChoiceVariableHandler(Observable.Observable):
             axis_choices.append("data")
         return axis_choices
 
-    def __get_available_sub_axis_choices(self, axis: str) -> typing.List[str]:
+    def __get_available_sub_axis_choices(self, axis: typing.Optional[str]) -> typing.List[str]:
         sub_axis_choices = []
         input_data_item = self.computation.get_input("input_data_item")
         if axis and input_data_item and input_data_item.xdata:
@@ -1288,19 +1329,23 @@ class AxisChoiceVariableHandler(Observable.Observable):
         choices = self.__get_available_axis_choices()
         if choices:
             return choices[min(self.axes_index, len(choices) - 1)]
+        else:
+            return None
 
     @property
     def current_sub_axis(self) -> typing.Optional[str]:
         choices = self.__get_available_sub_axis_choices(self.current_axis)
         if choices:
             return choices[min(self.sub_axes_index, len(choices) - 1)]
+        else:
+            return None
 
     @property
     def axes(self) -> typing.List[str]:
         return [self.__axes_labels[entry] for entry in self.__get_available_axis_choices()]
 
     @axes.setter
-    def axes(self, axes: typing.List[str]):
+    def axes(self, axes: typing.List[str]) -> None:
         ...
 
     @property
@@ -1308,7 +1353,7 @@ class AxisChoiceVariableHandler(Observable.Observable):
         return self.__get_available_sub_axis_choices(self.current_axis)
 
     @sub_axes.setter
-    def sub_axes(self, sub_axes: typing.List[str]):
+    def sub_axes(self, sub_axes: typing.List[str]) -> None:
         ...
 
     @property
@@ -1316,7 +1361,7 @@ class AxisChoiceVariableHandler(Observable.Observable):
         return self.__axes_index
 
     @axes_index.setter
-    def axes_index(self, axes_index: int):
+    def axes_index(self, axes_index: int) -> None:
         self.__axes_index = axes_index
         self.update()
         # self.property_changed_event.fire("axes_index")
@@ -1326,7 +1371,7 @@ class AxisChoiceVariableHandler(Observable.Observable):
         return self.__sub_axes_index
 
     @sub_axes_index.setter
-    def sub_axes_index(self, sub_axes_index: int):
+    def sub_axes_index(self, sub_axes_index: int) -> None:
         self.__sub_axes_index = sub_axes_index
         self.update()
         # self.property_changed_event.fire("sub_axes_index")
@@ -1336,7 +1381,7 @@ class AxisChoiceVariableHandler(Observable.Observable):
         return self.__sub_axes_visible
 
     @sub_axes_visible.setter
-    def sub_axes_visible(self, visible: bool):
+    def sub_axes_visible(self, visible: bool) -> None:
         self.__sub_axes_visible = visible if self.sub_axes_enabled else False
         self.property_changed_event.fire("sub_axes_visible")
 
@@ -1347,6 +1392,7 @@ class AxisChoiceVariableHandlerFactory(Inspector.VariableHandlerComponentFactory
             return AxisChoiceVariableHandler(computation, computation_variable, variable_model, True)
         if computation.processing_id in {"nion.measure_shifts", "nion.apply_shifts", "nion.crop_multi_dimensional"} and computation_variable.name == "axes_description":
             return AxisChoiceVariableHandler(computation, computation_variable, variable_model, False)
+        return None
 
 
 Registry.register_component(AxisChoiceVariableHandlerFactory(), {"variable-handler-component-factory"})

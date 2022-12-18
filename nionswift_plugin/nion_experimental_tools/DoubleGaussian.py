@@ -1,6 +1,7 @@
 # standard libraries
 import gettext
 import math
+import typing
 
 # third party libraries
 import numpy
@@ -11,6 +12,7 @@ from nion.data import DataAndMetadata
 from nion.data import Calibration
 from nion.swift.model import Symbolic
 from nion.swift.model import Graphics
+from nion.swift import Facade
 
 _ = gettext.gettext
 
@@ -23,10 +25,14 @@ class DoubleGaussian:
     outputs = {"target": {"label": _("Result")},
                "filtered_fft": {"label": _("Filtered FFT")}}
 
-    def __init__(self, computation, **kwargs):
+    def __init__(self, computation: Facade.Computation, **kwargs: typing.Any) -> None:
         self.computation = computation
 
-    def execute(self, src: API.DataItem, weight2: float, ring_graphic: API.Graphic):
+    def execute(self, src: typing.Optional[API.DataItem] = None, weight2: float = 1.0,
+                ring_graphic: typing.Optional[API.Graphic] = None, **kwargs: typing.Any) -> None:
+        assert src
+        assert ring_graphic
+
         sigma1 = ring_graphic._graphic.radius_2 * 2.0
         sigma2 = ring_graphic._graphic.radius_1 * 2.0
         # get the data
@@ -66,7 +72,7 @@ class DoubleGaussian:
                                         dimensional_calibration, data_shape_n in zip(dimensional_calibrations, data.shape)]
         self.__filtered_fft_xdata = DataAndMetadata.new_data_and_metadata(filtered_fft_data, dimensional_calibrations=fft_dimensional_calibrations)
 
-    def commit(self):
+    def commit(self) -> None:
         self.computation.set_referenced_xdata("target", self.__filtered_xdata)
         self.computation.set_referenced_xdata("filtered_fft", self.__filtered_fft_xdata)
 
@@ -76,7 +82,7 @@ class DoubleGaussianMenuItem:
     menu_id = "_processing_menu"  # required, specify menu_id where this item will go
     menu_item_name = _("Double Gaussian")  # menu item name#
 
-    def __init__(self, api):
+    def __init__(self, api: Facade.API_1) -> None:
         self.__api = api
 
     def menu_item_execute(self, window: API.DocumentWindow) -> None:
@@ -111,13 +117,13 @@ class DoubleGaussianExtension:
     # required for Swift to recognize this as an extension class.
     extension_id = "nionswift.extension.double_gaussian"
 
-    def __init__(self, api_broker):
+    def __init__(self, api_broker: typing.Any) -> None:
         # grab the api object.
         api = api_broker.get_api(version="1", ui_version="1")
         # be sure to keep a reference or it will be closed immediately.
         self.__menu_item_ref = api.create_menu_item(DoubleGaussianMenuItem(api))
 
-    def close(self):
+    def close(self) -> None:
         self.__menu_item_ref.close()
 
 

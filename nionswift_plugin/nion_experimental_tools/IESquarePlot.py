@@ -1,9 +1,8 @@
 import typing
 import gettext
-import numpy
 
 from nion.swift.model import DocumentModel
-from nion.swift import Facade as API
+from nion.swift import Facade
 
 _ = gettext.gettext
 
@@ -16,14 +15,14 @@ DocumentModel.DocumentModel.register_processing_descriptions(processing_descript
 
 
 class IESquarePlotMenuItemDelegate:
-    def __init__(self, api: API.API_1):
+    def __init__(self, api: Facade.API_1) -> None:
         self.__api = api
         self.menu_id = "eels_menu"
         self.menu_name = _("EELS")
         self.menu_before_id = "window_menu"
         self.menu_item_name = _("[EXPERIMENTAL] I E^2 Plot")
 
-    def menu_item_execute(self, window: API.DocumentWindow):
+    def menu_item_execute(self, window: Facade.DocumentWindow) -> None:
         selected_display_item = window._document_window.selected_display_item
         if not selected_display_item or not selected_display_item.data_item or not selected_display_item.data_item.xdata:
             return
@@ -35,9 +34,9 @@ class IESquarePlotExtension:
     extension_id = "nion.experimental.i_e_square_plot"
 
     def __init__(self, api_broker: typing.Any):
-        api = typing.cast(API.API_1, api_broker.get_api(version="~1.0"))
+        api = typing.cast(Facade.API_1, api_broker.get_api(version="~1.0"))
         self.__i_e_square_plot_menu_item_ref = api.create_menu_item(IESquarePlotMenuItemDelegate(api))
 
-    def close(self):
+    def close(self) -> None:
         self.__i_e_square_plot_menu_item_ref.close()
-        self.__i_e_square_plot_menu_item_ref = None
+        self.__i_e_square_plot_menu_item_ref = typing.cast(typing.Any, None)

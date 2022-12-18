@@ -1,34 +1,38 @@
 # system imports
 import gettext
+import typing
 
 import numpy as np
 
 # local libraries
-from nion.typeshed import API_1_0 as API
+from nion.data import DataAndMetadata
 from nion.swift import Facade
+from nion.swift.model import DisplayItem
 from nion.swift.model import Graphics
 from nion.swift.model import Symbolic
+from nion.ui import UserInterface
 
 from .DataCache import DataCache
 
 _ = gettext.gettext
 
+_DataArrayType = np.typing.NDArray[typing.Any]
+
 
 class Map4D:
     attributes = {"connection_type": "map"}
 
-    def __init__(self, computation, **kwargs):
+    def __init__(self, computation: Facade.Computation, **kwargs: typing.Any) -> None:
         self.computation = computation
-        self.__api = computation.api
         if not hasattr(computation, 'data_cache'):
-            def modify_data_fn(data):
+            def modify_data_fn(data: _DataArrayType) -> _DataArrayType:
                 new_shape = data.shape[:2] + (-1,)
                 return np.reshape(data, new_shape)
-            computation.data_cache = DataCache(modify_data_fn=modify_data_fn)
+            typing.cast(typing.Any, computation).data_cache = DataCache(modify_data_fn=modify_data_fn)
 
-        def create_panel_widget(ui, document_controller):
-            def select_button_clicked():
-                graphics = document_controller.target_display.selected_graphics
+        def create_panel_widget(ui: Facade.UserInterface, document_controller: Facade.DocumentWindow) -> Facade.ColumnWidget:
+            def select_button_clicked() -> None:
+                graphics = document_controller.target_display.selected_graphics if document_controller.target_display else None
                 if not graphics:
                     return
                 try:
@@ -57,13 +61,18 @@ class Map4D:
 
             return column
 
-        self.computation._computation.create_panel_widget = create_panel_widget
+        typing.cast(typing.Any, self.computation._computation).create_panel_widget = create_panel_widget
 
-    def execute(self, src, map_regions):
+    def execute(self, src: typing.Optional[Facade.DataSource] = None, map_regions: typing.Optional[typing.Sequence[Graphics.Graphic]] = None, **kwargs: typing.Any) -> None:
+        assert src
+        assert map_regions is not None
         try:
             src_data_item = src.data_item
-            data = self.computation.data_cache.get_cached_data(src_data_item)
-            mask_data = np.zeros(src_data_item.xdata.data_shape[2:], dtype=np.bool)
+            assert src_data_item.xdata
+            assert src_data_item.metadata is not None
+            data = typing.cast(DataCache, typing.cast(typing.Any, self.computation).data_cache).get_cached_data(src_data_item)
+            assert data is not None
+            mask_data = np.zeros(src_data_item.xdata.data_shape[2:], dtype=np.bool_)
             for region in map_regions:
                 mask_data = np.logical_or(mask_data, region.get_mask(src_data_item.xdata.data_shape[2:]))
             if mask_data.any():
@@ -74,19 +83,21 @@ class Map4D:
                 # new_data = np.sum(xdata.data[..., x][..., y, :], axis=(-2, -1))
             else:
                 new_data = np.sum(data, axis=-1)
-            self.__new_xdata = self.__api.create_data_and_metadata(new_data,
-                                                                   dimensional_calibrations=src_data_item.dimensional_calibrations[:2],
-                                                                   intensity_calibration=src_data_item.intensity_calibration)
-            metadata = src_data_item.metadata.copy()
+            self.__new_xdata = DataAndMetadata.new_data_and_metadata(new_data,
+                                                                     dimensional_calibrations=src_data_item.dimensional_calibrations[:2],
+                                                                     intensity_calibration=src_data_item.intensity_calibration)
+            metadata = dict(src_data_item.metadata).copy()
             metadata['nion.map_4d.parameters'] = {'src': src_data_item._data_item.write_to_dict(),
                                                   'map_regions': [region.write_to_dict() for region in map_regions]}
-            self.__new_xdata.metadata.update(metadata)
+            new_metadata = dict(self.__new_xdata.metadata).copy()
+            new_metadata.update(metadata)
+            self.__new_xdata._set_metadata(new_metadata)
         except Exception as e:
             print(str(e))
             import traceback
             traceback.print_exc()
 
-    def commit(self):
+    def commit(self) -> None:
         self.computation.set_referenced_xdata('target', self.__new_xdata)
 
 
@@ -97,21 +108,21 @@ class Map4DMenuItem:
     menu_before_id = "window_menu" # optional, specify before menu_id if not a standard menu
     menu_item_name = _("Map 4D")  # menu item name
 
-    def __init__(self, api):
+    def __init__(self, api: Facade.API_1) -> None:
         self.__api = api
-        self.__computation_data_items = dict()
-        self.__tool_tip_boxes = list()
+        self.__computation_data_items: typing.Dict[str, str] = dict()
+        self.__tool_tip_boxes: typing.List[UserInterface.BoxWidget] = list()
 
-    def __display_item_changed(self, display_item):
+    def __display_item_changed(self, display_item: DisplayItem.DisplayItem) -> None:
         data_item = display_item.data_item if display_item else None
         if data_item:
             tip_id = self.__computation_data_items.get(str(data_item.uuid))
             if tip_id:
                 self.__show_tool_tips(tip_id)
 
-    def __show_tool_tips(self, tip_id='source', timeout=30):
+    def __show_tool_tips(self, tip_id: str = 'source', timeout: float = 30.0) -> None:
         for box in self.__tool_tip_boxes:
-            box.remove_now()
+            typing.cast(typing.Any, box).remove_now()
         self.__tool_tip_boxes = list()
         if tip_id == 'source':
             text = ('Select one or multiple graphic(s) on the source data item and click "Select" in the computation '
@@ -124,11 +135,13 @@ class Map4DMenuItem:
             return
         document_controller = self.__api.application.document_windows[0]
         workspace = document_controller._document_controller.workspace_controller
-        box = workspace.pose_tool_tip_box(text, timeout)
-        #box = document_controller.show_tool_tip_box(text, timeout)
-        self.__tool_tip_boxes.append(box)
+        assert workspace
+        tool_tip_box = workspace.pose_tool_tip_box(text, timeout)
+        if tool_tip_box:
+            #box = document_controller.show_tool_tip_box(text, timeout)
+            self.__tool_tip_boxes.append(tool_tip_box)
 
-    def menu_item_execute(self, window: API.DocumentWindow) -> None:
+    def menu_item_execute(self, window: Facade.DocumentWindow) -> None:
         document_controller = window._document_controller
         selected_display_item = document_controller.selected_display_item
         data_item = (selected_display_item.data_items[0] if
@@ -136,17 +149,22 @@ class Map4DMenuItem:
 
         if data_item:
             api_data_item = Facade.DataItem(data_item)
-            if not api_data_item.xdata.is_data_4d:
+            if not (api_data_item.xdata and api_data_item.xdata.is_data_4d):
                 self.__show_tool_tips('wrong_shape')
                 return
             map_data_item = self.__api.library.create_data_item(title='Map 4D of ' + data_item.title)
             # the following uses internal API and should not be used as example code.
             computation = document_controller.document_model.create_computation()
-            computation.create_input_item("src", Symbolic.make_item(selected_display_item.get_display_data_channel_for_data_item(data_item)))
+            assert selected_display_item
+            display_data_channel = selected_display_item.get_display_data_channel_for_data_item(data_item)
+            assert display_data_channel
+            # note: display_data_channel gets passed to execute as a Facade.DataSource. see DataStructure.get_object_specifier
+            computation.create_input_item("src", Symbolic.make_item(display_data_channel))
             computation.create_input_item("map_regions", Symbolic.make_item_list([]))
             computation.processing_id = "nion.map_4d.2"
             document_controller.document_model.set_data_item_computation(map_data_item._data_item, computation)
             map_display_item = document_controller.document_model.get_display_item_for_data_item(map_data_item._data_item)
+            assert map_display_item
             document_controller.show_display_item(map_display_item)
             graphic = Graphics.PointGraphic()
             graphic.label = "Pick"
@@ -165,13 +183,13 @@ class Map4DExtension:
     # required for Swift to recognize this as an extension class.
     extension_id = "nion.extension.map_4d"
 
-    def __init__(self, api_broker):
+    def __init__(self, api_broker: typing.Any) -> None:
         # grab the api object.
         api = api_broker.get_api(version="1", ui_version="1")
         # be sure to keep a reference or it will be closed immediately.
         self.__menu_item_ref = api.create_menu_item(Map4DMenuItem(api))
 
-    def close(self):
+    def close(self) -> None:
         self.__menu_item_ref.close()
 
 Symbolic.register_computation_type('nion.map_4d.2', Map4D)

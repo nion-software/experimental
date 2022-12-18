@@ -1,10 +1,12 @@
-import typing
 import gettext
+import typing
+
 import numpy
 
 from nion.data import Core
 from nion.data import DataAndMetadata
 from nion.swift.model import Symbolic
+from nion.swift import Facade
 from nion.typeshed import API_1_0
 
 _ = gettext.gettext
@@ -21,11 +23,18 @@ class AlignMultiDimensionalSequence:
     outputs = {"aligned_haadf": {"label": _("Aligned HAADF sequence")},
                "aligned_si": {"label": _("Aligned multi-dimensional sequence")}}
 
-    def __init__(self, computation, **kwargs):
+    def __init__(self, computation: Facade.Computation, **kwargs: typing.Any) -> None:
         self.computation = computation
+        self.__aligned_haadf_sequence: typing.Optional[DataAndMetadata.DataAndMetadata] = None
+        self.__aligned_si_sequence: typing.Optional[DataAndMetadata.DataAndMetadata] = None
 
-    def execute(self, si_sequence_data_item: API_1_0.DataItem, haadf_sequence_data_item: API_1_0.DataItem,
-                align_index: int, align_region: API_1_0.Graphic, align_collection_index: int):
+    def execute(self, si_sequence_data_item: typing.Optional[API_1_0.DataItem] = None,
+                haadf_sequence_data_item: typing.Optional[API_1_0.DataItem] = None, align_index: int = 0,
+                align_region: typing.Optional[API_1_0.Graphic] = None, align_collection_index: int = 0,
+                **kwargs: typing.Any) -> None:
+        assert si_sequence_data_item
+        assert haadf_sequence_data_item
+        assert align_region
         if haadf_sequence_data_item == si_sequence_data_item:
             haadf_xdata = haadf_sequence_data_item.xdata[:, align_collection_index]
             two_items = False
@@ -44,7 +53,7 @@ class AlignMultiDimensionalSequence:
         si_result_data = numpy.empty_like(si_xdata.data)
 
         align_data_shape = haadf_xdata.datum_dimension_shape
-        align_axes_start_index = None
+        align_axes_start_index: typing.Optional[int] = None
         for i in range(len(si_xdata.data_shape) - 1):
             if align_data_shape == si_xdata.data_shape[i:i+2]:
                 align_axes_start_index = i
@@ -80,13 +89,14 @@ class AlignMultiDimensionalSequence:
                                                                            metadata=si_xdata.metadata,
                                                                            data_descriptor=si_xdata.data_descriptor)
 
-    def commit(self):
-        if self.__aligned_haadf_sequence is not None:
+    def commit(self) -> None:
+        if self.__aligned_haadf_sequence:
             self.computation.set_referenced_xdata("aligned_haadf", self.__aligned_haadf_sequence)
-        self.computation.set_referenced_xdata("aligned_si", self.__aligned_si_sequence)
+        if self.__aligned_si_sequence:
+            self.computation.set_referenced_xdata("aligned_si", self.__aligned_si_sequence)
 
 
-def align_multi_si(api: API_1_0.API, window: API_1_0.DocumentWindow):
+def align_multi_si(api: API_1_0.API, window: API_1_0.DocumentWindow) -> None:
     selected_display_items = window._document_controller._get_two_data_sources()
     error_msg = "Select a sequence of spectrum images and a sequence of scanned images in order to use this computation."
     assert selected_display_items[0][0] is not None, error_msg
@@ -167,14 +177,14 @@ Symbolic.register_computation_type("nion.align_multi_d_sequence", AlignMultiDime
 
 class AlignSequenceMenuItemDelegate:
 
-    def __init__(self, api):
+    def __init__(self, api: Facade.API_1) -> None:
         self.__api = api
         self.menu_id = "processing_menu"  # required, specify menu_id where this item will go
         self.menu_name = _("Processing")  # optional, specify default name if not a standard menu
         self.menu_before_id = "window_menu"  # optional, specify before menu_id if not a standard menu
         self.menu_item_name = _("Align sequence of multi-dimensional data")  # menu item name
 
-    def menu_item_execute(self, window):
+    def menu_item_execute(self, window: Facade.DocumentWindow) -> None:
         align_multi_si(self.__api, window)
 
 
@@ -183,12 +193,12 @@ class AlignSequenceExtension:
     # required for Swift to recognize this as an extension class.
     extension_id = "nion.experimental.align_multi_d_sequence"
 
-    def __init__(self, api_broker):
+    def __init__(self, api_broker: typing.Any) -> None:
         # grab the api object.
         api = api_broker.get_api(version="~1.0")
         self.__align_sequence_menu_item_ref = api.create_menu_item(AlignSequenceMenuItemDelegate(api))
 
-    def close(self):
+    def close(self) -> None:
         # close will be called when the extension is unloaded. in turn, close any references so they get closed. this
         # is not strictly necessary since the references will be deleted naturally when this object is deleted.
         self.__align_sequence_menu_item_ref.close()

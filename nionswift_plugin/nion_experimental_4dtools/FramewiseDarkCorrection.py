@@ -1,57 +1,74 @@
 # system imports
+import copy
+import functools
 import gettext
-from nion.swift.model import DataItem, Symbolic
-from nion.swift import Facade
-
-# local libraries
-from nion.typeshed import API_1_0 as API
-from nion.data import xdata_1_0 as xd
-
-from . import ImageChooser
-from .DataCache import DataCache
+import typing
+import uuid
 
 import numpy as np
-import uuid
+
+from nion.data import DataAndMetadata
+from nion.data import xdata_1_0 as xd
+from nion.swift import Facade
+from nion.swift.ComputationPanel import make_image_chooser
+from nion.swift.model import DataItem
+from nion.swift.model import DisplayItem
+from nion.swift.model import Symbolic
+from nion.ui import UserInterface
+
+# local libraries
+
+from .DataCache import DataCache
 
 _ = gettext.gettext
 
 
 class CalculateAverage4D:
-    def __init__(self, computation, **kwargs):
+    def __init__(self, computation: Facade.Computation, **kwargs: typing.Any) -> None:
         self.computation = computation
 
-    def execute(self, src):
+    def execute(self, src: typing.Optional[Facade.DataItem] = None, **kwargs: typing.Any) -> None:
+        assert src
+        assert src.xdata
         self.__new_xdata = xd.sum(src.xdata, axis=(0, 1))
 
-    def commit(self):
+    def commit(self) -> None:
         self.computation.set_referenced_xdata('target', self.__new_xdata)
 
 
 class FramewiseDarkCorrection:
-    def __init__(self, computation, **kwargs):
+    def __init__(self, api: Facade.API_1, computation: Facade.Computation, **kwargs: typing.Any) -> None:
+        self.__api = api
         self.computation = computation
-        self.__api = computation.api
         if not hasattr(computation, 'data_cache'):
-            computation.data_cache = DataCache()
+            typing.cast(typing.Any, computation).data_cache = DataCache()
 
-        def create_panel_widget(ui, document_controller):
-            def gain_mode_changed(current_item):
-                if current_item != self.computation._computation._get_variable('gain_mode').value:
-                    self.computation._computation._get_variable('gain_mode').value = current_item
+        def create_panel_widget(ui: Facade.UserInterface, document_controller: Facade.DocumentWindow) -> Facade.ColumnWidget:
+            def gain_mode_changed(current_item: typing.Any) -> None:
+                variable = self.computation._computation._get_variable('gain_mode')
+                assert variable
+                if current_item != variable.value:
+                    variable.value = current_item
 
-            def bin_data_changed(check_state):
-                if self.computation._computation._get_variable('bin_spectrum').value != (check_state == 'checked'):
-                    self.computation._computation._get_variable('bin_spectrum').value = check_state == 'checked'
+            def bin_data_changed(check_state: str) -> None:
+                variable = self.computation._computation._get_variable('bin_spectrum')
+                assert variable
+                if variable.value != (check_state == 'checked'):
+                    variable.value = check_state == 'checked'
 
-            def clear_gain_image():
-                variable = self.computation._computation._get_variable('gain_image')
-                if variable.objects_model.items:
-                    variable.objects_model.remove_item(0)
+            # this does nothing since objects_model is not defined. disabling. CM 2022-12-17.
+            # def clear_gain_image() -> None:
+            #     variable = self.computation._computation._get_variable('gain_image')
+            #     if variable.objects_model.items:
+            #         variable.objects_model.remove_item(0)
 
             column = ui.create_column_widget()
-            image_chooser, image_changed_listener = ImageChooser.make_image_chooser(document_controller._document_controller,
-                                                                                    self.computation._computation,
-                                                                                    self.computation._computation._get_variable('gain_image'))
+            gain_image_variable = self.computation._computation._get_variable('gain_image')
+            assert gain_image_variable
+            image_chooser, image_changed_listener = make_image_chooser(document_controller._document_controller,
+                                                                       self.computation._computation,
+                                                                       gain_image_variable,
+                                                                       column._widget.drag)
             self.__image_changed_listener = image_changed_listener
 
             clear_gain_image_button = ui.create_push_button_widget('Clear')
@@ -68,7 +85,7 @@ class FramewiseDarkCorrection:
 
             gain_mode_row2 = ui.create_row_widget()
             gain_mode_row2.add_stretch()
-            gain_mode_row2._widget.add(image_chooser)
+            typing.cast(UserInterface.BoxWidget, gain_mode_row2._widget).add(image_chooser)
             gain_mode_row2.add_spacing(5)
             gain_mode_row2.add(clear_gain_image_button)
 
@@ -83,32 +100,57 @@ class FramewiseDarkCorrection:
             column.add(bin_data_row)
             column.add_stretch()
 
-            gain_mode_chooser.current_item = self.computation._computation._get_variable('gain_mode').value
-            bin_data_checkbox.checked = self.computation._computation._get_variable('bin_spectrum').value
+            gain_mode_variable = self.computation._computation._get_variable('gain_mode')
+            bin_spectrum_variable = self.computation._computation._get_variable('bin_spectrum')
 
-            clear_gain_image_button.on_clicked = clear_gain_image
+            assert gain_mode_variable
+            assert bin_spectrum_variable
+
+            gain_mode_chooser.current_item = gain_mode_variable.value
+            bin_data_checkbox.checked = bin_spectrum_variable.value
+
+            # see note above
+            # clear_gain_image_button.on_clicked = clear_gain_image
             gain_mode_chooser.on_current_item_changed = gain_mode_changed
             bin_data_checkbox.on_check_state_changed = bin_data_changed
 
             return column
 
-        self.computation._computation.create_panel_widget = create_panel_widget
+        typing.cast(typing.Any, self.computation._computation).create_panel_widget = create_panel_widget
 
-    def execute(self, src1, src2, spectrum_region, top_dark_region, bottom_dark_region, bin_spectrum,
-                gain_image, gain_mode):
+    def execute(self,
+                src1: typing.Optional[Facade.DataItem] = None,
+                src2: typing.Optional[Facade.DataItem] = None,
+                spectrum_region: typing.Optional[Facade.Graphic] = None,
+                top_dark_region: typing.Optional[Facade.Graphic] = None,
+                bottom_dark_region: typing.Optional[Facade.Graphic] = None,
+                bin_spectrum: bool = False,
+                gain_image: typing.Optional[typing.Sequence[typing.Any]] = None,  # no idea what this should be
+                gain_mode: typing.Optional[str] = None,
+                **kwargs: typing.Any) -> None:
+        assert src1
+        assert src2
+        assert spectrum_region
+        assert top_dark_region
+        assert bottom_dark_region
+        assert gain_image is not None
+        assert gain_mode
         try:
+            assert src1.xdata
+            assert src1.metadata is not None
             data = src1.xdata.data
+            assert data is not None
             data_shape = np.array(data.shape)
-            metadata = src1.metadata.copy()
+            metadata = dict(src1.metadata).copy()
             sensor_readout_area = metadata.get('hardware_source', {}).get('sensor_readout_area')
             sensor_dimensions = metadata.get('hardware_source', {}).get('sensor_dimensions')
             if sensor_readout_area and sensor_dimensions:
                 cam_center = sensor_dimensions['height']/2 - sensor_readout_area['top']
             else:
                 cam_center = int(round(data_shape[-2]/2))
-            spectrum_area = np.rint(np.array(spectrum_region.bounds) * data_shape[2:]).astype(np.int)
-            top_dark_area = np.rint(np.array(top_dark_region.bounds) * data_shape[2:]).astype(np.int)
-            bottom_dark_area = np.rint(np.array(bottom_dark_region.bounds) * data_shape[2:]).astype(np.int)
+            spectrum_area = np.rint(np.array(spectrum_region.bounds) * data_shape[2:]).astype(np.int_)
+            top_dark_area = np.rint(np.array(top_dark_region.bounds) * data_shape[2:]).astype(np.int_)
+            bottom_dark_area = np.rint(np.array(bottom_dark_region.bounds) * data_shape[2:]).astype(np.int_)
             spectrum_range_y = np.array((spectrum_area[0,0], spectrum_area[0,0] + spectrum_area[1,0]))
             spectrum_range_x = np.array((spectrum_area[0,1], spectrum_area[0,1] + spectrum_area[1,1]))
             top_dark_area_range_y = np.array((top_dark_area[0,0], top_dark_area[0,0] + top_dark_area[1, 0]))
@@ -116,10 +158,11 @@ class FramewiseDarkCorrection:
 
             # undo gain correction if neccessary
             current_gain_image_uuid = metadata.get('hardware_source', {}).get('current_gain_image')
-            current_gain_image = None
+            current_gain_image: typing.Optional[Facade.DataItem] = None
             if current_gain_image_uuid:
                 current_gain_image = self.__api.library.get_data_item_by_uuid(uuid.UUID(current_gain_image_uuid))
             if metadata.get('hardware_source', {}).get('is_gain_corrected') and current_gain_image:
+                assert current_gain_image.xdata
                 if current_gain_image.xdata.data_shape == src1.xdata.data_shape[2:]:
                     data = data/current_gain_image.xdata.data
 
@@ -150,8 +193,10 @@ class FramewiseDarkCorrection:
 
             if ((gain_mode == 'auto' and current_gain_image) or # apply gain correction if needed
                 (gain_mode == 'custom' and gain_image)):
-
+                assert current_gain_image
+                assert current_gain_image.xdata
                 gain_xdata = gain_image[0].xdata if gain_mode == 'custom' else current_gain_image.xdata
+                assert gain_xdata
 
                 if gain_xdata.data_shape == corrected_image.shape[2:]:
                     corrected_image *= gain_xdata.data
@@ -162,12 +207,12 @@ class FramewiseDarkCorrection:
                     raise ValueError('Shape of gain image has to match last two dimensions of input data.')
                 del gain_xdata
 
-            dimensional_calibrations = src1.xdata.dimensional_calibrations.copy()
+            dimensional_calibrations = copy.deepcopy(list(src1.xdata.dimensional_calibrations))
             if bin_spectrum:
                 corrected_image = np.sum(corrected_image, axis=-2)
                 dimensional_calibrations = dimensional_calibrations[:2] + dimensional_calibrations[3:]
 
-            data_descriptor = self.__api.create_data_descriptor(False, 2, 1 if bin_spectrum else 2)
+            data_descriptor = DataAndMetadata.DataDescriptor(False, 2, 1 if bin_spectrum else 2)
             metadata['nion.framewise_dark_correction.parameters'] = {'src1': src1._data_item.write_to_dict(),
                                                                      'src2': src2._data_item.write_to_dict(),
                                                                      'spectrum_region': spectrum_region._graphic.write_to_dict(),
@@ -177,17 +222,17 @@ class FramewiseDarkCorrection:
                                                                      'gain_image': gain_image[0].data_item.write_to_dict() if gain_image else None,
                                                                      'gain_mode': gain_mode}
 
-            self.__new_xdata = self.__api.create_data_and_metadata(corrected_image,
-                                                                   intensity_calibration=src1.xdata.intensity_calibration,
-                                                                   dimensional_calibrations=dimensional_calibrations,
-                                                                   data_descriptor=data_descriptor,
-                                                                   metadata=metadata)
+            self.__new_xdata = DataAndMetadata.new_data_and_metadata(corrected_image,
+                                                                     intensity_calibration=src1.xdata.intensity_calibration,
+                                                                     dimensional_calibrations=dimensional_calibrations,
+                                                                     data_descriptor=data_descriptor,
+                                                                     metadata=metadata)
         except Exception as e:
             print(str(e))
             import traceback
             traceback.print_exc()
 
-    def commit(self):
+    def commit(self) -> None:
         self.computation.set_referenced_xdata('target', self.__new_xdata)
 
 class FramewiseDarkMenuItem:
@@ -199,21 +244,21 @@ class FramewiseDarkMenuItem:
 
     #DocumentModel.DocumentModel.register_processing_descriptions(correct_dark_processing_descriptions)
     #DocumentModel.DocumentModel.register_processing_descriptions(calculate_average_processing_descriptions)
-    def __init__(self, api):
+    def __init__(self, api: Facade.API_1) -> None:
         self.__api = api
-        self.__computation_data_items = dict()
-        self.__tool_tip_boxes = list()
+        self.__computation_data_items: typing.Dict[DataItem.DataItem, str] = dict()
+        self.__tool_tip_boxes: typing.List[UserInterface.BoxWidget] = list()
 
-    def __display_item_changed(self, display_item):
+    def __display_item_changed(self, display_item: DisplayItem.DisplayItem) -> None:
         data_item = display_item.data_item if display_item else None
         if data_item:
             tip_id = self.__computation_data_items.get(data_item)
             if tip_id:
                 self.__show_tool_tips(tip_id)
 
-    def __show_tool_tips(self, tip_id='source', timeout=30):
+    def __show_tool_tips(self, tip_id: str = 'source', timeout: float = 30.0) -> None:
         for box in self.__tool_tip_boxes:
-            box.remove_now()
+            typing.cast(typing.Any, box).remove_now()
         self.__tool_tip_boxes = list()
         if tip_id == 'source':
             text = 'In the "Computation" panel (Window -> Computation) you find the settings. Custom gain correction mode uses the gain image from the drag-and-drop area.\n"Bin data to 1D" will ouput 1D spectra instead of 2D camera frames in the result data item.\nSelect the "Frame average..." data item for further options.'
@@ -228,10 +273,13 @@ class FramewiseDarkMenuItem:
         document_controller = self.__api.application.document_windows[0]
         #box = document_controller.show_tool_tip_box(text, timeout)
         workspace = document_controller._document_controller.workspace_controller
-        box = workspace.pose_tool_tip_box(text, timeout)
-        self.__tool_tip_boxes.append(box)
+        assert workspace
+        tool_tip_box = workspace.pose_tool_tip_box(text, timeout)
+        if tool_tip_box:
+            #box = document_controller.show_tool_tip_box(text, timeout)
+            self.__tool_tip_boxes.append(tool_tip_box)
 
-    def menu_item_execute(self, window: API.DocumentWindow) -> None:
+    def menu_item_execute(self, window: Facade.DocumentWindow) -> None:
         document_controller = window._document_controller
         selected_display_item = document_controller.selected_display_item
         data_item = (selected_display_item.data_items[0] if selected_display_item and
@@ -239,7 +287,7 @@ class FramewiseDarkMenuItem:
 
         if data_item:
             api_data_item = Facade.DataItem(data_item)
-            if not api_data_item.xdata.is_data_4d:
+            if not (api_data_item.xdata and api_data_item.xdata.is_data_4d):
                 self.__show_tool_tips('wrong_shape')
                 return
             average_data_item = self.__api.library.create_data_item(title='Frame average of ' + data_item.title)
@@ -247,6 +295,7 @@ class FramewiseDarkMenuItem:
                                                   inputs={'src': api_data_item},
                                                   outputs={'target': average_data_item})
             average_display_item = document_controller.document_model.get_display_item_for_data_item(average_data_item._data_item)
+            assert average_display_item
             document_controller.show_display_item(average_display_item)
             spectrum_graphic = average_data_item.add_rectangle_region(0.5, 0.5, 0.1, 1.0)
             spectrum_graphic.label = 'Spectrum'
@@ -272,8 +321,8 @@ class FramewiseDarkMenuItem:
                                                           'gain_image': [],
                                                           'gain_mode': 'custom'},
                                                   outputs={'target': dark_corrected_data_item})
-            dark_corrected_display_item = document_controller.document_model.get_display_item_for_data_item(
-                dark_corrected_data_item._data_item)
+            dark_corrected_display_item = document_controller.document_model.get_display_item_for_data_item(dark_corrected_data_item._data_item)
+            assert dark_corrected_display_item
             document_controller.show_display_item(dark_corrected_display_item)
             self.__computation_data_items.update({data_item: 'source',
                                                   average_data_item._data_item: 'average',
@@ -287,14 +336,13 @@ class FramewiseDarkExtension:
     # required for Swift to recognize this as an extension class.
     extension_id = "nion.extension.framewise_dark_correction"
 
-    def __init__(self, api_broker):
+    def __init__(self, api_broker: typing.Any) -> None:
         # grab the api object.
         api = api_broker.get_api(version="1", ui_version="1")
         # be sure to keep a reference or it will be closed immediately.
         self.__menu_item_ref = api.create_menu_item(FramewiseDarkMenuItem(api))
+        Symbolic.register_computation_type('nion.calculate_4d_average', CalculateAverage4D)
+        Symbolic.register_computation_type('nion.framewise_dark_correction', functools.partial(FramewiseDarkCorrection, api))
 
-    def close(self):
+    def close(self) -> None:
         self.__menu_item_ref.close()
-
-Symbolic.register_computation_type('nion.calculate_4d_average', CalculateAverage4D)
-Symbolic.register_computation_type('nion.framewise_dark_correction', FramewiseDarkCorrection)

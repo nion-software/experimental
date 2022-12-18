@@ -1,5 +1,6 @@
 import gettext
 import logging
+import typing
 
 import numpy
 import scipy.optimize
@@ -22,19 +23,24 @@ class MakeIDPC:
               }
     outputs = {"output": {"label": _("iDPC")}}
 
-    def __init__(self, computation, **kwargs):
+    def __init__(self, computation: Facade.Computation, **kwargs: typing.Any) -> None:
         self.computation = computation
-        self.__result_xdata = None
+        self.__result_xdata: typing.Optional[DataAndMetadata.DataAndMetadata] = None
 
-    def __calculate_curl(self, rotation, com_x, com_y):
+    def __calculate_curl(self, rotation: float, com_x: float, com_y: float) -> float:
         com_x_rotated = com_x * numpy.cos(rotation) - com_y * numpy.sin(rotation)
         com_y_rotated = com_x * numpy.sin(rotation) + com_y * numpy.cos(rotation)
         curl_com = numpy.gradient(com_y_rotated, axis=1) - numpy.gradient(com_x_rotated, axis=0)
-        return numpy.mean(curl_com**2)
+        return float(numpy.mean(curl_com**2))
 
-    def execute(self, src, gradient_x_index, gradient_y_index, rotation, crop_region, **kwargs) -> None:
+    def execute(self, src: typing.Optional[Facade.DataItem] = None, gradient_x_index: int = 0, gradient_y_index: int = 0,
+                rotation_str: typing.Optional[str] = None, crop_region: typing.Optional[Facade.Graphic] = None,
+                **kwargs: typing.Any) -> None:
+        assert src
+        assert crop_region
         try:
             dpc_xdata = src.xdata
+            assert dpc_xdata
             assert dpc_xdata.is_datum_2d
             assert dpc_xdata.is_sequence or dpc_xdata.collection_dimension_count == 1
             gradx = dpc_xdata.data[gradient_x_index]
@@ -47,7 +53,7 @@ class MakeIDPC:
             gradx = gradx[crop_slices] - numpy.mean(gradx[crop_slices])
             grady = grady[crop_slices] - numpy.mean(grady[crop_slices])
             # Don't use "if rotation" here because that would also calculate rotation for a given value of 0
-            if rotation is None or rotation == "None" or rotation == "":
+            if not rotation_str or rotation_str == "None":
                 res = scipy.optimize.minimize_scalar(self.__calculate_curl, 0, args=(gradx, grady), bounds=(0, numpy.pi*2), method='bounded')
                 if res.success:
                     rotation = res.x
@@ -56,7 +62,7 @@ class MakeIDPC:
                     logging.warning(f'Could not find the optimal rotation. Optimize error: {res.message}\nUsing rotation=0 as default.')
                     rotation = 0
             else:
-                rotation = float(rotation) / 180.0 * numpy.pi
+                rotation = float(rotation_str) / 180.0 * numpy.pi
 
             gradx_rotated = gradx * numpy.cos(rotation) - grady * numpy.sin(rotation)
             grady_rotated = gradx * numpy.sin(rotation) + grady * numpy.cos(rotation)
@@ -75,15 +81,16 @@ class MakeIDPC:
             print(e)
             raise
 
-    def commit(self):
-        self.computation.set_referenced_xdata("output", self.__result_xdata)
+    def commit(self) -> None:
+        if self.__result_xdata:
+            self.computation.set_referenced_xdata("output", self.__result_xdata)
 
 
 class MakeIDPCMenuItem:
     menu_id = "_processing_menu"
     menu_item_name = _("Make iDPC from DPC")
 
-    def __init__(self, api):
+    def __init__(self, api: Facade.API_1) -> None:
         self.__api = api
 
     def menu_item_execute(self, window: API.DocumentWindow) -> None:
@@ -96,7 +103,7 @@ class MakeIDPCMenuItem:
 
         api_data_item = Facade.DataItem(data_item)
 
-        if (api_data_item.xdata.is_sequence or api_data_item.xdata.collection_dimension_count == 1) and api_data_item.xdata.datum_dimension_count == 2:
+        if api_data_item.xdata and (api_data_item.xdata.is_sequence or api_data_item.xdata.collection_dimension_count == 1) and api_data_item.xdata.datum_dimension_count == 2:
             crop_region = None
             for graphic in api_data_item.graphics:
                 if graphic.graphic_type == 'rect-graphic':
@@ -122,13 +129,13 @@ class MakeIDPCExtension:
     # required for Swift to recognize this as an extension class.
     extension_id = "nion.extension.make_idpc"
 
-    def __init__(self, api_broker):
+    def __init__(self, api_broker: typing.Any) -> None:
         # grab the api object.
         api = api_broker.get_api(version="1", ui_version="1")
         # be sure to keep a reference or it will be closed immediately.
         self.__idpc_menu_item_ref = api.create_menu_item(MakeIDPCMenuItem(api))
 
-    def close(self):
+    def close(self) -> None:
         self.__idpc_menu_item_ref.close()
 
 

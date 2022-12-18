@@ -1,24 +1,25 @@
 # system imports
 import gettext
+import math
+import typing
 
 # third part imports
-import numpy
-
-# local libraries
-# None
-
-_ = gettext.gettext
-
-
-import math
 import numpy
 import scipy.interpolate
 import scipy.optimize
 import scipy.signal
 import scipy.stats
 
+# local libraries
+from nion.swift import Facade
 
-def estimate_zlp_amplitude_position_width_fit_spline(d):
+_ = gettext.gettext
+
+DataArrayType = numpy.typing.NDArray[typing.Any]
+
+
+
+def estimate_zlp_amplitude_position_width_fit_spline(d: DataArrayType) -> typing.Tuple[float, float, float]:
     # estimate the ZLP, assumes the peak value is the ZLP and that the ZLP is the only gaussian feature in the data
     assert len(d.shape) == 1 and d.shape[0] > 1
     gaussian = lambda x, a, b, c: a*numpy.exp(-(x-b)**2/(2*c**2))
@@ -32,14 +33,14 @@ def estimate_zlp_amplitude_position_width_fit_spline(d):
         c = fwhm / (2 * math.sqrt(2 * math.log(2)))
         # now fit the gaussian to the data, using the amplitude, std dev, and bspline position as estimates (10%)
         popt, pcov = scipy.optimize.curve_fit(gaussian, range(d.shape[0]), d, bounds=([d_max * 0.9, r[0], c * 0.9], [d_max * 1.1, r[1], c * 1.1]))
-        return popt
+        return typing.cast(typing.Tuple[float, float, float], popt)
     return numpy.nan, numpy.nan, numpy.nan
 
 
-def estimate_zlp_amplitude_position_width_counting(d):
+def estimate_zlp_amplitude_position_width_counting(d: DataArrayType) -> typing.Tuple[float, float, float, float]:
     # estimate the ZLP, assumes the peak value is the ZLP and that the ZLP is the only gaussian feature in the data
     assert len(d.shape) == 1 and d.shape[0] > 1
-    mx_pos = numpy.argmax(d)
+    mx_pos = int(numpy.argmax(d))
     mx = d[mx_pos]
     half_mx = mx/2
     left_pos = mx_pos - sum(d[:mx_pos] > half_mx)
@@ -47,10 +48,10 @@ def estimate_zlp_amplitude_position_width_counting(d):
     return mx, mx_pos, left_pos, right_pos
 
 
-def measure_zlp_fit_spline(api, window):
+def measure_zlp_fit_spline(api: Facade.API_1, window: Facade.DocumentWindow) -> None:
     """Attaches the measure ZLP computation to the target data item in the window."""
     target_data_item = window.target_data_item
-    if target_data_item and target_data_item.display_xdata.is_data_1d:
+    if target_data_item and target_data_item.display_xdata and target_data_item.display_xdata.is_data_1d:
         for graphic in target_data_item.graphics:
             if graphic.graphic_type == "interval-graphic" and graphic.graphic_id == "zlp_interval":
                 target_data_item.remove_region(graphic)
@@ -66,10 +67,10 @@ def measure_zlp_fit_spline(api, window):
             zlp_interval.graphic_id = "zlp_interval"
 
 
-def measure_zlp_count_pixels(api, window):
+def measure_zlp_count_pixels(api: Facade.API_1, window: Facade.DocumentWindow) -> None:
     """Attaches the measure ZLP computation to the target data item in the window."""
     target_data_item = window.target_data_item
-    if target_data_item and target_data_item.display_xdata.is_data_1d:
+    if target_data_item and target_data_item.display_xdata and target_data_item.display_xdata.is_data_1d:
         for graphic in target_data_item.graphics:
             if graphic.graphic_type == "interval-graphic" and graphic.graphic_id == "zlp_interval_2":
                 target_data_item.remove_region(graphic)
@@ -86,42 +87,42 @@ def measure_zlp_count_pixels(api, window):
 
 class MeasureZLPFitSplineMenuItemDelegate:
 
-    def __init__(self, api):
+    def __init__(self, api: Facade.API_1) -> None:
         self.__api = api
         self.menu_id = "eels_menu"  # required, specify menu_id where this item will go
         self.menu_name = _("EELS")  # optional, specify default name if not a standard menu
         self.menu_before_id = "window_menu"  # optional, specify before menu_id if not a standard menu
         self.menu_item_name = _("Measure ZLP (Fit Spline)")  # menu item name
 
-    def menu_item_execute(self, window):
+    def menu_item_execute(self, window: Facade.DocumentWindow) -> None:
         measure_zlp_fit_spline(self.__api, window)
 
 
 class MeasureZLPCountPixelsMenuItemDelegate:
 
-    def __init__(self, api):
+    def __init__(self, api: Facade.API_1) -> None:
         self.__api = api
         self.menu_id = "eels_menu"  # required, specify menu_id where this item will go
         self.menu_name = _("EELS")  # optional, specify default name if not a standard menu
         self.menu_before_id = "window_menu"  # optional, specify before menu_id if not a standard menu
         self.menu_item_name = _("Measure ZLP (Count Pixels)")  # menu item name
 
-    def menu_item_execute(self, window):
+    def menu_item_execute(self, window: Facade.DocumentWindow) -> None:
         measure_zlp_count_pixels(self.__api, window)
 
 
 class Mark0eVMenuItemDelegate:
 
-    def __init__(self, api):
+    def __init__(self, api: Facade.API_1) -> None:
         self.__api = api
         self.menu_id = "eels_menu"  # required, specify menu_id where this item will go
         self.menu_name = _("EELS")  # optional, specify default name if not a standard menu
         self.menu_before_id = "window_menu"  # optional, specify before menu_id if not a standard menu
         self.menu_item_name = _("Mark 0eV")  # menu item name
 
-    def menu_item_execute(self, window):
+    def menu_item_execute(self, window: Facade.DocumentWindow) -> None:
         target_data_item = window.target_data_item
-        if target_data_item and target_data_item.display_xdata.is_data_1d:
+        if target_data_item and target_data_item.display_xdata and target_data_item.display_xdata.is_data_1d:
             for graphic in target_data_item.graphics:
                 if graphic.graphic_type == "interval-graphic" and graphic.graphic_id == "channel_0eV":
                     target_data_item.remove_region(graphic)
@@ -141,7 +142,7 @@ class MenuExampleExtension:
     # required for Swift to recognize this as an extension class.
     extension_id = "nion.eels_analysis.menu_item_attach"
 
-    def __init__(self, api_broker):
+    def __init__(self, api_broker: typing.Any) -> None:
         # grab the api object.
         api = api_broker.get_api(version="~1.0")
         # be sure to keep a reference or it will be closed immediately.
@@ -149,7 +150,7 @@ class MenuExampleExtension:
         self.__measure_zlp_count_pixels_menu_item_ref = api.create_menu_item(MeasureZLPCountPixelsMenuItemDelegate(api))
         self.__mark_0eV_menu_item_ref = api.create_menu_item(Mark0eVMenuItemDelegate(api))
 
-    def close(self):
+    def close(self) -> None:
         # close will be called when the extension is unloaded. in turn, close any references so they get closed. this
         # is not strictly necessary since the references will be deleted naturally when this object is deleted.
         self.__measure_zlp_fit_spline_menu_item_ref.close()

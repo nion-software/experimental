@@ -1,6 +1,5 @@
 import typing
 import gettext
-import functools
 import numpy
 
 from nion.data import Core
@@ -15,13 +14,13 @@ from . import MultiDimensionalProcessing
 _ = gettext.gettext
 
 
-class AlignMultiSI:
-    def __init__(self, computation, **kwargs):
+class AlignMultiSI(Symbolic.ComputationHandlerLike):
+    def __init__(self, computation: Facade.Computation, **kwargs: typing.Any) -> None:
         self.computation = computation
         self.progress_updated_event = Event.Event()
 
-        def create_panel_widget(ui, document_controller):
-            def update_align_region_label():
+        def create_panel_widget(ui: Facade.UserInterface, document_controller: Facade.DocumentWindow) -> Facade.ColumnWidget:
+            def update_align_region_label() -> None:
                 current_region = self.computation._computation.get_input("align_region")
                 haadf_sequence_data_item = self.computation._computation.get_input("haadf_sequence_data_item")
                 if current_region and haadf_sequence_data_item:
@@ -31,10 +30,11 @@ class AlignMultiSI:
                                       (int(bounds[1][0]*shape[0]), int(bounds[1][1]*shape[1])))
                 self.align_region_label.text = str(current_region)
 
-            def select_button_clicked():
+            def select_button_clicked() -> None:
                 for variable in self.computation._computation.variables:
                     if variable.name == "align_region":
                         self.computation._computation.remove_variable(variable)
+                assert document_controller.target_display
                 graphics = document_controller.target_display.selected_graphics or list()
                 align_region = None
                 for graphic in graphics:
@@ -44,7 +44,7 @@ class AlignMultiSI:
                 if align_region:
                     self.computation._computation.create_input_item("align_region", Symbolic.make_item(align_region._graphic))
 
-            def align_index_finished(text):
+            def align_index_finished(text: str) -> None:
                 try:
                     index = int(text)
                 except ValueError:
@@ -87,11 +87,14 @@ class AlignMultiSI:
 
             return column
 
-        self.computation._computation.create_panel_widget = create_panel_widget
-        self.computation._computation.progress_updated_event = self.progress_updated_event
+        typing.cast(typing.Any, self.computation._computation).create_panel_widget = create_panel_widget
+        typing.cast(typing.Any, self.computation._computation).progress_updated_event = self.progress_updated_event
 
-    def execute(self, si_sequence_data_item: API.DataItem, haadf_sequence_data_item: API.DataItem,
-                align_index: int, align_region: typing.Optional[API.Graphic]=None):
+    def execute(self, si_sequence_data_item: typing.Optional[API.DataItem] = None,
+                haadf_sequence_data_item: typing.Optional[API.DataItem] = None, align_index: int = 0,
+                align_region: typing.Optional[API.Graphic] = None, **kwargs: typing.Any) -> None:
+        assert haadf_sequence_data_item
+        assert si_sequence_data_item
         haadf_xdata = haadf_sequence_data_item.xdata
         si_xdata = si_sequence_data_item.xdata
         bounds = None
@@ -125,7 +128,7 @@ class AlignMultiSI:
                                                                            metadata=si_xdata.metadata,
                                                                            data_descriptor=si_xdata.data_descriptor)
 
-    def commit(self):
+    def commit(self) -> None:
         self.computation.set_referenced_xdata("aligned_haadf", self.__aligned_haadf_sequence)
         self.computation.set_referenced_xdata("aligned_si", self.__aligned_si_sequence)
 
@@ -144,10 +147,15 @@ class AlignMultiSI2(Symbolic.ComputationHandlerLike):
                "integrated_si": {"label": _("Integrated SI")},
                }
 
-    def __init__(self, computation, **kwargs):
+    def __init__(self, computation: Facade.Computation, **kwargs: typing.Any) -> None:
         self.computation = computation
 
-    def execute(self, *, haadf_data_item: API.DataItem, si_data_item: API.DataItem, reference_index: typing.Union[None, int, typing.Sequence[int]]=None, relative_shifts: bool=True, max_shift: int=0, bounds_graphic: typing.Optional[API.Graphic]=None):
+    def execute(self, haadf_data_item: typing.Optional[API.DataItem] = None,
+                si_data_item: typing.Optional[API.DataItem] = None,
+                reference_index: typing.Union[None, int, typing.Sequence[int]] = None, relative_shifts: bool = True,
+                max_shift: int = 0, bounds_graphic: typing.Optional[API.Graphic] = None, **kwargs: typing.Any) -> None:
+        assert si_data_item
+        assert haadf_data_item
         si_xdata = si_data_item.xdata
         haadf_xdata = haadf_data_item.xdata
         bounds = None
@@ -158,17 +166,19 @@ class AlignMultiSI2(Symbolic.ComputationHandlerLike):
         shifts_xdata = MultiDimensionalProcessing.function_measure_multi_dimensional_shifts(haadf_xdata, 'data', reference_index=reference_index, bounds=bounds, max_shift=max_shift_)
         self.__shifts_xdata = Core.function_transpose_flip(shifts_xdata, transpose=True, flip_v=False, flip_h=False)
         aligned_haadf_xdata = MultiDimensionalProcessing.function_apply_multi_dimensional_shifts(haadf_xdata, shifts_xdata.data, 'data')
+        assert aligned_haadf_xdata
         self.__integrated_haadf_xdata = Core.function_sum(aligned_haadf_xdata, axis=0)
         aligned_si_xdata = MultiDimensionalProcessing.function_apply_multi_dimensional_shifts(si_xdata, shifts_xdata.data, 'collection')
+        assert aligned_si_xdata
         self.__integrated_si_xdata = Core.function_sum(aligned_si_xdata, axis=0)
 
-    def commit(self):
+    def commit(self) -> None:
         self.computation.set_referenced_xdata("shifts", self.__shifts_xdata)
         self.computation.set_referenced_xdata("integrated_haadf", self.__integrated_haadf_xdata)
         self.computation.set_referenced_xdata("integrated_si", self.__integrated_si_xdata)
 
 
-def align_multi_si(api: API, window: API.DocumentWindow):
+def align_multi_si(api: API, window: API.DocumentWindow) -> None:
     selected_display_items = window._document_controller._get_two_data_sources()
     error_msg = "Select a sequence of spectrum images and a sequence of scanned images in order to use this computation."
     assert selected_display_items[0][0] is not None, error_msg
@@ -206,7 +216,7 @@ def align_multi_si(api: API, window: API.DocumentWindow):
     window.display_data_item(aligned_si)
 
 
-def align_multi_si2(api: API, window: API.DocumentWindow):
+def align_multi_si2(api: API, window: API.DocumentWindow) -> None:
     selected_display_items = window._document_controller._get_two_data_sources()
     error_msg = "Select a sequence of spectrum images and a sequence of scanned images in order to use this computation."
     assert selected_display_items[0][0] is not None, error_msg
@@ -269,14 +279,14 @@ Symbolic.register_computation_type("eels.align_multi_si2", AlignMultiSI2)
 
 class AlignMultiSIMenuItemDelegate:
 
-    def __init__(self, api):
+    def __init__(self, api: Facade.API_1) -> None:
         self.__api = api
         self.menu_id = "eels_menu"  # required, specify menu_id where this item will go
         self.menu_name = _("EELS")  # optional, specify default name if not a standard menu
         self.menu_before_id = "window_menu"  # optional, specify before menu_id if not a standard menu
         self.menu_item_name = _("[EXPERIMENTAL] Align SI sequence")  # menu item name
 
-    def menu_item_execute(self, window):
+    def menu_item_execute(self, window: Facade.DocumentWindow) -> None:
         try:
             align_multi_si2(self.__api, window)
         except Exception as e:
@@ -291,12 +301,12 @@ class AlignMultiSIExtension:
     # required for Swift to recognize this as an extension class.
     extension_id = "nion.experimental.align_multi_si"
 
-    def __init__(self, api_broker):
+    def __init__(self, api_broker: typing.Any) -> None:
         # grab the api object.
         api = api_broker.get_api(version="~1.0")
         self.__align_multi_si_menu_item_ref = api.create_menu_item(AlignMultiSIMenuItemDelegate(api))
 
-    def close(self):
+    def close(self) -> None:
         # close will be called when the extension is unloaded. in turn, close any references so they get closed. this
         # is not strictly necessary since the references will be deleted naturally when this object is deleted.
         self.__align_multi_si_menu_item_ref.close()

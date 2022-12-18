@@ -1,5 +1,6 @@
 import gettext
 import logging
+import typing
 
 import numpy
 import scipy.optimize
@@ -24,20 +25,25 @@ class MakeColorCOM:
               }
     outputs = {"output": {"label": _("Color COM")}}
 
-    def __init__(self, computation, **kwargs):
+    def __init__(self, computation: Facade.Computation, **kwargs: typing.Any) -> None:
         self.computation = computation
-        self.__result_xdata = None
-        self.__divergence_xdata = None
+        self.__result_xdata: typing.Optional[DataAndMetadata.DataAndMetadata] = None
+        self.__divergence_xdata: typing.Optional[DataAndMetadata.DataAndMetadata] = None
 
-    def __calculate_curl(self, rotation, com_x, com_y):
+    def __calculate_curl(self, rotation: float, com_x: float, com_y: float) -> float:
         com_x_rotated = com_x * numpy.cos(rotation) - com_y * numpy.sin(rotation)
         com_y_rotated = com_x * numpy.sin(rotation) + com_y * numpy.cos(rotation)
         curl_com = numpy.gradient(com_y_rotated, axis=1) - numpy.gradient(com_x_rotated, axis=0)
-        return numpy.mean(curl_com**2)
+        return float(numpy.mean(curl_com**2))
 
-    def execute(self, src, com_x_index, com_y_index, magnitude_min, magnitude_max, rotation, crop_region, **kwargs) -> None:
+    def execute(self, src: typing.Optional[Facade.DataItem] = None, com_x_index: int = 0, com_y_index: int = 0,
+                magnitude_min: float = 0.0, magnitude_max: float = 0.0, rotation_str: typing.Optional[str] = None,
+                crop_region: typing.Optional[Facade.Graphic] = None, **kwargs: typing.Any) -> None:
+        assert src
+        assert crop_region
         try:
             com_xdata = src.xdata
+            assert com_xdata
             assert com_xdata.is_datum_2d
             assert com_xdata.is_sequence or com_xdata.is_collection
             com_x = com_xdata.data[com_x_index]
@@ -51,7 +57,7 @@ class MakeColorCOM:
             com_x = com_x[crop_slices] - numpy.mean(com_x[crop_slices])
             com_y = com_y[crop_slices] - numpy.mean(com_y[crop_slices])
             # Don't use "if rotation" here because that would also calculate rotation for a given value of 0
-            if rotation is None or rotation == "None" or rotation == "":
+            if not rotation_str or rotation_str == "None":
                 res = scipy.optimize.minimize_scalar(self.__calculate_curl, 0, args=(com_x, com_y), bounds=(0, numpy.pi*2), method='bounded')
                 if res.success:
                     rotation = res.x
@@ -60,7 +66,7 @@ class MakeColorCOM:
                     logging.warning(f'Could not find the optimal rotation. Optimize error: {res.message}\nUsing rotation=0 as default.')
                     rotation = 0
             else:
-                rotation = float(rotation) / 180.0 * numpy.pi
+                rotation = float(rotation_str) / 180.0 * numpy.pi
 
             com_x_rotated = com_x * numpy.cos(rotation) - com_y * numpy.sin(rotation)
             com_y_rotated = com_x * numpy.sin(rotation) + com_y * numpy.cos(rotation)
@@ -98,16 +104,18 @@ class MakeColorCOM:
             print(e)
             raise
 
-    def commit(self):
-        self.computation.set_referenced_xdata("output", self.__result_xdata)
-        self.computation.set_referenced_xdata("divergence", self.__divergence_xdata)
+    def commit(self) -> None:
+        if self.__result_xdata:
+            self.computation.set_referenced_xdata("output", self.__result_xdata)
+        if self.__divergence_xdata:
+            self.computation.set_referenced_xdata("divergence", self.__divergence_xdata)
 
 
 class MakeColorCOMMenuItem:
     menu_id = "_processing_menu"
     menu_item_name = _("Make color COM image")
 
-    def __init__(self, api):
+    def __init__(self, api: Facade.API_1) -> None:
         self.__api = api
 
     def menu_item_execute(self, window: API.DocumentWindow) -> None:
@@ -120,7 +128,7 @@ class MakeColorCOMMenuItem:
 
         api_data_item = Facade.DataItem(data_item)
 
-        if (api_data_item.xdata.is_sequence or api_data_item.xdata.collection_dimension_count == 1) and api_data_item.xdata.datum_dimension_count == 2:
+        if api_data_item.xdata and (api_data_item.xdata.is_sequence or api_data_item.xdata.collection_dimension_count == 1) and api_data_item.xdata.datum_dimension_count == 2:
             result_data_items = {"output": self.__api.library.create_data_item(title="Color COM image of " + data_item.title),
                                 "divergence": self.__api.library.create_data_item(title="Divergence of " + data_item.title)}
             crop_region = None
@@ -149,13 +157,13 @@ class MakeColorCOMExtension:
     # required for Swift to recognize this as an extension class.
     extension_id = "nion.extension.make_color_com"
 
-    def __init__(self, api_broker):
+    def __init__(self, api_broker: typing.Any) -> None:
         # grab the api object.
         api = api_broker.get_api(version="1", ui_version="1")
         # be sure to keep a reference or it will be closed immediately.
         self.__idpc_menu_item_ref = api.create_menu_item(MakeColorCOMMenuItem(api))
 
-    def close(self):
+    def close(self) -> None:
         self.__idpc_menu_item_ref.close()
 
 

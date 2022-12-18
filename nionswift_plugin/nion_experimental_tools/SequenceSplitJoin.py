@@ -3,6 +3,7 @@ import gettext
 import logging
 import copy
 import numpy
+import typing
 
 # local libraries
 from nion.typeshed import API_1_0 as API
@@ -14,34 +15,35 @@ _ = gettext.gettext
 
 
 class SequenceJoin:
-    def __init__(self, computation, **kwargs):
+    def __init__(self, computation: Facade.Computation, **kwargs: typing.Any) -> None:
         self.computation = computation
 
-    def execute(self, src_list):
+    def execute(self, src_list: typing.Sequence[Facade.DataItem], **kwargs: typing.Any) -> None:
         try:
-            self.__new_xdata = xd.sequence_join([data_item.xdata for data_item in src_list])
+            self.__new_xdata = xd.sequence_join([data_item.xdata for data_item in src_list if data_item.xdata])
         except Exception as e:
             print(str(e))
             import traceback
             traceback.print_exc()
 
-    def commit(self):
+    def commit(self) -> None:
         self.computation.set_referenced_xdata("target", self.__new_xdata)
 
 
 class SequenceSplit:
-    def __init__(self, computation, **kwargs):
+    def __init__(self, computation: Facade.Computation, **kwargs: typing.Any) -> None:
         self.computation = computation
 
-    def execute(self, src):
+    def execute(self, src: Facade.DataItem, **kwargs: typing.Any) -> None:
         try:
+            assert src.xdata
             self.__new_xdata_list = xd.sequence_split(src.xdata)
         except Exception as e:
             print(str(e))
             import traceback
             traceback.print_exc()
 
-    def commit(self):
+    def commit(self) -> None:
         if self.__new_xdata_list:
             for i, xdata in enumerate(self.__new_xdata_list):
                 self.computation.set_referenced_xdata(f"target_{i}", xdata)
@@ -51,7 +53,7 @@ class SequenceJoinMenuItem:
     menu_id = "_processing_menu"  # required, specify menu_id where this item will go
     menu_item_name = _("Join Sequence(s)")  # menu item name
 
-    def __init__(self, api):
+    def __init__(self, api: Facade.API_1) -> None:
         self.__api = api
 
     def menu_item_execute(self, window: API.DocumentWindow) -> None:
@@ -107,7 +109,7 @@ class SequenceSplitMenuItem:
     menu_id = "_processing_menu"
     menu_item_name = _("Split Sequence")
 
-    def __init__(self, api):
+    def __init__(self, api: Facade.API_1) -> None:
         self.__api = api
 
     def menu_item_execute(self, window: API.DocumentWindow) -> None:
@@ -131,6 +133,7 @@ class SequenceSplitMenuItem:
             legend_position = display_item.get_display_property('legend_position')
             display_type = display_item.display_type
         api_data_item = Facade.DataItem(data_item)
+        assert api_data_item.xdata
 
         if api_data_item.xdata.is_sequence:
             if api_data_item.xdata.data_shape[0] > 100:
@@ -158,16 +161,16 @@ class SequenceSplitJoinExtension:
     # required for Swift to recognize this as an extension class.
     extension_id = "nion.extension.sequence_split_join"
 
-    def __init__(self, api_broker):
+    def __init__(self, api_broker: typing.Any) -> None:
         # grab the api object.
         api = api_broker.get_api(version="1", ui_version="1")
         # be sure to keep a reference or it will be closed immediately.
         self.__join_menu_item_ref = api.create_menu_item(SequenceJoinMenuItem(api))
         self.__split_menu_item_ref = api.create_menu_item(SequenceSplitMenuItem(api))
 
-    def close(self):
+    def close(self) -> None:
         self.__join_menu_item_ref.close()
         self.__split_menu_item_ref.close()
 
-Symbolic.register_computation_type("nion.join_sequence", SequenceJoin)
-Symbolic.register_computation_type("nion.split_sequence", SequenceSplit)
+Symbolic.register_computation_type("nion.join_sequence", typing.cast(typing.Callable[[typing.Any], Symbolic.ComputationHandlerLike], SequenceJoin))
+Symbolic.register_computation_type("nion.split_sequence", typing.cast(typing.Callable[[typing.Any], Symbolic.ComputationHandlerLike], SequenceSplit))
