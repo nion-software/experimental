@@ -35,11 +35,11 @@ def function_find_local_maxima(input_xdata: DataAndMetadata._DataAndMetadataLike
     if numpy.ndim(input_xdata.data) == 1:
         x = numpy.mgrid[:local_maxima.shape[0]]
         max_x, max_val = x[local_maxima], input_xdata.data[local_maxima]
-        max_list = sorted(zip(max_x, max_val), key=lambda key: key[-1], reverse=True)
+        max_list = sorted(zip(max_x, max_val), key=lambda key: key[-1], reverse=True) # type: ignore # mypy doesn't seem to recognize this
     elif numpy.ndim(input_xdata.data) == 2:
         y, x = numpy.mgrid[:local_maxima.shape[0], :local_maxima.shape[1]]
         max_y, max_x, max_val = y[local_maxima], x[local_maxima], input_xdata.data[local_maxima]
-        max_list = sorted(zip(max_y, max_x, max_val), key=lambda key: key[-1], reverse=True)
+        max_list = sorted(zip(max_y, max_x, max_val), key=lambda key: key[-1], reverse=True) # type: ignore # mypy doesn't seem to recognize this
     else:
         raise ValueError(f'Only one- and two-dimensional data is supported by this function but input has {numpy.ndim(input_xdata.data)} dimensions.')
 
@@ -62,9 +62,8 @@ class FindLocalMaxima(Symbolic.ComputationHandlerLike):
         self.__src: typing.Optional[Facade.DataItem] = None
         self.__api = Facade.get_api(version="~1.0")
 
-
-    def execute(self, *, input_data_item: Facade.DataItem, spacing: int, number_maxima: int) -> None:
-        assert input_data_item.xdata is not None
+    def execute(self, *, input_data_item: Facade.DataItem, spacing: int, number_maxima: int, **kwargs: typing.Any) -> None: # type: ignore
+        assert input_data_item.display_xdata is not None
 
         self.__max_points, self.__max_vals = function_find_local_maxima(input_data_item.display_xdata.data, spacing, number_maxima)
         self.__src = input_data_item
@@ -73,6 +72,7 @@ class FindLocalMaxima(Symbolic.ComputationHandlerLike):
 
     def commit(self) -> None:
         if self.__max_points and self.__src:
+            assert self.__src.display_xdata is not None
             max_grapics = self.computation.get_result("max_graphics", None)
             with self.__api.library.data_ref_for_data_item(self.__src):
                 if max_grapics:
