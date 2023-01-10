@@ -9,3 +9,4 @@ from . import MakeColorCOM
 from . import AlignSequenceOfMultiDimensionalData
 from . import MultiDimensionalProcessing
 from . import IESquarePlot
+from . import FindLocalMaxima

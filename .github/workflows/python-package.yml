@@ -40,7 +40,7 @@ jobs:
         mypy --version
     - name: Typing
       run: |
-        mypy --namespace-packages --ignore-missing-imports --follow-imports=silent --strict --no-warn-redundant-casts --no-warn-unused-ignores --exclude '/test' --exclude '/docs' -p nion.experimental -p nionswift_plugin.drift_correction -p nionswift_plugin.nion_experimental_4dtools -p nionswift_plugin.nion_experimental_tools
+        mypy --namespace-packages --ignore-missing-imports --follow-imports=silent --strict --no-warn-redundant-casts --no-warn-unused-ignores --exclude "/test" --exclude "/docs" -p nion.experimental -p nionswift_plugin.drift_correction -p nionswift_plugin.nion_experimental_4dtools -p nionswift_plugin.nion_experimental_tools
     - name: Test
       run: |
         python -m unittest discover nionswift_plugin/nion_experimental_tools -v -p '*_test.py'
