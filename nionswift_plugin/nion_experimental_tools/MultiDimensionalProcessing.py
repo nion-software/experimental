@@ -393,7 +393,11 @@ class ApplyShifts(MultiDimensionalProcessingComputation):
             raise ValueError(f"Unknown shift axis: '{shift_axis}'.")
         # Like this we directly write to the underlying storage and don't have to cache everything in memory first
         result_data_item = self.computation.get_result('shifted')
-        MultiDimensionalProcessing.function_apply_multi_dimensional_shifts(input_xdata, shifts, tuple(shift_axis_indices), out=result_data_item.xdata)
+        if result_data_item.xdata.data_shape == input_xdata.data_shape:
+            MultiDimensionalProcessing.function_apply_multi_dimensional_shifts(input_xdata, shifts, tuple(shift_axis_indices), out=result_data_item.xdata)
+            result_xdata = result_data_item.xdata
+        else: # But if the shape in the data item does not match the input's shape we cannot do that
+            result_xdata = MultiDimensionalProcessing.function_apply_multi_dimensional_shifts(input_xdata, shifts, tuple(shift_axis_indices))
         if crop_to_valid:
             shift_axis_shape = [input_data_item.data.shape[i] for i in range(len(input_data_item.data.shape)) if i in shift_axis_indices]
             valid_area = calculate_valid_area_from_shifts(tuple(shift_axis_shape), shifts)
@@ -405,19 +409,15 @@ class ApplyShifts(MultiDimensionalProcessingComputation):
                     k += 1
                 else:
                     slice_tuple += (slice(0, None),)
-            self.__result_xdata = result_data_item.xdata[slice_tuple]
+            self.__result_xdata = result_xdata[slice_tuple]
         else:
-            self.__result_xdata = None
+            self.__result_xdata = result_xdata
         settings_dict = computation_settings.setdefault(self.computation._computation.processing_id, dict())
         settings_dict["crop_to_valid"] = crop_to_valid
         return None
 
     def commit(self) -> None:
-        if self.__result_xdata is not None:
-            self.computation.set_referenced_xdata("shifted", self.__result_xdata)
-        # Still call "set_referenced_xdata" to notify Swift that the data has been updated.
-        else:
-            self.computation.set_referenced_xdata("shifted", self.computation.get_result("shifted").xdata)
+        self.computation.set_referenced_xdata("shifted", self.__result_xdata)
         return None
 
 
