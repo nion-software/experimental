@@ -1,7 +1,9 @@
 Nion Swift Experimental
 =======================
 
-A Nion Swift package for experimental menu items and scripts.
+A Nion Swift package for experimental menu items and scripts and other items.
+
+This is a public repository maintained primarily by Nion.
 
 .. start-badges
 
