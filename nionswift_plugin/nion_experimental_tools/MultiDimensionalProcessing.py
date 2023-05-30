@@ -247,7 +247,8 @@ class MeasureShifts(MultiDimensionalProcessingComputation):
         self.__shifts_xdata = MultiDimensionalProcessing.function_measure_multi_dimensional_shifts(input_xdata, tuple(shift_axis_indices), reference_index=reference_index, bounds=bounds, max_shift=max_shift_)
         settings_dict = computation_settings.setdefault(self.computation._computation.processing_id, dict())
         settings_dict["axes_description"] = axes_description
-        settings_dict["reference_index"] = reference_index
+        # Reference index cannot be None, otherwise the computation will fail to run the next time
+        settings_dict["reference_index"] = reference_index or 0
         settings_dict["relative_shifts"] = relative_shifts
         settings_dict["max_shift"] = max_shift
         return None
@@ -370,6 +371,8 @@ class ApplyShifts(MultiDimensionalProcessingComputation):
     def execute(self, *, input_data_item: Symbolic.DataSource, shifts_data_item: Symbolic.DataSource, axes_description: str, crop_to_valid: bool) -> None: # type: ignore
         input_xdata = input_data_item.xdata
         assert input_xdata is not None
+        assert shifts_data_item.display_item is not None
+        assert shifts_data_item.data is not None
         if shifts_data_item.display_item.display_type == "line_plot":
             shifts = shifts_data_item.data.T
         else:
@@ -399,11 +402,11 @@ class ApplyShifts(MultiDimensionalProcessingComputation):
         else: # But if the shape in the data item does not match the input's shape we cannot do that
             result_xdata = MultiDimensionalProcessing.function_apply_multi_dimensional_shifts(input_xdata, shifts, tuple(shift_axis_indices))
         if crop_to_valid:
-            shift_axis_shape = [input_data_item.data.shape[i] for i in range(len(input_data_item.data.shape)) if i in shift_axis_indices]
+            shift_axis_shape = [input_xdata.data_shape[i] for i in range(len(input_xdata.data_shape)) if i in shift_axis_indices]
             valid_area = calculate_valid_area_from_shifts(tuple(shift_axis_shape), shifts)
-            slice_tuple = tuple()
+            slice_tuple: typing.Tuple[slice, ...] = tuple()
             k = 0
-            for i in range(len(input_data_item.data.shape)):
+            for i in range(len(input_xdata.data_shape)):
                 if i in shift_axis_indices:
                     slice_tuple += (slice(valid_area[k], valid_area[k+2]),)
                     k += 1
@@ -690,7 +693,7 @@ class MakeTableauMenuItemDelegate:
         return None
 
 
-def calculate_valid_area_from_shifts(input_shape: typing.Tuple[int, ...], shifts: numpy.typing.NDArray) -> typing.Tuple[int, int, int, int]:
+def calculate_valid_area_from_shifts(input_shape: typing.Tuple[int, ...], shifts: numpy.typing.NDArray[numpy.float_]) -> typing.Tuple[int, int, int, int]:
     if len(input_shape) == 2:
         min_y = numpy.amin(shifts[..., 0])
         max_y = numpy.amax(shifts[..., 0])
@@ -728,7 +731,7 @@ def calculate_valid_area_from_shifts(input_shape: typing.Tuple[int, ...], shifts
     else:
         raise ValueError("Only shifts with one or two axis are supported.")
 
-    return top, left, bottom, right
+    return top, typing.cast(int, left), bottom, typing.cast(int, right)
 
 
 class AlignImageSequence(Symbolic.ComputationHandlerLike):
@@ -760,7 +763,7 @@ class AlignImageSequence(Symbolic.ComputationHandlerLike):
         shifts_axes = tuple(input_xdata.datum_dimension_indexes)
         assert len(shifts_axes) == 2, "This computation only works for sequences and collections of 2D data."
         shifts_xdata = MultiDimensionalProcessing.function_measure_multi_dimensional_shifts(input_xdata, shifts_axes, reference_index=reference_index, bounds=bounds, max_shift=max_shift_)
-        self.__valid_area_tlbr = calculate_valid_area_from_shifts(input_xdata.datum_dimension_shape, shifts_xdata.data)
+        self.__valid_area_tlbr: typing.Optional[typing.Tuple[int, int, int, int]] = calculate_valid_area_from_shifts(input_xdata.datum_dimension_shape, shifts_xdata.data)
         self.__shifts_xdata = Core.function_transpose_flip(shifts_xdata, transpose=True, flip_v=False, flip_h=False)
         aligned_input_xdata = MultiDimensionalProcessing.function_apply_multi_dimensional_shifts(input_xdata, shifts_xdata.data, shifts_axes)
         assert aligned_input_xdata is not None
@@ -771,9 +774,11 @@ class AlignImageSequence(Symbolic.ComputationHandlerLike):
         self.__integrated_input_xdata = Core.function_sum(aligned_input_xdata, axis=0)
         if show_shifted_output:
             self.__shifted_xdata = aligned_input_xdata
+            assert input_data_item.data_item is not None
             self.__input_title = input_data_item.data_item.title
         settings_dict = computation_settings.setdefault(self.computation._computation.processing_id, dict())
-        settings_dict["reference_index"] = reference_index
+        # Reference index cannot be None, otherwise the computation will fail to run the next time we start it
+        settings_dict["reference_index"] = reference_index or 0
         settings_dict["relative_shifts"] = relative_shifts
         settings_dict["max_shift"] = max_shift
         settings_dict["show_shifted_output"] = show_shifted_output

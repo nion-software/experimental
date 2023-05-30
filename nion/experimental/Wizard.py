@@ -14,7 +14,7 @@ class WizardStep:
     title: str
     long_description: typing.Optional[str] = None
 
-    def __init__(self, api: API):
+    def __init__(self, api: API.API):
         self.api = api
         self.property_changed_event = Event.Event()
 
