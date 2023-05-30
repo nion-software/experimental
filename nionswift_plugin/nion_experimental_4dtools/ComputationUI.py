@@ -111,8 +111,14 @@ class ComputationUIPanelDelegate(object):
             self.__update_computation_ui(self.__get_computations_involved(data_item))
 
             def computation_updated(computation: Symbolic.Computation) -> None:
-                assert data_item
-                self.__update_computation_ui(self.__get_computations_involved(data_item))
+                # NOTE: computation_updated_event may be called from a background thread.
+                # queue the update to the main thread.
+
+                def _computation_updated(computation: Symbolic.Computation) -> None:
+                    assert data_item
+                    self.__update_computation_ui(self.__get_computations_involved(data_item))
+
+                self.document_controller._document_controller.queue_task(functools.partial(_computation_updated, computation))
 
             self.__computation_updated_event_listener = self.document_controller._document_controller.document_model.computation_updated_event.listen(computation_updated)
         else:
