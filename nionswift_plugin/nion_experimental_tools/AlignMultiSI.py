@@ -105,7 +105,7 @@ class AlignMultiSI(Symbolic.ComputationHandlerLike):
                                                                            True, bounds=bounds)
         sequence_shape = haadf_sequence_data_item.xdata.sequence_dimension_shape
         data_zeros = (0,) * si_xdata.datum_dimension_count
-        c = int(numpy.product(sequence_shape))
+        c = int(numpy.prod(sequence_shape))
         haadf_result_data = numpy.empty_like(haadf_xdata.data)
         si_result_data = numpy.empty_like(si_xdata.data)
         for i in range(c):
