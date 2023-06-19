@@ -10,15 +10,8 @@ This is a public repository maintained primarily by Nion.
 .. list-table::
     :stub-columns: 1
 
-    * - tests
-      - | |linux|
     * - package
       - |version|
-
-
-.. |linux| image:: https://img.shields.io/travis/nion-software/experimental/master.svg?label=Linux%20build
-   :target: https://travis-ci.org/nion-software/experimental
-   :alt: Travis CI build status (Linux)
 
 .. |version| image:: https://img.shields.io/pypi/v/nionswift-experimental.svg
    :target: https://pypi.org/project/nionswift-experimental/
