@@ -48,7 +48,7 @@ class AlignMultiDimensionalSequence:
                                                                            True, bounds=bounds)
         sequence_shape = haadf_sequence_data_item.xdata.sequence_dimension_shape
 
-        c = int(numpy.product(sequence_shape))
+        c = int(numpy.prod(sequence_shape))
         haadf_result_data = numpy.empty_like(haadf_xdata.data)
         si_result_data = numpy.empty_like(si_xdata.data)
 

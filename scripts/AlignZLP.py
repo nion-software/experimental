@@ -26,7 +26,7 @@ def align_zlp(interactive, api):
             d_rank = src_xdata.datum_dimension_count
             src_shape = tuple(src_xdata.data_shape)
             s_shape = src_shape[0:-d_rank]
-            count = int(numpy.product(s_shape))
+            count = int(numpy.prod(s_shape))
 
             # use this as the reference position. all other spectra will be aligned to this one.
             ref_pos = numpy.argmax(src_data[0, 0])

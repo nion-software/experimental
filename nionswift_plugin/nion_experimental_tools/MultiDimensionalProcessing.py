@@ -1,6 +1,7 @@
 import typing
 import gettext
 import copy
+import math
 import numpy
 import numpy.typing
 
@@ -11,6 +12,7 @@ from nion.swift.model import Symbolic
 from nion.swift.model import DataItem
 from nion.swift import Inspector
 from nion.swift import DocumentController
+from nion.swift import Application as ApplicationModule
 from nion.ui import Declarative
 from nion.utils import Registry
 from nion.utils import Observable
@@ -26,6 +28,9 @@ else:
 _ = gettext.gettext
 
 _DataArrayType = numpy.typing.NDArray[typing.Any]
+
+
+computation_settings: typing.Dict[str, typing.Dict[str, typing.Any]] = {}
 
 
 class MultiDimensionalProcessingComputation(Symbolic.ComputationHandlerLike):
@@ -240,6 +245,12 @@ class MeasureShifts(MultiDimensionalProcessingComputation):
             raise ValueError(f"Unknown shift axis: '{shift_axis}'.")
 
         self.__shifts_xdata = MultiDimensionalProcessing.function_measure_multi_dimensional_shifts(input_xdata, tuple(shift_axis_indices), reference_index=reference_index, bounds=bounds, max_shift=max_shift_)
+        settings_dict = computation_settings.setdefault(self.computation._computation.processing_id, dict())
+        settings_dict["axes_description"] = axes_description
+        # Reference index cannot be None, otherwise the computation will fail to run the next time
+        settings_dict["reference_index"] = reference_index or 0
+        settings_dict["relative_shifts"] = relative_shifts
+        settings_dict["max_shift"] = max_shift
         return None
 
     def commit(self) -> None:
@@ -275,15 +286,12 @@ class MeasureShiftsMenuItemDelegate:
         # Make a result data item with 3 dimensions to ensure we get a large_format data item
         result_data_item = self.__api.library.create_data_item_from_data(numpy.zeros((1,1,1)), title="Shifts of {}".format(selected_data_item.title))
 
-        # shift_axis_structure = DataStructure.DataStructure(structure_type=shift_axis)
-        # self.__api.library._document_model.append_data_structure(shift_axis_structure)
-        # shift_axis_structure.source = result_data_item._data_item
-
+        settings_dict = computation_settings.get("nion.measure_shifts", dict())
         inputs = {"input_data_item": {"object": selected_data_item, "type": "data_source"},
-                  "axes_description": shift_axis,
-                  "reference_index": 0,
-                  "relative_shifts": True,
-                  "max_shift": 0,
+                  "axes_description": settings_dict.get("axes_description", shift_axis),
+                  "reference_index": settings_dict.get("reference_index", 0),
+                  "relative_shifts": settings_dict.get("relative_shifts", False),
+                  "max_shift": settings_dict.get("max_shift", 0),
                   }
         if bounds_graphic:
             inputs["bounds_graphic"] = bounds_graphic
@@ -300,6 +308,7 @@ class ApplyShifts(MultiDimensionalProcessingComputation):
     inputs = {"input_data_item": {"label": _("Input data item")},
               "shifts_data_item": {"label": _("Shifts data item")},
               "axes_description": {"label": _("Apply shift along this axis")},
+              "crop_to_valid": {"label": _("Crop result to valid area")},
               }
     outputs = {"shifted": {"label": _("Shifted")},
                }
@@ -359,10 +368,15 @@ class ApplyShifts(MultiDimensionalProcessingComputation):
 
         return shift_axis
 
-    def execute(self, *, input_data_item: Facade.DataItem, shifts_data_item: Facade.DataItem, axes_description: str) -> None: # type: ignore
+    def execute(self, *, input_data_item: Symbolic.DataSource, shifts_data_item: Symbolic.DataSource, axes_description: str, crop_to_valid: bool) -> None: # type: ignore
         input_xdata = input_data_item.xdata
         assert input_xdata is not None
-        shifts  = shifts_data_item.data
+        assert shifts_data_item.display_item is not None
+        assert shifts_data_item.data is not None
+        if shifts_data_item.display_item.display_type == "line_plot":
+            shifts = shifts_data_item.data.T
+        else:
+            shifts  = shifts_data_item.data
         split_description = axes_description.split("-")
         shift_axis = split_description[0]
         if shift_axis == "collection":
@@ -382,14 +396,31 @@ class ApplyShifts(MultiDimensionalProcessingComputation):
             raise ValueError(f"Unknown shift axis: '{shift_axis}'.")
         # Like this we directly write to the underlying storage and don't have to cache everything in memory first
         result_data_item = self.computation.get_result('shifted')
-        MultiDimensionalProcessing.function_apply_multi_dimensional_shifts(input_xdata, shifts, tuple(shift_axis_indices), out=result_data_item.xdata)
+        if result_data_item.xdata.data_shape == input_xdata.data_shape:
+            MultiDimensionalProcessing.function_apply_multi_dimensional_shifts(input_xdata, shifts, tuple(shift_axis_indices), out=result_data_item.xdata)
+            result_xdata = result_data_item.xdata
+        else: # But if the shape in the data item does not match the input's shape we cannot do that
+            result_xdata = MultiDimensionalProcessing.function_apply_multi_dimensional_shifts(input_xdata, shifts, tuple(shift_axis_indices))
+        if crop_to_valid:
+            shift_axis_shape = [input_xdata.data_shape[i] for i in range(len(input_xdata.data_shape)) if i in shift_axis_indices]
+            valid_area = calculate_valid_area_from_shifts(tuple(shift_axis_shape), shifts)
+            slice_tuple: typing.Tuple[slice, ...] = tuple()
+            k = 0
+            for i in range(len(input_xdata.data_shape)):
+                if i in shift_axis_indices:
+                    slice_tuple += (slice(valid_area[k], valid_area[k+2]),)
+                    k += 1
+                else:
+                    slice_tuple += (slice(0, None),)
+            self.__result_xdata = result_xdata[slice_tuple]
+        else:
+            self.__result_xdata = result_xdata
+        settings_dict = computation_settings.setdefault(self.computation._computation.processing_id, dict())
+        settings_dict["crop_to_valid"] = crop_to_valid
         return None
 
     def commit(self) -> None:
-        # self.computation.set_referenced_xdata("shifted", self.__result_xdata)
-        # self.__result_xdata = None
-        # Still call "set_referenced_xdata" to notify Swift that the data has been updated.
-        self.computation.set_referenced_xdata("shifted", self.computation.get_result("shifted").xdata)
+        self.computation.set_referenced_xdata("shifted", self.__result_xdata)
         return None
 
 
@@ -427,7 +458,14 @@ class ApplyShiftsMenuItemDelegate:
         else:
             raise ValueError(error_msg)
 
-        shift_axis = ApplyShifts.guess_starting_axis(input_di.xdata, shifts_xdata=shifts_di.xdata)
+        display_item = self.__api.library._document_model.get_display_item_for_data_item(shifts_di._data_item)
+        assert display_item is not None
+        if display_item.display_type == "line_plot":
+            shifts_xdata = Core.function_transpose_flip(shifts_di.xdata, transpose=True, flip_v=False, flip_h=False)
+        else:
+            shifts_xdata = shifts_di.xdata
+
+        shift_axis = ApplyShifts.guess_starting_axis(input_di.xdata, shifts_xdata=shifts_xdata)
 
         data_item = DataItem.DataItem(large_format=True)
         data_item.title="Shifted {}".format(input_di.title)
@@ -438,13 +476,11 @@ class ApplyShiftsMenuItemDelegate:
         data_item.metadata = copy.deepcopy(input_di.xdata.metadata)
         result_data_item = self.__api._new_api_object(data_item)
 
-        # shift_axis_structure = DataStructure.DataStructure(structure_type=shift_axis)
-        # self.__api.library._document_model.append_data_structure(shift_axis_structure)
-        # shift_axis_structure.source = result_data_item._data_item
-
+        settings_dict = computation_settings.get("nion.align_and_integrate_image_sequence", dict())
         inputs = {"input_data_item": {"object": input_di, "type": "data_source"},
                   "shifts_data_item": {"object": shifts_di, "type": "data_source"},
-                  "axes_description": shift_axis
+                  "axes_description": shift_axis,
+                  "crop_to_valid": settings_dict.get("crop_to_valid", False)
                   }
 
         self.__api.library.create_computation("nion.apply_shifts",
@@ -657,22 +693,66 @@ class MakeTableauMenuItemDelegate:
         return None
 
 
+def calculate_valid_area_from_shifts(input_shape: typing.Tuple[int, ...], shifts: numpy.typing.NDArray[numpy.float_]) -> typing.Tuple[int, int, int, int]:
+    if len(input_shape) == 2:
+        min_y = numpy.amin(shifts[..., 0])
+        max_y = numpy.amax(shifts[..., 0])
+        min_x = numpy.amin(shifts[..., 1])
+        max_x = numpy.amax(shifts[..., 1])
+        valid_area_tlbr = [0.0, 0.0, input_shape[0], input_shape[1]]
+        if min_y < 0:
+            valid_area_tlbr[2] += min_y
+        if max_y > 0:
+            valid_area_tlbr[0] = max_y
+        if min_x < 0:
+            valid_area_tlbr[3] += min_x
+        if max_x > 0:
+            valid_area_tlbr[1] = max_x
+
+        top = min(input_shape[0], max(0, math.ceil(valid_area_tlbr[0])))
+        left = min(input_shape[1], max(0, math.ceil(valid_area_tlbr[1])))
+        bottom = min(input_shape[0], max(top, math.floor(valid_area_tlbr[2])))
+        right = min(input_shape[1], max(left, math.floor(valid_area_tlbr[3])))
+    elif len(input_shape) == 1:
+        min_y = numpy.amin(shifts)
+        max_y = numpy.amax(shifts)
+
+        valid_area_t_b = [0.0, input_shape[0]]
+
+        if min_y < 0:
+            valid_area_t_b[1] += min_y
+        if max_y > 0:
+            valid_area_t_b[0] = max_y
+
+        top = min(input_shape[0], max(0, math.ceil(valid_area_t_b[0])))
+        left = None
+        bottom = min(input_shape[0], max(top, math.floor(valid_area_t_b[1])))
+        right = None
+    else:
+        raise ValueError("Only shifts with one or two axis are supported.")
+
+    return top, typing.cast(int, left), bottom, typing.cast(int, right)
+
+
 class AlignImageSequence(Symbolic.ComputationHandlerLike):
     label = _("Align and integrate image sequence")
     inputs = {"input_data_item": {"label": _("Input data item")},
               "reference_index": {"label": _("Reference index for shifts")},
               "relative_shifts": {"label": _("Measure shifts relative to previous slice")},
               "max_shift": {"label": _("Max shift between consecutive frames (in pixels, <= 0 to disable)")},
+              "show_shifted_output": {"label": _("Show shifted output")},
+              "crop_to_valid": {"label": _("Crop result to valid area")},
               "bounds_graphic": {"label": _("Shift bounds")},
               }
     outputs = {"shifts": {"label": _("Shifts")},
                "integrated_sequence": {"label": _("Integrated sequence")},
+               "shifted_data": {"label": _("Aligned sequence")}
                }
 
     def __init__(self, computation: typing.Any, **kwargs: typing.Any) -> None:
         self.computation = computation
 
-    def execute(self, *, input_data_item: Facade.DataItem, reference_index: typing.Optional[int] = None, relative_shifts: bool=True, max_shift: int=0, bounds_graphic: typing.Optional[Facade.Graphic]=None) -> None: # type: ignore
+    def execute(self, *, input_data_item: Symbolic.DataSource, reference_index: typing.Optional[int] = None, relative_shifts: bool=True, max_shift: int=0, show_shifted_output: bool = False, crop_to_valid: bool = True, bounds_graphic: typing.Optional[Facade.Graphic]=None) -> None: # type: ignore
         input_xdata = input_data_item.xdata
         assert input_xdata is not None
         bounds = None
@@ -681,16 +761,70 @@ class AlignImageSequence(Symbolic.ComputationHandlerLike):
         max_shift_ = max_shift if max_shift > 0 else None
         reference_index = reference_index if not relative_shifts else None
         shifts_axes = tuple(input_xdata.datum_dimension_indexes)
+        assert len(shifts_axes) == 2, "This computation only works for sequences and collections of 2D data."
         shifts_xdata = MultiDimensionalProcessing.function_measure_multi_dimensional_shifts(input_xdata, shifts_axes, reference_index=reference_index, bounds=bounds, max_shift=max_shift_)
+        self.__valid_area_tlbr: typing.Optional[typing.Tuple[int, int, int, int]] = calculate_valid_area_from_shifts(input_xdata.datum_dimension_shape, shifts_xdata.data)
         self.__shifts_xdata = Core.function_transpose_flip(shifts_xdata, transpose=True, flip_v=False, flip_h=False)
         aligned_input_xdata = MultiDimensionalProcessing.function_apply_multi_dimensional_shifts(input_xdata, shifts_xdata.data, shifts_axes)
         assert aligned_input_xdata is not None
+        if crop_to_valid:
+            top, left, bottom, right = self.__valid_area_tlbr
+            aligned_input_xdata = aligned_input_xdata[..., top:bottom, left:right]
+            self.__valid_area_tlbr = None
         self.__integrated_input_xdata = Core.function_sum(aligned_input_xdata, axis=0)
+        if show_shifted_output:
+            self.__shifted_xdata = aligned_input_xdata
+            assert input_data_item.data_item is not None
+            self.__input_title = input_data_item.data_item.title
+        settings_dict = computation_settings.setdefault(self.computation._computation.processing_id, dict())
+        # Reference index cannot be None, otherwise the computation will fail to run the next time we start it
+        settings_dict["reference_index"] = reference_index or 0
+        settings_dict["relative_shifts"] = relative_shifts
+        settings_dict["max_shift"] = max_shift
+        settings_dict["show_shifted_output"] = show_shifted_output
+        settings_dict["crop_to_valid"] = crop_to_valid
         return None
 
     def commit(self) -> None:
         self.computation.set_referenced_xdata("shifts", self.__shifts_xdata)
         self.computation.set_referenced_xdata("integrated_sequence", self.__integrated_input_xdata)
+        integrated_data_item = self.computation.get_result("integrated_sequence")
+        for graphic in integrated_data_item.graphics:
+            if graphic.label == "Valid Area":
+                integrated_data_item.remove_region(graphic)
+                break
+        shape = integrated_data_item.data.shape
+        valid_area = self.__valid_area_tlbr
+        if valid_area is not None:
+            rectangle_bounds = (max(0.0, min(1.0, (valid_area[0] + (valid_area[2] - valid_area[0]) * 0.5) / shape[0])),
+                                max(0.0, min(1.0, (valid_area[1] + (valid_area[3] - valid_area[1]) * 0.5) / shape[1])),
+                                max(0.0, min(1.0, (valid_area[2] - valid_area[0]) / shape[0])),
+                                max(0.0, min(1.0, (valid_area[3] - valid_area[1]) / shape[1])))
+            rect = integrated_data_item.add_rectangle_region(*rectangle_bounds)
+            rect.label = "Valid Area"
+        try:
+            shifted_xdata = self.__shifted_xdata
+        except AttributeError:
+            shifted_result_data_item = self.computation.get_result("shifted_data")
+            if shifted_result_data_item:
+                self.computation.set_result("shifted_data", None)
+                api = Facade.API_1(None, ApplicationModule.app)
+                api.library._document_model.remove_data_item(shifted_result_data_item._data_item)
+        else:
+            shifted_result_data_item = self.computation.get_result("shifted_data")
+            if not shifted_result_data_item:
+                api = Facade.API_1(None, ApplicationModule.app)
+                shifted_result_data_item = api.library.create_data_item_from_data(numpy.zeros((1,1,1)), title=f"{self.__input_title} aligned")
+                api.application.document_windows[0].display_data_item(shifted_result_data_item)
+                self.computation.set_result("shifted_data", shifted_result_data_item)
+            self.computation.set_referenced_xdata("shifted_data", shifted_xdata)
+            for graphic in shifted_result_data_item.graphics:
+                if graphic.label == "Valid Area":
+                    integrated_data_item.remove_region(graphic)
+                    break
+            if valid_area is not None:
+                rect = shifted_result_data_item.add_rectangle_region(*rectangle_bounds)
+                rect.label = "Valid Area"
         return None
 
 
@@ -727,21 +861,30 @@ class AlignImageSequenceMenuItemDelegate:
             # Make a result data item with 3 dimensions to ensure we get a large_format data item
             result_data_item = self.__api.library.create_data_item_from_data(numpy.zeros((1,1,1)), title=f"{selected_data_item.title} aligned and integrated")
             shifts = self.__api.library.create_data_item_from_data(numpy.zeros((2, 2)), title=f"{selected_data_item.title} measured shifts")
-
+            settings_dict = computation_settings.get("nion.align_and_integrate_image_sequence", dict())
             inputs = {"input_data_item": {"object": selected_data_item, "type": "data_source"},
-                      "reference_index": 0,
-                      "relative_shifts": False,
-                      "max_shift": 0,
+                      "reference_index": settings_dict.get("reference_index", 0),
+                      "relative_shifts": settings_dict.get("relative_shifts", False),
+                      "max_shift": settings_dict.get("max_shift", 0),
+                      "show_shifted_output": settings_dict.get("show_shifted_output", False),
+                      "crop_to_valid": settings_dict.get("crop_to_valid", True)
                       }
             if bounds_graphic:
                 inputs["bounds_graphic"] = bounds_graphic
 
+            outputs = {"shifts": shifts, "integrated_sequence": result_data_item}
+            if settings_dict.get("show_shifted_output", False):
+                shifted_result_data_item = self.__api.library.create_data_item_from_data(numpy.zeros((1,1,1)), title=f"{selected_data_item.title} aligned")
+                outputs["shifted_data"] = shifted_result_data_item
+
+
             self.__api.library.create_computation("nion.align_and_integrate_image_sequence",
                                                   inputs=inputs,
-                                                  outputs={"shifts": shifts,
-                                                           "integrated_sequence": result_data_item})
+                                                  outputs=outputs)
             window.display_data_item(result_data_item)
             window.display_data_item(shifts)
+            if "shifted_data" in outputs:
+                window.display_data_item(shifted_result_data_item)
 
             display_item = self.__api.library._document_model.get_display_item_for_data_item(shifts._data_item)
             assert display_item is not None
