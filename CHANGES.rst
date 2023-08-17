@@ -1,6 +1,14 @@
 Changelog (nionswift-experimental)
 ==================================
 
+0.7.10 (2023-08-17)
+-------------------
+- Add Python 3.11 support. Drop Python 3.8.
+- Add crop to valid area functionality.
+- Remove measure ZLP; functionality moved to eels-analysis.
+- Add find local maxima computation.
+- Use multi-d processing base functions from nion.data.
+
 0.7.9 (2022-07-26)
 ------------------
 - Add I vs E square plot computation.
