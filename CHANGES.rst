@@ -1,6 +1,10 @@
 Changelog (nionswift-experimental)
 ==================================
 
+0.7.11 (2023-08-17)
+-------------------
+- Add typing support.
+
 0.7.10 (2023-08-17)
 -------------------
 - Add Python 3.11 support. Drop Python 3.8.
