@@ -20,9 +20,9 @@ jobs:
         python-version: ["3.9", "3.10", "3.11"]
 
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v3
     - name: Set up Python ${{ matrix.python-version }}
-      uses: actions/setup-python@v2
+      uses: actions/setup-python@v4
       with:
         python-version: ${{ matrix.python-version }}
     - name: Display Python version
@@ -36,9 +36,8 @@ jobs:
       run: |
         pip install -r test-requirements.txt
         python -m pip install mypy
-        python -m pip install flake8
         mypy --version
-    - name: Typing
+    - name: Type Checking
       run: |
         mypy --namespace-packages --ignore-missing-imports --follow-imports=silent --strict --no-warn-redundant-casts --no-warn-unused-ignores --exclude "/test" --exclude "/docs" -p nion.experimental -p nionswift_plugin.drift_correction -p nionswift_plugin.nion_experimental_4dtools -p nionswift_plugin.nion_experimental_tools
     - name: Test
@@ -46,14 +45,33 @@ jobs:
         python -m unittest discover nionswift_plugin/nion_experimental_tools -v -p '*_test.py'
         # python -m unittest discover nion -v -p '*_test.py'
     - name: Upload Artifacts
-      uses: actions/upload-artifact@v2
+      uses: actions/upload-artifact@v3
       if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.9'
       with:
         name: distribution
         path: dist
-    - name: Publish package
-      uses: pypa/gh-action-pypi-publish@master
+    - name: Publish package to PyPI
+      uses: pypa/gh-action-pypi-publish@release/v1
       if: github.event_name == 'push' && startsWith(github.event.ref, 'refs/tags') && matrix.os == 'ubuntu-latest' && matrix.python-version == '3.9'
       with:
+        skip-existing: true
         user: __token__
         password: ${{ secrets.pypi_password }}
+    - name: Set up Miniconda for conda-build
+      if: github.event_name == 'push' && startsWith(github.event.ref, 'refs/tags') && matrix.os == 'ubuntu-latest' && matrix.python-version == '3.9'
+      uses: conda-incubator/setup-miniconda@v2
+      with:
+        auto-update-conda: true
+        python-version: '3.10'
+    - name: Build/publish anaconda package
+      if: github.event_name == 'push' && startsWith(github.event.ref, 'refs/tags') && matrix.os == 'ubuntu-latest' && matrix.python-version == '3.9'
+      shell: bash -l {0}
+      run: |
+        # make a directory to avoid name conflicts with the channel. argh.
+        mkdir conda_build
+        pushd conda_build
+        conda update -n base --all -y
+        conda update --all -y
+        conda install conda-build anaconda-client -y
+        conda-build -q -c nion --skip-existing --user nion --token ${{ secrets.anaconda_token }} ..
+        popd
