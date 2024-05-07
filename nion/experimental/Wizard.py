@@ -114,7 +114,7 @@ class AsyncWizardUIHandler(Declarative.Handler):
         self.property_changed_event = Event.Event()
         self.ui_view = ui_view
         self.__thread: typing.Optional[threading.Thread] = None
-        self.__task: typing.Optional[asyncio.Task] = None
+        self.__task: typing.Optional[asyncio.Task[None]] = None
         self.on_closed: typing.Optional[typing.Callable[[], typing.Any]] = None
         self.__canceled_ui_visible = False
         self.__cancel_button_visible = False
@@ -131,10 +131,10 @@ class AsyncWizardUIHandler(Declarative.Handler):
 
     def __create_property(self, name: str, value: typing.Any = None) -> None:
         self.__requirement_values[name] = value
-        def getter(self) -> None:
+        def getter(self: AsyncWizardUIHandler) -> typing.Any:
             return self.__requirement_values[name]
 
-        def setter(self, value: typing.Any) -> None:
+        def setter(self: AsyncWizardUIHandler, value: typing.Any) -> None:
             self.__requirement_values[name] = value
             self.property_changed_event.fire(name)
             self.property_changed_event.fire('run_step_button_enabled')
@@ -148,7 +148,7 @@ class AsyncWizardUIHandler(Declarative.Handler):
 
     # For testing
     @property
-    def _task(self) -> typing.Optional[asyncio.Task]:
+    def _task(self) -> typing.Optional[asyncio.Task[None]]:
         return self.__task
 
     @property
@@ -407,7 +407,7 @@ class AsyncWizardUIHandler(Declarative.Handler):
                                     'the wizard regardless of the failure.')
 
     def skip_clicked(self, widget: Declarative.UIWidget) -> None:
-        def callback(task: asyncio.Task) -> None:
+        def callback(task: asyncio.Task[None]) -> None:
             step = self.current_step_index + 1
             while step < len(self.__wizard_steps) - 1 and self.__wizard_steps[step].depends_on_previous_step:
                 step += 1
