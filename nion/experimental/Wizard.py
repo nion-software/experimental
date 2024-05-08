@@ -246,6 +246,7 @@ class AsyncWizardUIHandler(Declarative.Handler):
 
     @property
     def output_text(self) -> str:
+        print(f'Getting output text for step {self.current_step}: {self.current_step.output_text}')
         return self.current_step.output_text
 
     @output_text.setter
@@ -345,9 +346,10 @@ class AsyncWizardUIHandler(Declarative.Handler):
 
     def __set_up_ui_for_pre_wizard_step(self) -> None:
         def listen_fn(listen_to: set[str], fire: set[str], name: str) -> None:
+            print(f'Got event {name}, firing events {fire}')
             if name in listen_to:
                 for fire_event in fire:
-                    self.property_changed_event.fire(fire)
+                    self.property_changed_event.fire(fire_event)
         self.__output_text_listener = self.current_step.property_changed_event.listen(functools.partial(listen_fn, {'output_text'}, {'output_text'}))
         self.__instructions_text_listener = self.current_step.property_changed_event.listen(functools.partial(listen_fn, {'instructions_text'}, {'instructions_text', 'instructions_field_visible', 'instructions_background_color'}))
         self.canceled_ui_visible = False
