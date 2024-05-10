@@ -767,11 +767,13 @@ class AlignImageSequence(Symbolic.ComputationHandlerLike):
         self.__shifts_xdata = Core.function_transpose_flip(shifts_xdata, transpose=True, flip_v=False, flip_h=False)
         aligned_input_xdata = MultiDimensionalProcessing.function_apply_multi_dimensional_shifts(input_xdata, shifts_xdata.data, shifts_axes)
         assert aligned_input_xdata is not None
+        aligned_input_xdata._set_metadata(input_xdata.metadata)
         if crop_to_valid:
             top, left, bottom, right = self.__valid_area_tlbr
             aligned_input_xdata = aligned_input_xdata[..., top:bottom, left:right]
             self.__valid_area_tlbr = None
         self.__integrated_input_xdata = Core.function_sum(aligned_input_xdata, axis=0)
+        self.__integrated_input_xdata._set_metadata(input_xdata.metadata)
         if show_shifted_output:
             self.__shifted_xdata = aligned_input_xdata
             assert input_data_item.data_item is not None
