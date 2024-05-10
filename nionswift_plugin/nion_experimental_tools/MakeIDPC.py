@@ -1,6 +1,7 @@
 import gettext
 import logging
 import typing
+import warnings
 
 import numpy
 import scipy.optimize
@@ -18,7 +19,9 @@ class MakeIDPC:
     inputs = {"src": {"label": _("DPC Data Item")},
               "gradient_x_index": {"label": _("DPC x-slice")},
               "gradient_y_index": {"label": _("DPC y-slice")},
-              "rotation": {"label": _("Rotation (deg) or 'None' for automatic")},
+              "flip_x": {"label":_("Flip x-axis")},
+              "flip_y": {"label":_("Flip y-axis")},
+              "rotation_str": {"label": _("Rotation (deg) or 'None' for automatic")},
               "crop_region": {"label": _("Crop")},
               }
     outputs = {"output": {"label": _("iDPC")}}
@@ -34,7 +37,8 @@ class MakeIDPC:
         return float(numpy.mean(curl_com**2))
 
     def execute(self, src: typing.Optional[Facade.DataItem] = None, gradient_x_index: int = 0, gradient_y_index: int = 0,
-                rotation_str: typing.Optional[str] = None, crop_region: typing.Optional[Facade.Graphic] = None,
+                flip_x: bool = False, flip_y: bool = False, rotation_str: typing.Optional[str] = None,
+                crop_region: typing.Optional[Facade.Graphic] = None,
                 **kwargs: typing.Any) -> None:
         assert src
         assert crop_region
@@ -52,6 +56,10 @@ class MakeIDPC:
             # Subtract the mean of each component so that we remove any global offset
             gradx = gradx[crop_slices] - numpy.mean(gradx[crop_slices])
             grady = grady[crop_slices] - numpy.mean(grady[crop_slices])
+            if flip_x:
+                gradx *= -1.0
+            if flip_y:
+                grady *= -1.0
             # Don't use "if rotation" here because that would also calculate rotation for a given value of 0
             if not rotation_str or rotation_str == "None":
                 res = scipy.optimize.minimize_scalar(self.__calculate_curl, 0, args=(gradx, grady), bounds=(0, numpy.pi*2), method='bounded')
@@ -69,8 +77,9 @@ class MakeIDPC:
             freq_v = numpy.fft.fftfreq(gradx.shape[-2], d=dpc_xdata.dimensional_calibrations[-2].scale)
             freq_u = numpy.fft.fftfreq(gradx.shape[-1], d=dpc_xdata.dimensional_calibrations[-1].scale)
             freqs = numpy.meshgrid(freq_u, freq_v)
-
-            fft_idpc = (numpy.fft.fft2(gradx_rotated) * freqs[0] + numpy.fft.fft2(grady_rotated) * freqs[1]) / (1j * (freqs[0]**2 + freqs[1]**2))
+            with warnings.catch_warnings():
+                warnings.simplefilter('ignore')
+                fft_idpc = (numpy.fft.fft2(gradx_rotated) * freqs[0] + numpy.fft.fft2(grady_rotated) * freqs[1]) / (1j * (freqs[0]**2 + freqs[1]**2))
             fft_idpc[numpy.isnan(fft_idpc)] = 0
             self.__result_xdata = DataAndMetadata.new_data_and_metadata(numpy.real(numpy.fft.ifft2(fft_idpc)),
                                                                         intensity_calibration=dpc_xdata.intensity_calibration,
@@ -117,7 +126,9 @@ class MakeIDPCMenuItem:
                                                   inputs={"src": api_data_item,
                                                           "gradient_x_index": 0,
                                                           "gradient_y_index": 1,
-                                                          "rotation": "None",
+                                                          "flip_x": False,
+                                                          "flip_y": False,
+                                                          "rotation_str": "None",
                                                           "crop_region": crop_region},
                                                   outputs=result_data_items)
             for data_item in result_data_items.values():
