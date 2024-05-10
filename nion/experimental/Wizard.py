@@ -129,6 +129,10 @@ class AsyncWizardUIHandler(Declarative.Handler):
         self.instructions_background_action_color = 'peachpuff'
         self.__create_requirement_properties()
 
+    @staticmethod
+    def _get_requirement_property_name(step_index: int, requirement_index: int) -> str:
+        return f'requirement_{step_index}_{requirement_index}_checked'
+
     def __create_property(self, name: str, value: typing.Any = None) -> None:
         self.__requirement_values[name] = value
         def getter(self: AsyncWizardUIHandler) -> typing.Any:
@@ -144,7 +148,7 @@ class AsyncWizardUIHandler(Declarative.Handler):
     def __create_requirement_properties(self) -> None:
         for wizard_step in self.__wizard_steps:
             for i in range(len(wizard_step.requirements)):
-                self.__create_property(f'requirement_{wizard_step.step_index}_{i}_checked', value=False)
+                self.__create_property(self._get_requirement_property_name(wizard_step.step_index, i), value=False)
 
     # For testing
     @property
@@ -246,7 +250,6 @@ class AsyncWizardUIHandler(Declarative.Handler):
 
     @property
     def output_text(self) -> str:
-        print(f'Getting output text for step {self.current_step}: {self.current_step.output_text}')
         return self.current_step.output_text
 
     @output_text.setter
@@ -329,7 +332,7 @@ class AsyncWizardUIHandler(Declarative.Handler):
         current_step_index = self.current_step_index
         checked = []
         for i in range(len(self.current_step.requirements)):
-            checked.append(getattr(self, f'requirement_{current_step_index}_{i}_checked'))
+            checked.append(getattr(self, self._get_requirement_property_name(current_step_index, i)))
         return all(checked)
 
     @run_step_button_enabled.setter
@@ -346,7 +349,6 @@ class AsyncWizardUIHandler(Declarative.Handler):
 
     def __set_up_ui_for_pre_wizard_step(self) -> None:
         def listen_fn(listen_to: set[str], fire: set[str], name: str) -> None:
-            print(f'Got event {name}, firing events {fire}')
             if name in listen_to:
                 for fire_event in fire:
                     self.property_changed_event.fire(fire_event)
@@ -359,9 +361,9 @@ class AsyncWizardUIHandler(Declarative.Handler):
         self.restart_enabled = False
         self.status_text = ''
         self.current_step.output_text = ''
-        self.property_changed_event.fire('instructions_text')
-        self.property_changed_event.fire('instructions_field_visible')
-        self.property_changed_event.fire('instructions_background_color')
+        self.current_step.instructions_text = ''
+        for i in range(len(self.current_step.requirements)):
+            setattr(self, self._get_requirement_property_name(self.current_step.step_index, i), False)
 
     def __set_up_ui_for_post_wizard_step(self) -> None:
         self.__output_text_listener = None
@@ -707,7 +709,7 @@ class WizardUI:
     def __generate_requirements_ui(self, ui: Declarative.DeclarativeUI, wizard_step: AsyncWizardStep) -> Declarative.UIDescription:
         requirements: typing.List[Declarative.UIDescription] = list()
         for i, requirement in enumerate(wizard_step.requirements):
-            requirements.append(ui.create_row(ui.create_check_box(text=line_break(requirement), checked=f'@binding(requirement_{wizard_step.step_index}_{i}_checked)'), ui.create_stretch(), spacing=5, margin=5))
+            requirements.append(ui.create_row(ui.create_check_box(text=line_break(requirement), checked=f'@binding({AsyncWizardUIHandler._get_requirement_property_name(wizard_step.step_index, i)})'), ui.create_stretch(), spacing=5, margin=5))
         if requirements:
             requirements.insert(0, ui.create_row(ui.create_label(text='Please go through the list of requirements below and click "Run step" once you have checked all boxes.'), ui.create_stretch(), spacing=5, margin=5))
             requirements.append(ui.create_row(ui.create_push_button(text='Run step', on_clicked='run_step_clicked', enabled='@binding(run_step_button_enabled)'), ui.create_stretch(), margin=5, spacing=5))
