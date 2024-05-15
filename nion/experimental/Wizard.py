@@ -125,6 +125,7 @@ class AsyncWizardUIHandler(Declarative.Handler):
         self.__requirement_values: dict[str, typing.Any] = dict()
         self.__output_text_listener: typing.Optional[Event.EventListener] = None
         self.__instructions_text_listener: typing.Optional[Event.EventListener] = None
+        self.__run_step_button_enabled = True
         self.instructions_background_default_color = '#f0f0f0'
         self.instructions_background_action_color = 'peachpuff'
         self.__create_requirement_properties()
@@ -230,6 +231,8 @@ class AsyncWizardUIHandler(Declarative.Handler):
         self.property_changed_event.fire('current_step_title')
         self.property_changed_event.fire('current_step_description')
         self.property_changed_event.fire('ui_stack_current_index')
+        self.cancel_button_visible = False
+        self.restart_enabled = True
         if visible:
             self.content_list.items = []
         else:
@@ -329,6 +332,8 @@ class AsyncWizardUIHandler(Declarative.Handler):
 
     @property
     def run_step_button_enabled(self) -> bool:
+        if not self.__run_step_button_enabled:
+            return False
         current_step_index = self.current_step_index
         checked = []
         for i in range(len(self.current_step.requirements)):
@@ -352,6 +357,7 @@ class AsyncWizardUIHandler(Declarative.Handler):
             if name in listen_to:
                 for fire_event in fire:
                     self.property_changed_event.fire(fire_event)
+        self.__run_step_button_enabled = True
         self.__output_text_listener = self.current_step.property_changed_event.listen(functools.partial(listen_fn, {'output_text'}, {'output_text'}))
         self.__instructions_text_listener = self.current_step.property_changed_event.listen(functools.partial(listen_fn, {'instructions_text'}, {'instructions_text', 'instructions_field_visible', 'instructions_background_color'}))
         self.canceled_ui_visible = False
@@ -446,8 +452,14 @@ class AsyncWizardUIHandler(Declarative.Handler):
 
     def show_menu_clicked(self, widget: Declarative.UIWidget) -> None:
         def jump_to_step(step: int) -> None:
-            self.current_step_index = step
-            self.__task = self.__event_loop.create_task(self.run_current_step())
+            def callback(task: asyncio.Task[None]) -> None:
+                self.current_step_index = step
+                self.__task = self.__event_loop.create_task(self.run_current_step())
+            if self.__task:
+                self.__task.add_done_callback(callback)
+                self.__task.cancel()
+            else:
+                callback(typing.cast(asyncio.Task[None](None)))
         document_controller = self.__api.application.document_controllers[0]._document_controller
         menu = document_controller.create_context_menu()
         for item in self.__wizard_steps:
@@ -459,6 +471,8 @@ class AsyncWizardUIHandler(Declarative.Handler):
         menu.popup(position.x, position.y)
 
     def run_step_clicked(self, widget: Declarative.UIWidget) -> None:
+        self.__run_step_button_enabled = False
+        self.property_changed_event.fire('run_step_button_enabled')
         self.__continue_event.set()
 
     def create_handler(self, component_id: str, **kwargs: typing.Any) -> typing.Optional[AsyncWizardStep]:
@@ -733,8 +747,8 @@ class WizardUI:
         active_ui_column = ui.create_column(requirements_row, instructions_row, content_row, output_row, status_row)
         canceled_ui_colum = ui.create_column(canceled_row)
         ui_stack = ui.create_stack(active_ui_column, canceled_ui_colum, current_index='@binding(ui_stack_current_index)')
-        control_row = ui.create_row(ui.create_push_button(text='Cancel', on_clicked='cancel_clicked', visible='@binding(cancel_button_visible)'),
-                                    ui.create_push_button(text='Skip', on_clicked='skip_clicked', visible='@binding(skip_button_visible)'),
+        control_row = ui.create_row(ui.create_push_button(text='Cancel Step', on_clicked='cancel_clicked', visible='@binding(cancel_button_visible)'),
+                                    ui.create_push_button(text='Skip Step', on_clicked='skip_clicked', visible='@binding(skip_button_visible)'),
                                     ui.create_push_button(text='Restart Wizard', on_clicked='restart_clicked', visible='@binding(restart_button_visible)'),
                                     ui.create_stretch(),
                                     ui.create_push_button(text='Restart Step', on_clicked='restart_step_clicked', enabled='@binding(restart_enabled)'),
