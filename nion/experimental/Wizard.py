@@ -459,7 +459,7 @@ class AsyncWizardUIHandler(Declarative.Handler):
                 self.__task.add_done_callback(callback)
                 self.__task.cancel()
             else:
-                callback(typing.cast(asyncio.Task[None](None)))
+                callback(typing.cast(asyncio.Task[None], None))
         document_controller = self.__api.application.document_controllers[0]._document_controller
         menu = document_controller.create_context_menu()
         for item in self.__wizard_steps:
