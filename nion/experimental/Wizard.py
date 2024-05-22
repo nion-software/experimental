@@ -92,7 +92,7 @@ class AsyncWizardStep:
 
     @staticmethod
     def get_ui_description(ui: Declarative.DeclarativeUI) -> Declarative.UIDescription:
-        return dict()
+        return ui.create_column() # Don't return an empty dict, because this will cause an assertion error in nionui
 
     def init_step(self) -> int:
         return 0
