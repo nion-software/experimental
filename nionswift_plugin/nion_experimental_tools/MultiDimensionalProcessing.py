@@ -440,8 +440,10 @@ class ApplyShiftsMenuItemDelegate:
         error_msg = "Select a multi-dimensional data item and another one that contains shifts that can be broadcast to the shape of the first one."
         assert selected_display_items[0][0] is not None, error_msg
         assert selected_display_items[1][0] is not None, error_msg
-        di_1 = selected_display_items[0][0].data_item
-        di_2 = selected_display_items[1][0].data_item
+        display_1 = selected_display_items[0][0]
+        display_2 = selected_display_items[1][0]
+        di_1 = display_1.data_item
+        di_2 = display_2.data_item
         assert di_1 is not None, error_msg
         assert di_2 is not None, error_msg
         assert di_1.xdata is not None, error_msg
@@ -451,16 +453,16 @@ class ApplyShiftsMenuItemDelegate:
 
         if len(di_1.data.shape) < len(di_2.data.shape):
             shifts_di = self.__api._new_api_object(di_1)
+            shifts_display = display_1
             input_di = self.__api._new_api_object(di_2)
         elif len(di_2.data.shape) < len(di_1.data.shape):
             shifts_di = self.__api._new_api_object(di_2)
+            shifts_display = display_2
             input_di = self.__api._new_api_object(di_1)
         else:
             raise ValueError(error_msg)
 
-        display_item = self.__api.library._document_model.get_display_item_for_data_item(shifts_di._data_item)
-        assert display_item is not None
-        if display_item.display_type == "line_plot":
+        if shifts_display.display_type == "line_plot":
             shifts_xdata = Core.function_transpose_flip(shifts_di.xdata, transpose=True, flip_v=False, flip_h=False)
         else:
             shifts_xdata = shifts_di.xdata
