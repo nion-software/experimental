@@ -1,6 +1,13 @@
 Changelog (nionswift-experimental)
 ==================================
 
+0.7.13 (2024-06-14)
+-------------------
+- Directly use selected display item. Fixes #35.
+- Make AlignImageSequence copy input metadata dict to result.
+- Add flip option to IDPC computation.
+- Add new async wizard implementation.
+
 0.7.12 (2023-08-17)
 -------------------
 - Add typing support.
