@@ -134,9 +134,10 @@ class AlignMultiSI(Symbolic.ComputationHandlerLike):
 
 
 class AlignMultiSI2(Symbolic.ComputationHandlerLike):
+    computation_id = "eels.align_multi_si2"
     label = _("Align and integrate SI sequence")
-    inputs = {"haadf_data_item": {"label": _("HHADF data item")},
-              "si_data_item": {"label": _("SI data item")},
+    inputs = {"haadf_data_item": {"label": _("HHADF data item"), "data_type": "xdata"},
+              "si_data_item": {"label": _("SI data item"), "data_type": "xdata"},
               "reference_index": {"label": _("Reference index for shifts")},
               "relative_shifts": {"label": _("Measure shifts relative to previous slice")},
               "max_shift": {"label": _("Max shift between consecutive frames (in pixels, <= 0 to disable)")},
@@ -150,7 +151,8 @@ class AlignMultiSI2(Symbolic.ComputationHandlerLike):
     def __init__(self, computation: Facade.Computation, **kwargs: typing.Any) -> None:
         self.computation = computation
 
-    def execute(self, haadf_data_item: typing.Optional[API.DataItem] = None,
+    def execute(self, *,
+                haadf_data_item: typing.Optional[API.DataItem] = None,
                 si_data_item: typing.Optional[API.DataItem] = None,
                 reference_index: typing.Optional[int] = None, relative_shifts: bool = True,
                 max_shift: int = 0, bounds_graphic: typing.Optional[API.Graphic] = None, **kwargs: typing.Any) -> None:
@@ -276,7 +278,7 @@ def align_multi_si2(api: API, window: API.DocumentWindow) -> None:
 
 
 Symbolic.register_computation_type("eels.align_multi_si", AlignMultiSI)
-Symbolic.register_computation_type("eels.align_multi_si2", AlignMultiSI2)
+Symbolic.register_computation_type(AlignMultiSI2.computation_id, AlignMultiSI2)
 
 
 class AlignMultiSIMenuItemDelegate:

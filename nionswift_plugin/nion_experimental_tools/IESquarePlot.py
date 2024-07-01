@@ -20,7 +20,10 @@ class IESquarePlotMenuItemDelegate:
         self.menu_id = "eels_menu"
         self.menu_name = _("EELS")
         self.menu_before_id = "window_menu"
-        self.menu_item_name = _("[EXPERIMENTAL] I E^2 Plot")
+
+    @property
+    def menu_item_name(self) -> str:
+        return _("[EXPERIMENTAL] I E^2 Plot")
 
     def menu_item_execute(self, window: Facade.DocumentWindow) -> None:
         selected_display_item = window._document_window.selected_display_item

@@ -17,9 +17,10 @@ from nion.swift import Facade
 _ = gettext.gettext
 
 
-class DoubleGaussian:
+class DoubleGaussian(Symbolic.ComputationHandlerLike):
+    computation_id = "nion.extension.doublegaussian"
     label = _("Double Gaussian")
-    inputs = {"src": {"label": _("Source")},
+    inputs = {"src": {"label": _("Source"), "data_type": "xdata"},
               "weight2": {"label": _("Weight")},
               "ring_graphic": {"label": _("Change the radii of the ring graphic in the FFT\nto adjust the Gaussian's sigmas.")}}
     outputs = {"target": {"label": _("Result")},
@@ -28,7 +29,7 @@ class DoubleGaussian:
     def __init__(self, computation: Facade.Computation, **kwargs: typing.Any) -> None:
         self.computation = computation
 
-    def execute(self, src: typing.Optional[API.DataItem] = None, weight2: float = 1.0,
+    def execute(self, *, src: typing.Optional[API.DataItem] = None, weight2: float = 1.0,
                 ring_graphic: typing.Optional[API.Graphic] = None, **kwargs: typing.Any) -> None:
         assert src
         assert ring_graphic
@@ -127,4 +128,4 @@ class DoubleGaussianExtension:
         self.__menu_item_ref.close()
 
 
-Symbolic.register_computation_type("nion.extension.doublegaussian", DoubleGaussian)
+Symbolic.register_computation_type(DoubleGaussian.computation_id, DoubleGaussian)

@@ -12,10 +12,11 @@ from nion.typeshed import API_1_0
 _ = gettext.gettext
 
 
-class AlignMultiDimensionalSequence:
+class AlignMultiDimensionalSequence(Symbolic.ComputationHandlerLike):
+    computation_id = "nion.align_multi_d_sequence"
     label = _("Align multi-dimensional sequence")
-    inputs = {"si_sequence_data_item": {"label": _("Multi-dimensional sequence data item")},
-              "haadf_sequence_data_item": {"label": _("HAADF sequence data item")},
+    inputs = {"si_sequence_data_item": {"label": _("Multi-dimensional sequence data item"), "data_type": "xdata"},
+              "haadf_sequence_data_item": {"label": _("HAADF sequence data item"), "data_type": "xdata"},
               "align_index": {"label": _("Align to this slice")},
               "align_region": {"label": _("Alignment bounds")},
               "align_collection_index": {"label": _("Calculate shifts from this slice")}
@@ -28,7 +29,8 @@ class AlignMultiDimensionalSequence:
         self.__aligned_haadf_sequence: typing.Optional[DataAndMetadata.DataAndMetadata] = None
         self.__aligned_si_sequence: typing.Optional[DataAndMetadata.DataAndMetadata] = None
 
-    def execute(self, si_sequence_data_item: typing.Optional[API_1_0.DataItem] = None,
+    def execute(self, *,
+                si_sequence_data_item: typing.Optional[API_1_0.DataItem] = None,
                 haadf_sequence_data_item: typing.Optional[API_1_0.DataItem] = None, align_index: int = 0,
                 align_region: typing.Optional[API_1_0.Graphic] = None, align_collection_index: int = 0,
                 **kwargs: typing.Any) -> None:
@@ -172,7 +174,7 @@ def align_multi_si(api: API_1_0.API, window: API_1_0.DocumentWindow) -> None:
         window.display_data_item(aligned_haadf)
 
 
-Symbolic.register_computation_type("nion.align_multi_d_sequence", AlignMultiDimensionalSequence)
+Symbolic.register_computation_type(AlignMultiDimensionalSequence.computation_id, AlignMultiDimensionalSequence)
 
 
 class AlignSequenceMenuItemDelegate:

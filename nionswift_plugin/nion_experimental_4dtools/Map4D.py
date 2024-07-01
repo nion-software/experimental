@@ -10,6 +10,7 @@ from nion.swift import Facade
 from nion.swift.model import DisplayItem
 from nion.swift.model import Graphics
 from nion.swift.model import Symbolic
+from nion.swift.model import DocumentModel
 from nion.ui import UserInterface
 
 from .DataCache import DataCache
@@ -193,3 +194,13 @@ class Map4DExtension:
         self.__menu_item_ref.close()
 
 Symbolic.register_computation_type('nion.map_4d.2', Map4D)
+
+DocumentModel.DocumentModel.register_processing_descriptions({
+    "nion.map_4d.2": {
+        "title": _("Map 4D"),
+        "sources": [
+            {"name": "src", "label": _("Source data item"), "data_type": "xdata"},
+            {"name": "map_regions", "label": _("Map graphics")}
+        ]
+    }
+})

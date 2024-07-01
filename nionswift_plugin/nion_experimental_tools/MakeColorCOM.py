@@ -13,9 +13,10 @@ from nion.swift import Facade
 _ = gettext.gettext
 
 
-class MakeColorCOM:
+class MakeColorCOM(Symbolic.ComputationHandlerLike):
+    computation_id = "nion.make_color_com"
     label = _("Make color COM image")
-    inputs = {"src": {"label": _("COM Data Item")},
+    inputs = {"src": {"label": _("COM Data Item"), "data_type": "xdata"},
               "com_x_index": {"label": _("COM x-slice")},
               "com_y_index": {"label": _("COM y-slice")},
               "magnitude_min": {"label": _("Magnitude min (percentile)")},
@@ -167,7 +168,7 @@ class MakeColorCOMExtension:
         self.__idpc_menu_item_ref.close()
 
 
-Symbolic.register_computation_type("nion.make_color_com", MakeColorCOM)
+Symbolic.register_computation_type(MakeColorCOM.computation_id, MakeColorCOM)
 
 hsv_cyclic_colormap = numpy.array( [[255, 0, 0],
                                     [255, 6, 0],

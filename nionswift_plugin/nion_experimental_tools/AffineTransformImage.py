@@ -16,10 +16,11 @@ from nion.data import Core
 _ = gettext.gettext
 
 
-class AffineTransformImage:
+class AffineTransformImage(Symbolic.ComputationHandlerLike):
+    computation_id = "nion.affine_transform_image"
     label = _("Affine Transform Image")
     inputs = {
-        "src_data_item": {"label": _("Source")},
+        "src_data_item": {"label": _("Source"), "data_type": "xdata"},
         "vector_a": {"label": _("Vector a")},
         "vector_b": {"label": _("Vector b")},
         }
@@ -29,7 +30,8 @@ class AffineTransformImage:
     def __init__(self, computation: Facade.Computation, **kwargs: typing.Any) -> None:
         self.computation = computation
 
-    def execute(self, src_data_item: typing.Optional[Facade.DataItem] = None,
+    def execute(self, *,
+                src_data_item: typing.Optional[Facade.DataItem] = None,
                 vector_a: typing.Optional[typing.Sequence[Facade.Graphic]] = None,
                 vector_b: typing.Optional[typing.Sequence[Facade.Graphic]] = None, **kwargs: typing.Any) -> None:
         assert src_data_item
@@ -199,4 +201,4 @@ class AffineTransformExtension:
         self.__copy_affine_transform_menu_item_ref.close()
 
 
-Symbolic.register_computation_type("nion.affine_transform_image", AffineTransformImage)
+Symbolic.register_computation_type(AffineTransformImage.computation_id, AffineTransformImage)
