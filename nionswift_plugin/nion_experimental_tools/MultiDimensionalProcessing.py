@@ -114,8 +114,9 @@ def function_crop_along_axis(input_xdata: DataAndMetadata.DataAndMetadata, crop_
 
 
 class IntegrateAlongAxis(MultiDimensionalProcessingComputation):
+    computation_id = "nion.integrate_along_axis"
     label = _("Integrate")
-    inputs = {"input_data_item": {"label": _("Input data item")},
+    inputs = {"input_data_item": {"label": _("Input data item"), "data_type": "xdata"},
               "axes_description": {"label": _("Integrate these axes")},
               # "sub_integration_axes": {"label": _("Select which of the above axes to integrate"), "entity_id": "sub_axis_choice"},
               "integration_graphic": {"label": _("Integration mask")},
@@ -185,8 +186,9 @@ class IntegrateAlongAxis(MultiDimensionalProcessingComputation):
 
 
 class MeasureShifts(MultiDimensionalProcessingComputation):
+    computation_id = "nion.measure_shifts"
     label = _("Measure shifts")
-    inputs = {"input_data_item": {"label": _("Input data item")},
+    inputs = {"input_data_item": {"label": _("Input data item"), "data_type": "xdata"},
               "axes_description": {"label": _("Measure shift along this axis")},
               "reference_index": {"label": _("Reference index for shifts")},
               "relative_shifts": {"label": _("Measure shifts relative to previous slice")},
@@ -304,9 +306,10 @@ class MeasureShiftsMenuItemDelegate:
 
 
 class ApplyShifts(MultiDimensionalProcessingComputation):
+    computation_id = "nion.apply_shifts"
     label = _("Apply shifts")
-    inputs = {"input_data_item": {"label": _("Input data item")},
-              "shifts_data_item": {"label": _("Shifts data item")},
+    inputs = {"input_data_item": {"label": _("Input data item"), "data_type": "xdata"},
+              "shifts_data_item": {"label": _("Shifts data item"), "data_type": "xdata"},
               "axes_description": {"label": _("Apply shift along this axis")},
               "crop_to_valid": {"label": _("Crop result to valid area")},
               }
@@ -533,8 +536,9 @@ class IntegrateAlongAxisMenuItemDelegate:
 
 
 class Crop(MultiDimensionalProcessingComputation):
+    computation_id = "nion.crop_multi_dimensional"
     label = _("Crop")
-    inputs = {"input_data_item": {"label": _("Input data item")},
+    inputs = {"input_data_item": {"label": _("Input data item"), "data_type": "xdata"},
               "axes_description": {"label": _("Crop along this axis")},
               "crop_graphic": {"label": _("Crop bounds")},
               "crop_bounds_left": {"label": _("Crop bound left")},
@@ -627,8 +631,9 @@ class CropMenuItemDelegate:
 
 
 class MakeTableau(Symbolic.ComputationHandlerLike):
+    computation_id = "nion.make_tableau_image"
     label = _("Display Tableau")
-    inputs = {"input_data_item": {"label": _("Input data item")},
+    inputs = {"input_data_item": {"label": _("Input data item"), "data_type": "xdata"},
               "scale": {"label": _("Scale")}}
     outputs = {"tableau": {"label": "Tableau"}}
 
@@ -737,8 +742,9 @@ def calculate_valid_area_from_shifts(input_shape: typing.Tuple[int, ...], shifts
 
 
 class AlignImageSequence(Symbolic.ComputationHandlerLike):
+    computation_id = "nion.align_and_integrate_image_sequence"
     label = _("Align and integrate image sequence")
-    inputs = {"input_data_item": {"label": _("Input data item")},
+    inputs = {"input_data_item": {"label": _("Input data item"), "data_type": "xdata"},
               "reference_index": {"label": _("Reference index for shifts")},
               "relative_shifts": {"label": _("Measure shifts relative to previous slice")},
               "max_shift": {"label": _("Max shift between consecutive frames (in pixels, <= 0 to disable)")},
@@ -1110,9 +1116,6 @@ class AxisChoiceVariableHandlerFactory(Inspector.VariableHandlerComponentFactory
 
 Registry.register_component(AxisChoiceVariableHandlerFactory(), {"variable-handler-component-factory"})
 
-Symbolic.register_computation_type("nion.integrate_along_axis", IntegrateAlongAxis)
-Symbolic.register_computation_type("nion.measure_shifts", MeasureShifts)
-Symbolic.register_computation_type("nion.apply_shifts", ApplyShifts)
-Symbolic.register_computation_type("nion.crop_multi_dimensional", Crop)
-Symbolic.register_computation_type("nion.make_tableau_image", MakeTableau)
-Symbolic.register_computation_type("nion.align_and_integrate_image_sequence", AlignImageSequence)
+
+for computation in [IntegrateAlongAxis, MeasureShifts, ApplyShifts, Crop, MakeTableau, AlignImageSequence]:
+    Symbolic.register_computation_type(getattr(computation, "computation_id"), computation)

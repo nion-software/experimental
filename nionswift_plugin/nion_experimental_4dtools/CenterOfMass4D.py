@@ -10,7 +10,7 @@ from nion.data import DataAndMetadata
 from nion.data import xdata_1_0 as xd
 from nion.swift import Facade
 from nion.swift.ComputationPanel import make_image_chooser
-from nion.swift.model import DataItem
+from nion.swift.model import DocumentModel
 from nion.swift.model import DisplayItem
 from nion.swift.model import Graphics
 from nion.swift.model import Symbolic
@@ -212,3 +212,13 @@ class Map4DExtension:
         self.__menu_item_ref.close()
 
 Symbolic.register_computation_type('nion.center_of_mass_4d.2', CenterOfMass4D)
+
+DocumentModel.DocumentModel.register_processing_descriptions({
+    "nion.center_of_mass_4d.2": {
+        "title": _("Center of Mass Map"),
+        "sources": [
+            {"name": "src", "label": _("Source data item"), "data_type": "xdata"},
+            {"name": "map_regions", "label": _("Map graphics")}
+        ]
+    }
+})

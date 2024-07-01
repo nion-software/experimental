@@ -14,12 +14,18 @@ from nion.swift.model import Symbolic
 _ = gettext.gettext
 
 
-class SequenceJoin:
+class SequenceJoin(Symbolic.ComputationHandlerLike):
+    computation_id = "nion.join_sequence"
+    label = _("Join Sequence(s)")
+    inputs = {"src_list": {"label": _("Source data item list")}}
+    outputs = {"target": {"label": _("Joined sequence")}}
+
     def __init__(self, computation: Facade.Computation, **kwargs: typing.Any) -> None:
         self.computation = computation
 
-    def execute(self, src_list: typing.Sequence[Facade.DataItem], **kwargs: typing.Any) -> None:
+    def execute(self, *, src_list: typing.Optional[typing.Sequence[Facade.DataItem]] = None, **kwargs: typing.Any) -> None:
         try:
+            src_list = src_list or list()
             self.__new_xdata = xd.sequence_join([data_item.xdata for data_item in src_list if data_item.xdata])
         except Exception as e:
             print(str(e))
@@ -30,13 +36,18 @@ class SequenceJoin:
         self.computation.set_referenced_xdata("target", self.__new_xdata)
 
 
-class SequenceSplit:
+class SequenceSplit(Symbolic.ComputationHandlerLike):
+    computation_id = "nion.split_sequence"
+    label = _("Split Sequence")
+    inputs = {"src": {"label": _("Source data item"), "data_type": "xdata"}}
+    outputs = {"target": {"label": _("Split sequence")}}
+
     def __init__(self, computation: Facade.Computation, **kwargs: typing.Any) -> None:
         self.computation = computation
 
-    def execute(self, src: Facade.DataItem, **kwargs: typing.Any) -> None:
+    def execute(self, *, src: typing.Optional[Facade.DataItem] = None, **kwargs: typing.Any) -> None:
         try:
-            assert src.xdata
+            assert src and src.xdata
             self.__new_xdata_list = xd.sequence_split(src.xdata)
         except Exception as e:
             print(str(e))
@@ -172,5 +183,5 @@ class SequenceSplitJoinExtension:
         self.__join_menu_item_ref.close()
         self.__split_menu_item_ref.close()
 
-Symbolic.register_computation_type("nion.join_sequence", typing.cast(typing.Callable[[typing.Any], Symbolic.ComputationHandlerLike], SequenceJoin))
-Symbolic.register_computation_type("nion.split_sequence", typing.cast(typing.Callable[[typing.Any], Symbolic.ComputationHandlerLike], SequenceSplit))
+Symbolic.register_computation_type(SequenceJoin.computation_id, SequenceJoin)
+Symbolic.register_computation_type(SequenceSplit.computation_id, SequenceSplit)

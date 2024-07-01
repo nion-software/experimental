@@ -10,6 +10,7 @@ from nion.swift import Facade
 from nion.swift.model import DisplayItem
 from nion.swift.model import Graphics
 from nion.swift.model import Symbolic
+from nion.swift.model import DocumentModel
 from nion.ui import UserInterface
 
 from .DataCache import DataCache
@@ -367,3 +368,21 @@ class Map4DExtension:
         self.__menu_item_ref.close()
 
 Symbolic.register_computation_type('nion.map_4d_rgb.2', Map4DRGB)
+
+DocumentModel.DocumentModel.register_processing_descriptions({
+    "nion.map_4d_rgb.2": {
+        "title": _("Map 4D RGB"),
+        "sources": [
+            {"name": "src", "label": _("Source data item"), "data_type": "xdata"},
+            {"name": "map_regions_r", "label": _("Map graphics red")},
+            {"name": "map_regions_g", "label": _("Map graphics green")},
+            {"name": "map_regions_b", "label": _("Map graphics blue")},
+            {"name": "gamma_r", "label": _("Gamma red")},
+            {"name": "gamma_g", "label": _("Gamma green")},
+            {"name": "gamma_b", "label": _("Gamma blue")},
+            {"name": "enabled_r", "label": _("Red channel enabled")},
+            {"name": "enabled_g", "label": _("Green channel enabled")},
+            {"name": "enabled_b", "label": _("Blue channel enabled")},
+        ]
+    }
+})

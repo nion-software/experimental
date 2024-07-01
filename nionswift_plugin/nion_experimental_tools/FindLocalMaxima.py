@@ -50,10 +50,12 @@ def function_find_local_maxima(input_xdata: DataAndMetadata._DataAndMetadataLike
 
 
 class FindLocalMaxima(Symbolic.ComputationHandlerLike):
+    computation_id = "nion.find_local_maxima"
     label = _("Find Local Maxima")
-    inputs = {"input_data_item": {"label": _("Input data item")},
+    inputs = {"input_data_item": {"label": _("Input data item"), "data_type": "xdata"},
               "spacing": {"label": _("Spacing")},
               "number_maxima": {"label": _("Number maxima")}}
+    outputs = dict[str, typing.Any]()
 
     def __init__(self, computation: Facade.Computation, **kwargs: typing.Any) -> None:
         self.computation = computation
@@ -131,4 +133,4 @@ class FindLocalMaximaExtension:
         return None
 
 
-Symbolic.register_computation_type("nion.find_local_maxima", FindLocalMaxima)
+Symbolic.register_computation_type(FindLocalMaxima.computation_id, FindLocalMaxima)

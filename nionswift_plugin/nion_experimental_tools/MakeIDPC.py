@@ -14,9 +14,10 @@ from nion.swift import Facade
 _ = gettext.gettext
 
 
-class MakeIDPC:
+class MakeIDPC(Symbolic.ComputationHandlerLike):
+    computation_id = "nion.make_idpc"
     label = _("Make iDPC from DPC")
-    inputs = {"src": {"label": _("DPC Data Item")},
+    inputs = {"src": {"label": _("DPC Data Item"), "data_type": "xdata"},
               "gradient_x_index": {"label": _("DPC x-slice")},
               "gradient_y_index": {"label": _("DPC y-slice")},
               "flip_x": {"label":_("Flip x-axis")},
@@ -36,7 +37,8 @@ class MakeIDPC:
         curl_com = numpy.gradient(com_y_rotated, axis=1) - numpy.gradient(com_x_rotated, axis=0)
         return float(numpy.mean(curl_com**2))
 
-    def execute(self, src: typing.Optional[Facade.DataItem] = None, gradient_x_index: int = 0, gradient_y_index: int = 0,
+    def execute(self, *,
+                src: typing.Optional[Facade.DataItem] = None, gradient_x_index: int = 0, gradient_y_index: int = 0,
                 flip_x: bool = False, flip_y: bool = False, rotation_str: typing.Optional[str] = None,
                 crop_region: typing.Optional[Facade.Graphic] = None,
                 **kwargs: typing.Any) -> None:
@@ -150,4 +152,4 @@ class MakeIDPCExtension:
         self.__idpc_menu_item_ref.close()
 
 
-Symbolic.register_computation_type("nion.make_idpc", MakeIDPC)
+Symbolic.register_computation_type(MakeIDPC.computation_id, MakeIDPC)
