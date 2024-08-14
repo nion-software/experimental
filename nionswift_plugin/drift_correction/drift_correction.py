@@ -74,8 +74,8 @@ def calculate_image_moments(image: _NDArray) -> typing.Tuple[float, float, float
     angle : float
             Angle of an ellipse with the same moments as the input image.
     """
-    coords_y: numpy.typing.NDArray[numpy.float_] = numpy.arange(image.shape[0], dtype=float)
-    coords_x: numpy.typing.NDArray[numpy.float_] = numpy.arange(image.shape[1], dtype=float)
+    coords_y: numpy.typing.NDArray[numpy.float64] = numpy.arange(image.shape[0], dtype=float)
+    coords_x: numpy.typing.NDArray[numpy.float64] = numpy.arange(image.shape[1], dtype=float)
 
     proj_y = numpy.sum(image, axis=1)
     proj_x = numpy.sum(image, axis=0)
@@ -92,7 +92,7 @@ def calculate_image_moments(image: _NDArray) -> typing.Tuple[float, float, float
     #nu40 = numpy.sum(coords[1]**4*image)/nu00
     # Find image orientation
     # Formula taken from https://en.wikipedia.org/wiki/Image_moment
-    covmat: numpy.typing.NDArray[numpy.float_] = numpy.array(((nu20, nu11), (nu11, nu02)))
+    covmat: numpy.typing.NDArray[numpy.float64] = numpy.array(((nu20, nu11), (nu11, nu02)))
     eigval, eigvec = numpy.linalg.eig(covmat) # type: ignore
     angle_vec = eigvec[:, numpy.argmax(eigval)]
     angle = numpy.arctan2(-1.0*angle_vec[1], angle_vec[0])
@@ -570,7 +570,7 @@ class DriftCorrector:
 
         self.__last_as2_update = 0.0
         # This is interpreted in x, y order!
-        self.__drift_vector: numpy.typing.NDArray[numpy.float_] = numpy.array((0.0, 0.0))
+        self.__drift_vector: numpy.typing.NDArray[numpy.float64] = numpy.array((0.0, 0.0))
         self.__last_update = time.time()
         self.__drift_vector_backup: typing.Optional[_NDArray] = None
         self.__as2_update_rate_backup: typing.Optional[float] = None
