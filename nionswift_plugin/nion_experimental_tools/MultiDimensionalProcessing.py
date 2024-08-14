@@ -700,7 +700,7 @@ class MakeTableauMenuItemDelegate:
         return None
 
 
-def calculate_valid_area_from_shifts(input_shape: typing.Tuple[int, ...], shifts: numpy.typing.NDArray[numpy.float_]) -> typing.Tuple[int, int, int, int]:
+def calculate_valid_area_from_shifts(input_shape: typing.Tuple[int, ...], shifts: numpy.typing.NDArray[numpy.float64]) -> typing.Tuple[int, int, int, int]:
     if len(input_shape) == 2:
         min_y = numpy.amin(shifts[..., 0])
         max_y = numpy.amax(shifts[..., 0])
