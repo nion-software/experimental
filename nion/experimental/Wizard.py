@@ -102,7 +102,12 @@ class AsyncWizardStep:
 
 
 class AsyncWizardUIHandler(Declarative.Handler):
-    def __init__(self, api: API, ui_view: Declarative.UIDescription, wizard_steps: typing.Sequence[AsyncWizardStep], event_loop: typing.Optional[asyncio.AbstractEventLoop] = None) -> None:
+    def __init__(self,
+                 api: API,
+                 ui_view: Declarative.UIDescription,
+                 wizard_steps: typing.Sequence[AsyncWizardStep], *,
+                 event_loop: typing.Optional[asyncio.AbstractEventLoop] = None,
+                 open_help: typing.Callable[[], None] | None = None) -> None:
         super().__init__()
         self.__event_loop = event_loop or asyncio.get_event_loop()
         self.__wizard_steps = wizard_steps
@@ -128,6 +133,7 @@ class AsyncWizardUIHandler(Declarative.Handler):
         self.__run_step_button_enabled = True
         self.instructions_background_default_color = '#f0f0f0'
         self.instructions_background_action_color = 'peachpuff'
+        self.__open_help = open_help
         self.__create_requirement_properties()
 
     @staticmethod
@@ -352,6 +358,10 @@ class AsyncWizardUIHandler(Declarative.Handler):
             self.on_closed()
         super().close()
 
+    def open_help(self, widget: Declarative.UIWidget) -> None:
+        if self.__open_help is not None:
+            self.__open_help()
+
     def __set_up_ui_for_pre_wizard_step(self) -> None:
         def listen_fn(listen_to: set[str], fire: set[str], name: str) -> None:
             if name in listen_to:
@@ -376,7 +386,7 @@ class AsyncWizardUIHandler(Declarative.Handler):
         if self.current_step_index < len(self.__wizard_steps) - 1:
             self.continue_enabled = True
             self.cancel_button_visible = False
-            self.skip_button_visible = True
+            self.skip_button_visible = not self.current_step.canceled
             self.status_text = 'Done. Use the buttons below to restart the current or continue with the next step.'
         else:
             self.continue_enabled = False
@@ -690,11 +700,11 @@ class WizardUI:
         ui_view = self.__create_ui_view(ui, wizard_steps, title)
         return WizardUIHandler(api, ui_view, wizard_steps)
 
-    def get_ui_handler_v2(self, api_broker: PlugInManager.APIBroker, wizard_steps: typing.Sequence[AsyncWizardStep], title: str) -> AsyncWizardUIHandler:
+    def get_ui_handler_v2(self, api_broker: PlugInManager.APIBroker, wizard_steps: typing.Sequence[AsyncWizardStep], title: str, *, open_help: typing.Callable[[], None] | None  = None) -> AsyncWizardUIHandler:
         api = api_broker.get_api('~1.0')
         ui = api_broker.get_ui('~1.0')
-        ui_view = self.__create_ui_view_v2(ui, wizard_steps, title)
-        return AsyncWizardUIHandler(api, ui_view, wizard_steps)
+        ui_view = self.__create_ui_view_v2(ui, wizard_steps, title, open_help is not None)
+        return AsyncWizardUIHandler(api, ui_view, wizard_steps, open_help=open_help)
 
     def __create_ui_view(self, ui: Declarative.DeclarativeUI, wizard_steps: typing.Sequence[WizardStep], title: str) -> Declarative.UIDescription:
         steps = [ui.create_radio_button(text=' ', value=step.step_index, group_value='@binding(current_step)', enabled=False) for step in wizard_steps]
@@ -729,11 +739,14 @@ class WizardUI:
             requirements.append(ui.create_row(ui.create_push_button(text='Run step', on_clicked='run_step_clicked', enabled='@binding(run_step_button_enabled)'), ui.create_stretch(), margin=5, spacing=5))
         return ui.create_column(*requirements)
 
-    def __create_ui_view_v2(self, ui: Declarative.DeclarativeUI, wizard_steps: typing.Sequence[AsyncWizardStep], title: str) -> Declarative.UIDescription:
+    def __create_ui_view_v2(self, ui: Declarative.DeclarativeUI, wizard_steps: typing.Sequence[AsyncWizardStep], title: str, has_help: bool) -> Declarative.UIDescription:
         steps = [ui.create_radio_button(text=' ', value=step.step_index, group_value='@binding(current_step_index)', enabled=False) for step in wizard_steps]
         steps.insert(0, ui.create_stretch())
         steps.append(ui.create_stretch())
-        step_row = ui.create_row(ui.create_push_button(text='\u2630', on_clicked='show_menu_clicked', size_policy_horizontal='minimum', size_policy_vertical='minimum', background_color='#f0f0f0', border_color='#f0f0f0', font='bold', style='minimal'), *steps, margin=5)
+        step_row = ui.create_row(ui.create_push_button(text='\u2630', on_clicked='show_menu_clicked', size_policy_horizontal='minimum', size_policy_vertical='minimum', background_color='#f0f0f0', border_color='#f0f0f0', font='bold', style='minimal'),
+                                 *steps,
+                                 ui.create_push_button(text='\u2754', on_clicked='open_help', visible=has_help, size_policy_horizontal='minimum', size_policy_vertical='minimum', background_color='#f0f0f0', border_color='#f0f0f0', font='bold', style='minimal'),
+                                 margin=5)
         title_row = ui.create_row(ui.create_label(text='@binding(current_step_title)', font='bold'), spacing=5, margin=5)
         description_row = ui.create_row(ui.create_label(text='@binding(current_step_description)'), spacing=5, margin=5)
         requirements = [self.__generate_requirements_ui(ui, wizard_step) for wizard_step in wizard_steps]
