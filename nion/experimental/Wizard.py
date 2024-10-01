@@ -68,7 +68,7 @@ class AsyncWizardStep:
     def __init__(self, api: API.API):
         self.api = api
         self.property_changed_event = Event.Event()
-        self.canceled = True
+        self.canceled = False
         self.__output_text = ''
         self.__instructions_text = ''
 
@@ -133,6 +133,10 @@ class AsyncWizardUIHandler(Declarative.Handler):
         self.__run_step_button_enabled = True
         self.instructions_background_default_color = '#f0f0f0'
         self.instructions_background_action_color = 'peachpuff'
+        self.status_text_default_color = '#f0f0f0'
+        self.status_text_info_color = 'peachpuff'
+        self.status_text_error_color = 'lightcoral'
+        self.__status_text_color = self.status_text_default_color
         self.__open_help = open_help
         self.__create_requirement_properties()
 
@@ -256,6 +260,17 @@ class AsyncWizardUIHandler(Declarative.Handler):
     def status_text(self, status_text: str) -> None:
         self.__status_text = status_text
         self.property_changed_event.fire('status_text')
+        if not status_text:
+            self.status_text_color = self.status_text_default_color
+
+    @property
+    def status_text_color(self) -> str:
+        return self.__status_text_color
+
+    @status_text_color.setter
+    def status_text_color(self, color: str) -> None:
+        self.__status_text_color = color
+        self.property_changed_event.fire('status_text_color')
 
     @property
     def output_text(self) -> str:
@@ -388,11 +403,13 @@ class AsyncWizardUIHandler(Declarative.Handler):
             self.cancel_button_visible = False
             self.skip_button_visible = not self.current_step.canceled
             self.status_text = 'Done. Use the buttons below to restart the current or continue with the next step.'
+            self.status_text_color = self.status_text_info_color
         else:
             self.continue_enabled = False
             self.cancel_button_visible = False
             self.skip_button_visible = False
             self.status_text = 'Wizard finished. You can close the dialog now or re-run the whole wizard.'
+            self.status_text_color = self.status_text_info_color
         self.restart_enabled = True
 
     async def run_next_step(self) -> None:
@@ -422,9 +439,11 @@ class AsyncWizardUIHandler(Declarative.Handler):
             if exception:
                 self.status_text = ('An error occured during the current step. Check the terminal output for more details.\n'
                                     'You can still continue with the wizard regardless of the error.')
+                self.status_text_color = self.status_text_error_color
             elif error:
                 self.status_text = ('The current step did not finish successfully. You can re-run it or continue with\n'
                                     'the wizard regardless of the failure.')
+                self.status_text_color = self.status_text_error_color
 
     def skip_clicked(self, widget: Declarative.UIWidget) -> None:
         def callback(task: asyncio.Task[None]) -> None:
@@ -756,7 +775,7 @@ class WizardUI:
 
         canceled_row = ui.create_row(ui.create_label(text='Current step canceled.\nYou can restart the step or the entire wizard with the buttons below.'), spacing=5, margin=5)
         output_row = ui.create_row(ui.create_text_edit(text='@binding(output_text)', editable=False, min_height=220, visible='@binding(output_field_visible)'))
-        status_row = ui.create_row(ui.create_label(text='@binding(status_text)'), spacing=5, margin=5)
+        status_row = ui.create_row(ui.create_label(text='@binding(status_text)'), background_color='@binding(status_text_color)', spacing=5, margin=5)
         active_ui_column = ui.create_column(requirements_row, instructions_row, content_row, output_row, status_row)
         canceled_ui_colum = ui.create_column(canceled_row)
         ui_stack = ui.create_stack(active_ui_column, canceled_ui_colum, current_index='@binding(ui_stack_current_index)')
