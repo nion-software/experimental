@@ -1,6 +1,12 @@
 Changelog (nionswift-experimental)
 ==================================
 
+0.7.14 (2024-10-27)
+-------------------
+- Wizard dialog improvements.
+- Computation performance improvements.
+- Require Numpy 2. Add Python 3.13 support. Drop Python 3.9, 3.10 support.
+
 0.7.13 (2024-06-14)
 -------------------
 - Directly use selected display item. Fixes #35.
