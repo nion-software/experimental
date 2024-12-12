@@ -570,7 +570,7 @@ class DriftCorrector:
 
         self.__last_as2_update = 0.0
         # This is interpreted in x, y order!
-        self.__drift_vector: numpy.typing.NDArray[numpy.float64] = numpy.array((0.0, 0.0))
+        self.__drift_vector: numpy.typing.NDArray[typing.Any] = numpy.array((0.0, 0.0))
         self.__last_update = time.time()
         self.__drift_vector_backup: typing.Optional[_NDArray] = None
         self.__as2_update_rate_backup: typing.Optional[float] = None
