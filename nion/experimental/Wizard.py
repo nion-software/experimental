@@ -179,6 +179,7 @@ class AsyncWizardUIHandler(Declarative.Handler):
             self.property_changed_event.fire('current_step_index')
             self.property_changed_event.fire('current_step_title')
             self.property_changed_event.fire('current_step_description')
+            self.property_changed_event.fire('output_field_visible')
 
     @property
     def current_step(self) -> AsyncWizardStep:
