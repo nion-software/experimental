@@ -69,4 +69,7 @@ def register_computation_classes() -> None:
     DocumentModel.DocumentModel.register_processing_descriptions(processing_descriptions)
 
 
-register_computation_classes()
+def run() -> None:
+    register_computation_classes()
+    # register these here so they only get registered once. This is a bit of a hack.
+    DocumentModel.DocumentModel.register_processing_descriptions(IESquarePlot.processing_descriptions)
