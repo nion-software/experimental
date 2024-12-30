@@ -1,7 +1,6 @@
 import typing
 import gettext
 
-from nion.swift.model import DocumentModel
 from nion.swift import Facade
 
 _ = gettext.gettext
@@ -9,9 +8,6 @@ _ = gettext.gettext
 processing_descriptions = {"nion.processing.i_e_square_plot":
                                {"title": _("I E^2 Plot"), "expression": "src.xdata * xd.axis_coordinates(src.xdata, -1)**2","sources": [{"name": "src", "label": _("Source")}]}
                            }
-
-
-DocumentModel.DocumentModel.register_processing_descriptions(processing_descriptions)
 
 
 class IESquarePlotMenuItemDelegate:
