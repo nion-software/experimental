@@ -1,6 +1,11 @@
 Changelog (nionswift-experimental)
 ==================================
 
+0.7.15 (2025-01-06)
+-------------------
+- Update to use latest nionswift dependency.
+- Wizard dialog improvements.
+
 0.7.14 (2024-10-27)
 -------------------
 - Wizard dialog improvements.
