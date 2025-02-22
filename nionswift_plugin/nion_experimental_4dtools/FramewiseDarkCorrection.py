@@ -24,6 +24,8 @@ _ = gettext.gettext
 
 
 class CalculateAverage4D:
+    label = _("Frame Average 4D")
+
     def __init__(self, computation: Facade.Computation, **kwargs: typing.Any) -> None:
         self.computation = computation
 
@@ -37,6 +39,8 @@ class CalculateAverage4D:
 
 
 class FramewiseDarkCorrection:
+    label = _("Framewise Dark Correction")
+
     def __init__(self, api: Facade.API_1, computation: Facade.Computation, **kwargs: typing.Any) -> None:
         self.__api = api
         self.computation = computation
@@ -281,55 +285,65 @@ class FramewiseDarkMenuItem:
 
     def menu_item_execute(self, window: Facade.DocumentWindow) -> None:
         document_controller = window._document_controller
-        selected_display_item = document_controller.selected_display_item
-        data_item = (selected_display_item.data_items[0] if selected_display_item and
-                     len(selected_display_item.data_items) > 0 else None)
-
+        data_item = document_controller.selected_data_item
         if data_item:
-            api_data_item = Facade.DataItem(data_item)
-            if not (api_data_item.xdata and api_data_item.xdata.is_data_4d):
-                self.__show_tool_tips('wrong_shape')
-                return
-            average_data_item = self.__api.library.create_data_item(title='Frame average of ' + data_item.title)
-            self.__api.library.create_computation('nion.calculate_4d_average',
-                                                  inputs={'src': api_data_item},
-                                                  outputs={'target': average_data_item})
-            average_display_item = document_controller.document_model.get_display_item_for_data_item(average_data_item._data_item)
-            assert average_display_item
-            document_controller.show_display_item(average_display_item)
-            spectrum_graphic = average_data_item.add_rectangle_region(0.5, 0.5, 0.1, 1.0)
-            spectrum_graphic.label = 'Spectrum'
-            bottom_dark_graphic = average_data_item.add_rectangle_region(0.7, 0.5, 0.1, 1.0)
-            bottom_dark_graphic.label = 'Bottom dark area'
-            top_dark_graphic = average_data_item.add_rectangle_region(0.3, 0.5, 0.1, 1.0)
-            top_dark_graphic.label = 'Top dark area'
-            spectrum_graphic._graphic.is_bounds_constrained = True
-            bottom_dark_graphic._graphic.is_bounds_constrained = True
-            top_dark_graphic._graphic.is_bounds_constrained = True
+            try:
+                average_data_item, dark_corrected_data_item = framewise_correction_4D(self.__api, window, Facade.DataItem(data_item), 'auto', True, None)
+                self.__computation_data_items.update({data_item: 'source',
+                                                      average_data_item._data_item: 'average',
+                                                      dark_corrected_data_item._data_item: 'corrected'})
+                self.__show_tool_tips()
+                self.__display_item_changed_event_listener = (document_controller.focused_display_item_changed_event.listen(self.__display_item_changed))
+            except Exception as e:
+                self.__show_tool_tips(str(e))
 
-            dark_corrected_data_item = Facade.DataItem(DataItem.DataItem(large_format=True))
-            self.__api.library._document_model.append_data_item(dark_corrected_data_item._data_item)
-            dark_corrected_data_item._data_item.session_id = self.__api.library._document_model.session_id
-            dark_corrected_data_item.title = 'Framewise dark correction of ' + data_item.title
-            self.__api.library.create_computation('nion.framewise_dark_correction',
-                                                  inputs={'src1': api_data_item,
-                                                          'src2': average_data_item,
-                                                          'spectrum_region': spectrum_graphic,
-                                                          'top_dark_region': top_dark_graphic,
-                                                          'bottom_dark_region': bottom_dark_graphic,
-                                                          'bin_spectrum': True,
-                                                          'gain_image': [],
-                                                          'gain_mode': 'custom'},
-                                                  outputs={'target': dark_corrected_data_item})
-            dark_corrected_display_item = document_controller.document_model.get_display_item_for_data_item(dark_corrected_data_item._data_item)
-            assert dark_corrected_display_item
-            document_controller.show_display_item(dark_corrected_display_item)
-            self.__computation_data_items.update({data_item: 'source',
-                                                  average_data_item._data_item: 'average',
-                                                  dark_corrected_data_item._data_item: 'corrected'})
-            self.__show_tool_tips()
-            self.__display_item_changed_event_listener = (
-                           document_controller.focused_display_item_changed_event.listen(self.__display_item_changed))
+
+def framewise_correction_4D(api: Facade.API_1, window: Facade.DocumentWindow, data_item: Facade.DataItem, gain_mode: str, is_binned: bool, gain_image: Facade.DataItem | None) -> tuple[Facade.DataItem, Facade.DataItem]:
+    if not data_item.xdata or not data_item.xdata.is_data_4d:
+        raise ValueError("Data item must be 4D.")
+    document_controller = window._document_controller
+    document_model = document_controller.document_model
+    average_data_item = api.library.create_data_item()
+    api.library.create_computation('nion.calculate_4d_average',
+                                   inputs={'src': data_item},
+                                   outputs={'target': average_data_item})
+    average_display_item = document_model.get_display_item_for_data_item(average_data_item._data_item)
+    assert average_display_item
+    document_controller.show_display_item(average_display_item)
+    spectrum_graphic = average_data_item.add_rectangle_region(0.5, 0.5, 0.1, 1.0)
+    spectrum_graphic.label = 'Spectrum'
+    bottom_dark_graphic = average_data_item.add_rectangle_region(0.7, 0.5, 0.1, 1.0)
+    bottom_dark_graphic.label = 'Bottom dark area'
+    top_dark_graphic = average_data_item.add_rectangle_region(0.3, 0.5, 0.1, 1.0)
+    top_dark_graphic.label = 'Top dark area'
+    spectrum_graphic._graphic.is_bounds_constrained = True
+    bottom_dark_graphic._graphic.is_bounds_constrained = True
+    top_dark_graphic._graphic.is_bounds_constrained = True
+
+    dark_corrected_data_item = Facade.DataItem(DataItem.DataItem(large_format=True))
+    document_model.append_data_item(dark_corrected_data_item._data_item)
+    dark_corrected_data_item._data_item.session_id = document_model.session_id
+    dark_corrected_data_item._data_item.title = f"{data_item._data_item.title} ({FramewiseDarkCorrection.label})"  # explicit because auto doesn't handle multiple inputs
+    api.library.create_computation('nion.framewise_dark_correction',
+                                   inputs={'src1': data_item,
+                                           'src2': average_data_item,
+                                           'spectrum_region': spectrum_graphic,
+                                           'top_dark_region': top_dark_graphic,
+                                           'bottom_dark_region': bottom_dark_graphic,
+                                           'bin_spectrum': True,
+                                           'gain_image': [],
+                                           'gain_mode': 'custom'},
+                                   outputs={'target': dark_corrected_data_item})
+    dark_corrected_display_item = document_model.get_display_item_for_data_item(dark_corrected_data_item._data_item)
+    assert dark_corrected_display_item
+    document_controller.show_display_item(dark_corrected_display_item)
+    return average_data_item, dark_corrected_data_item
+
+
+def register_computations(api: Facade.API_1) -> None:
+    Symbolic.register_computation_type('nion.calculate_4d_average', CalculateAverage4D)
+    Symbolic.register_computation_type('nion.framewise_dark_correction', functools.partial(FramewiseDarkCorrection, api))
+
 
 class FramewiseDarkExtension:
 
@@ -341,8 +355,7 @@ class FramewiseDarkExtension:
         api = api_broker.get_api(version="1", ui_version="1")
         # be sure to keep a reference or it will be closed immediately.
         self.__menu_item_ref = api.create_menu_item(FramewiseDarkMenuItem(api))
-        Symbolic.register_computation_type('nion.calculate_4d_average', CalculateAverage4D)
-        Symbolic.register_computation_type('nion.framewise_dark_correction', functools.partial(FramewiseDarkCorrection, api))
+        register_computations(api)
 
     def close(self) -> None:
         self.__menu_item_ref.close()

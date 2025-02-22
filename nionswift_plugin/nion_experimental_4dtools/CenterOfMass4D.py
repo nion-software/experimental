@@ -24,6 +24,7 @@ _DataArrayType = np.typing.NDArray[typing.Any]
 
 
 class CenterOfMass4D:
+    label = _("Center of Mass Map")
     attributes = {"connection_type": "map"}
 
     def __init__(self, computation: Facade.Computation, **kwargs: typing.Any) -> None:
@@ -67,8 +68,8 @@ class CenterOfMass4D:
 
         typing.cast(typing.Any, self.computation._computation).create_panel_widget = create_panel_widget
 
-    def execute(self, src: typing.Optional[Facade.DataSource] = None, map_regions: typing.Optional[typing.Sequence[Graphics.Graphic]] = None, **kwargs: typing.Any) -> None:
-        assert src
+    def execute(self, src: Facade.DataSource | None = None, map_regions: typing.Sequence[Graphics.Graphic] | None = None, **kwargs: typing.Any) -> None:
+        assert src is not None
         assert map_regions is not None
         try:
             src_data_item = src.data_item
@@ -110,6 +111,7 @@ class CenterOfMass4D:
             new_metadata.update(metadata)
             self.__new_xdata._set_metadata(new_metadata)
         except Exception as e:
+            print("-----------")
             print(str(e))
             import traceback
             traceback.print_exc()
@@ -162,39 +164,42 @@ class CenterOfMass4DMenuItem:
 
     def menu_item_execute(self, window: Facade.DocumentWindow) -> None:
         document_controller = window._document_controller
-        selected_display_item = document_controller.selected_display_item
-        data_item = (selected_display_item.data_items[0] if
-                     selected_display_item and len(selected_display_item.data_items) > 0 else None)
+        display_item = document_controller.selected_display_item
+        data_item = display_item.data_item if display_item else None
+        if display_item and data_item:
+            try:
+                map_data_item = center_of_mass_4D(self.__api, window, Facade.Display(display_item), [])
+                self.__computation_data_items.update({str(data_item.uuid): 'source', str(map_data_item._data_item.uuid): 'center_of_mass_4d'})
+                self.__show_tool_tips()
+                self.__display_item_changed_event_listener = document_controller.focused_display_item_changed_event.listen(self.__display_item_changed)
+            except Exception as e:
+                self.__show_tool_tips(str(e))
 
-        if data_item:
-            api_data_item = Facade.DataItem(data_item)
-            if not (api_data_item.xdata and api_data_item.xdata.is_data_4d):
-                self.__show_tool_tips('wrong_shape')
-                return
-            map_data_item = self.__api.library.create_data_item(title='Center of Mass Map of ' + data_item.title)
-            # the following uses internal API and should not be used as example code.
-            computation = document_controller.document_model.create_computation()
-            assert selected_display_item
-            display_data_channel = selected_display_item.get_display_data_channel_for_data_item(data_item)
-            assert display_data_channel
-            # note: display_data_channel gets passed to execute as a Facade.DataSource. see DataStructure.get_object_specifier
-            computation.create_input_item("src", Symbolic.make_item(display_data_channel))
-            computation.create_input_item("map_regions", Symbolic.make_item_list([]))
-            computation.processing_id = "nion.center_of_mass_4d.2"
-            document_controller.document_model.set_data_item_computation(map_data_item._data_item, computation)
-            map_display_item = document_controller.document_model.get_display_item_for_data_item(map_data_item._data_item)
-            assert map_display_item
-            document_controller.show_display_item(map_display_item)
-            graphic = Graphics.PointGraphic()
-            graphic.label = "Pick"
-            graphic.role = "collection_index"
-            map_display_item.add_graphic(graphic)
-            # see note above.
-            self.__computation_data_items.update({str(data_item.uuid): 'source',
-                                                  str(map_data_item._data_item.uuid): 'center_of_mass_4d'})
-            self.__show_tool_tips()
-            self.__display_item_changed_event_listener = (
-                           document_controller.focused_display_item_changed_event.listen(self.__display_item_changed))
+
+def center_of_mass_4D(api: Facade.API_1, window: Facade.DocumentWindow, display_item: Facade.Display, map_regions: typing.Sequence[Facade.Graphic]) -> Facade.DataItem:
+    display_data_channel = display_item._display_item.display_data_channel
+    if not display_data_channel:
+        raise ValueError("Display item must have a single display.")
+    assert display_data_channel.data_item
+    data_item = Facade.DataItem(display_data_channel.data_item)
+    if not data_item.xdata or not data_item.xdata.is_data_4d:
+        raise ValueError("Data item must be 4D.")
+    document_model = api.library._document_model
+    map_data_item = api.library.create_data_item()
+    # the following uses internal API and should not be used as example code.
+    computation = document_model.create_computation()
+    computation.create_input_item("src", Symbolic.make_item(display_data_channel))
+    computation.create_input_item("map_regions", Symbolic.make_item_list([map_region._graphic for map_region in map_regions]))
+    computation.processing_id = "nion.center_of_mass_4d.2"
+    document_model.set_data_item_computation(map_data_item._data_item, computation)
+    map_display_item = document_model.get_display_item_for_data_item(map_data_item._data_item)
+    assert map_display_item
+    window._document_controller.show_display_item(map_display_item)
+    graphic = Graphics.PointGraphic()
+    graphic.label = "Pick"
+    graphic.role = "collection_index"
+    map_display_item.add_graphic(graphic)
+    return map_data_item
 
 
 class Map4DExtension:
@@ -210,6 +215,7 @@ class Map4DExtension:
 
     def close(self) -> None:
         self.__menu_item_ref.close()
+
 
 Symbolic.register_computation_type('nion.center_of_mass_4d.2', CenterOfMass4D)
 
