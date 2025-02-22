@@ -5,4 +5,5 @@ build-backend = "setuptools.build_meta"
 [tool.pytest.ini_options]
 testpaths = [
     "nionswift_plugin/nion_experimental_tools/test",
+    "nionswift_plugin/nion_experimental_4dtools/test",
 ]

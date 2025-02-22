@@ -21,6 +21,8 @@ _ = gettext.gettext
 
 
 class TotalBin4D:
+    label = _("Total Bin 4D")
+
     def __init__(self, computation: Facade.Computation, **kwargs: typing.Any) -> None:
         self.computation = computation
 
@@ -40,6 +42,8 @@ class TotalBin4D:
 
 
 class DarkCorrection4D:
+    label = _("4D Dark Correction")
+
     def __init__(self, api: Facade.API_1, computation: Facade.Computation, **kwargs: typing.Any) -> None:
         self.__api = api
         self.computation = computation
@@ -248,52 +252,60 @@ class DarkCorrection4DMenuItem:
 
     def menu_item_execute(self, window: Facade.DocumentWindow) -> None:
         document_controller = window._document_controller
-        selected_display_item = document_controller.selected_display_item
-        data_item = (selected_display_item.data_items[0] if
-                     selected_display_item and len(selected_display_item.data_items) > 0 else None)
-
+        data_item = document_controller.selected_data_item
         if data_item:
-            api_data_item = Facade.DataItem(data_item)
-            if not (api_data_item.xdata and api_data_item.xdata.is_data_4d):
-                self.__show_tool_tips('wrong_shape')
-                return
-            total_bin_data_item = self.__api.library.create_data_item(title='Total bin 4D of ' + data_item.title)
-            self.__api.library.create_computation('nion.total_bin_4d_SI',
-                                                  inputs={'src': api_data_item},
-                                                  outputs={'target': total_bin_data_item})
+            try:
+                total_bin_data_item, dark_corrected_data_item = dark_correction_4D(self.__api, window, Facade.DataItem(data_item), 'auto', True, None)
+                self.__computation_data_items.update({data_item: 'source',
+                                                      total_bin_data_item._data_item: 'total bin',
+                                                      dark_corrected_data_item._data_item: 'corrected'})
+                self.__show_tool_tips()
+                self.__display_item_changed_event_listener = (document_controller.focused_display_item_changed_event.listen(self.__display_item_changed))
+            except Exception as e:
+                self.__show_tool_tips(str(e))
 
-            total_bin_display_item = document_controller.document_model.get_display_item_for_data_item(total_bin_data_item._data_item)
-            assert total_bin_display_item
-            document_controller.show_display_item(total_bin_display_item)
-            dark_subtract_area_graphic = total_bin_data_item.add_rectangle_region(0.8, 0.5, 0.4, 1.0)
-            dark_subtract_area_graphic.label = 'Dark subtract area'
-            crop_region = api_data_item.add_rectangle_region(0.5, 0.5, 1.0, 1.0)
-            crop_region.label = 'Crop'
 
-            dark_subtract_area_graphic._graphic.is_bounds_constrained = True
-            crop_region._graphic.is_bounds_constrained = True
-            dark_corrected_data_item = Facade.DataItem(DataItem.DataItem(large_format=True))
-            self.__api.library._document_model.append_data_item(dark_corrected_data_item._data_item)
-            dark_corrected_data_item._data_item.session_id = self.__api.library._document_model.session_id
-            dark_corrected_data_item.title = '4D dark correction of ' + data_item.title
-            self.__api.library.create_computation('nion.dark_correction_4d',
-                                                  inputs={'src1': api_data_item,
-                                                          'src2': total_bin_data_item,
-                                                          'dark_area_region': dark_subtract_area_graphic,
-                                                          'crop_region': crop_region,
-                                                          'bin_spectrum': True,
-                                                          'gain_image': [],
-                                                          'gain_mode': 'custom'},
-                                                  outputs={'target': dark_corrected_data_item})
-            dark_corrected_display_item = document_controller.document_model.get_display_item_for_data_item(dark_corrected_data_item._data_item)
-            assert dark_corrected_display_item
-            document_controller.show_display_item(dark_corrected_display_item)
-            self.__computation_data_items.update({data_item: 'source',
-                                                  total_bin_data_item._data_item: 'total bin',
-                                                  dark_corrected_data_item._data_item: 'corrected'})
-            self.__show_tool_tips()
-            self.__display_item_changed_event_listener = (
-                           document_controller.focused_display_item_changed_event.listen(self.__display_item_changed))
+def dark_correction_4D(api: Facade.API_1, window: Facade.DocumentWindow, data_item: Facade.DataItem, gain_mode: str, is_binned: bool, gain_image: Facade.DataItem | None) -> tuple[Facade.DataItem, Facade.DataItem]:
+    if not data_item.xdata or not data_item.xdata.is_data_4d:
+        raise ValueError("Data item must be 4D.")
+    document_controller = window._document_controller
+    document_model = document_controller.document_model
+    total_bin_data_item = api.library.create_data_item()
+    api.library.create_computation('nion.total_bin_4d_SI',
+                                   inputs={'src': data_item},
+                                   outputs={'target': total_bin_data_item})
+    total_bin_display_item = document_model.get_display_item_for_data_item(total_bin_data_item._data_item)
+    assert total_bin_display_item
+    document_controller.show_display_item(total_bin_display_item)
+    dark_subtract_area_graphic = total_bin_data_item.add_rectangle_region(0.8, 0.5, 0.4, 1.0)
+    dark_subtract_area_graphic.label = 'Dark subtract area'
+    dark_subtract_area_graphic._graphic.is_bounds_constrained = True
+    crop_region = data_item.add_rectangle_region(0.5, 0.5, 1.0, 1.0)
+    crop_region.label = 'Crop'
+    crop_region._graphic.is_bounds_constrained = True
+    dark_corrected_data_item = Facade.DataItem(DataItem.DataItem(large_format=True))
+    dark_corrected_data_item._data_item.session_id = document_model.session_id
+    dark_corrected_data_item._data_item.title = f"{data_item._data_item.title} ({DarkCorrection4D.label})"  # explicit because auto doesn't handle multiple inputs
+    document_model.append_data_item(dark_corrected_data_item._data_item)
+    api.library.create_computation('nion.dark_correction_4d',
+                                   inputs={'src1': data_item,
+                                           'src2': total_bin_data_item,
+                                           'dark_area_region': dark_subtract_area_graphic,
+                                           'crop_region': crop_region,
+                                           'bin_spectrum': is_binned,
+                                           'gain_image': [gain_image] if gain_image else [],
+                                           'gain_mode': gain_mode},
+                                   outputs={'target': dark_corrected_data_item})
+    dark_corrected_display_item = document_model.get_display_item_for_data_item(dark_corrected_data_item._data_item)
+    assert dark_corrected_display_item
+    document_controller.show_display_item(dark_corrected_display_item)
+    return total_bin_data_item, dark_corrected_data_item
+
+
+def register_computations(api: Facade.API_1) -> None:
+    Symbolic.register_computation_type('nion.total_bin_4d_SI', TotalBin4D)
+    Symbolic.register_computation_type('nion.dark_correction_4d', functools.partial(DarkCorrection4D, api))
+
 
 class DarkCorrection4DExtension:
 
@@ -305,8 +317,7 @@ class DarkCorrection4DExtension:
         api = api_broker.get_api(version="1", ui_version="1")
         # be sure to keep a reference or it will be closed immediately.
         self.__menu_item_ref = api.create_menu_item(DarkCorrection4DMenuItem(api))
-        Symbolic.register_computation_type('nion.total_bin_4d_SI', TotalBin4D)
-        Symbolic.register_computation_type('nion.dark_correction_4d', functools.partial(DarkCorrection4D, api))
+        register_computations(api)
 
     def close(self) -> None:
         self.__menu_item_ref.close()
