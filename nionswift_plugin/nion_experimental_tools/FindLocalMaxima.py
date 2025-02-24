@@ -1,12 +1,20 @@
+# standard libraries
 import gettext
+import math
+import typing
+
+# third party libraries
 import numpy
 import numpy.typing
 import scipy.ndimage
-import typing
 
+# local libraries
 from nion.data import DataAndMetadata
 from nion.swift import Facade
 from nion.swift.model import Symbolic
+from nion.swift.model import Graphics
+from nion.typeshed import API_1_0
+
 
 _ = gettext.gettext
 
@@ -96,6 +104,14 @@ class FindLocalMaxima(Symbolic.ComputationHandlerLike):
             self.computation.set_result("max_graphics", max_graphics)
 
 
+def find_local_maxima(api: API_1_0.API, data_item: Facade.DataItem) -> None:
+    api.library.create_computation("nion.find_local_maxima",
+                                   inputs={"input_data_item": data_item,
+                                           "spacing": 5,
+                                           "number_maxima": 10},
+                                   outputs={"max_graphics": None})
+
+
 class FindLocalMaximaMenuItemDelegate:
     def __init__(self, api: Facade.API_1) -> None:
         self.__api  = api
@@ -107,15 +123,9 @@ class FindLocalMaximaMenuItemDelegate:
 
     def menu_item_execute(self, window: Facade.DocumentWindow) -> None:
         selected_data_item = window.target_data_item
-
         if not selected_data_item or not selected_data_item.xdata:
             return
-
-        self.__api.library.create_computation("nion.find_local_maxima",
-                                              inputs={"input_data_item": selected_data_item,
-                                                      "spacing": 5,
-                                                      "number_maxima": 10},
-                                              outputs={"max_graphics": None})
+        find_local_maxima(self.__api, selected_data_item)
         return None
 
 
