@@ -187,7 +187,7 @@ class IntegrateAlongAxis(MultiDimensionalProcessingComputation):
 
 class MeasureShifts(MultiDimensionalProcessingComputation):
     computation_id = "nion.measure_shifts"
-    label = _("Measure shifts")
+    label = _("Measure Shifts")
     inputs = {"input_data_item": {"label": _("Input data item"), "data_type": "xdata"},
               "axes_description": {"label": _("Measure shift along this axis")},
               "reference_index": {"label": _("Reference index for shifts")},
@@ -260,6 +260,28 @@ class MeasureShifts(MultiDimensionalProcessingComputation):
         return None
 
 
+def measure_shifts(api: Facade.API_1, window: Facade.DocumentWindow, data_item: Facade.DataItem, bounds_graphic: Facade.Graphic | None, shift_axis: str) -> Facade.DataItem:
+    # Make a result data item with 3 dimensions to ensure we get a large_format data item
+    result_data_item = api.library.create_data_item_from_data(numpy.zeros((1,1,1)))
+
+    settings_dict = computation_settings.get("nion.measure_shifts", dict())
+    inputs = {"input_data_item": {"object": data_item, "type": "data_source"},
+              "axes_description": settings_dict.get("axes_description", shift_axis),
+              "reference_index": settings_dict.get("reference_index", 0),
+              "relative_shifts": settings_dict.get("relative_shifts", False),
+              "max_shift": settings_dict.get("max_shift", 0),
+              }
+    if bounds_graphic:
+        inputs["bounds_graphic"] = bounds_graphic
+
+    api.library.create_computation("nion.measure_shifts",
+                                   inputs=inputs,
+                                   outputs={"shifts": result_data_item})
+    window.display_data_item(result_data_item)
+
+    return result_data_item
+
+
 class MeasureShiftsMenuItemDelegate:
     def __init__(self, api: Facade.API_1) -> None:
         self.__api = api
@@ -272,36 +294,20 @@ class MeasureShiftsMenuItemDelegate:
         return _("Measure shifts")
 
     def menu_item_execute(self, window: Facade.DocumentWindow) -> None:
-        selected_data_item = window.target_data_item
+        data_item = window.target_data_item
 
-        if not selected_data_item or not selected_data_item.xdata:
+        if not data_item or not data_item.xdata:
             return None
 
         bounds_graphic = None
-        if selected_data_item.display.selected_graphics:
-            for graphic in selected_data_item.display.selected_graphics:
+        if data_item.display.selected_graphics:
+            for graphic in data_item.display.selected_graphics:
                 if graphic.graphic_type in {"rect-graphic", "interval-graphic"}:
                     bounds_graphic = graphic
 
-        shift_axis = MeasureShifts.guess_starting_axis(selected_data_item.xdata, graphic=bounds_graphic)
+        shift_axis = MeasureShifts.guess_starting_axis(data_item.xdata, graphic=bounds_graphic)
 
-        # Make a result data item with 3 dimensions to ensure we get a large_format data item
-        result_data_item = self.__api.library.create_data_item_from_data(numpy.zeros((1,1,1)), title="Shifts of {}".format(selected_data_item.title))
-
-        settings_dict = computation_settings.get("nion.measure_shifts", dict())
-        inputs = {"input_data_item": {"object": selected_data_item, "type": "data_source"},
-                  "axes_description": settings_dict.get("axes_description", shift_axis),
-                  "reference_index": settings_dict.get("reference_index", 0),
-                  "relative_shifts": settings_dict.get("relative_shifts", False),
-                  "max_shift": settings_dict.get("max_shift", 0),
-                  }
-        if bounds_graphic:
-            inputs["bounds_graphic"] = bounds_graphic
-
-        self.__api.library.create_computation("nion.measure_shifts",
-                                              inputs=inputs,
-                                              outputs={"shifts": result_data_item})
-        window.display_data_item(result_data_item)
+        measure_shifts(self.__api, window, data_item, bounds_graphic, shift_axis)
         return None
 
 
@@ -427,6 +433,32 @@ class ApplyShifts(MultiDimensionalProcessingComputation):
         return None
 
 
+def apply_shifts(api: Facade.API_1, window: Facade.DocumentWindow, input_di: Facade.DataItem, shifts_di: Facade.DataItem, shift_axis: str) -> Facade.DataItem:
+    data_item = DataItem.DataItem(large_format=True)
+    data_item.title = f"{input_di.title} (Shifted)"
+    window._document_controller.document_model.append_data_item(data_item)
+    input_xdata = input_di.xdata
+    assert input_xdata
+    data_item.reserve_data(data_shape=input_xdata.data_shape, data_dtype=input_xdata.data_dtype, data_descriptor=input_xdata.data_descriptor)
+    data_item.dimensional_calibrations = input_xdata.dimensional_calibrations
+    data_item.intensity_calibration = input_xdata.intensity_calibration
+    data_item.metadata = copy.deepcopy(input_xdata.metadata)
+    result_data_item = Facade.DataItem(data_item)
+
+    settings_dict = computation_settings.get("nion.align_and_integrate_image_sequence", dict())
+    inputs = {"input_data_item": {"object": input_di, "type": "data_source"},
+              "shifts_data_item": {"object": shifts_di, "type": "data_source"},
+              "axes_description": shift_axis,
+              "crop_to_valid": settings_dict.get("crop_to_valid", False)
+              }
+
+    api.library.create_computation("nion.apply_shifts",
+                                   inputs=inputs,
+                                   outputs={"shifted": result_data_item})
+    window.display_data_item(result_data_item)
+    return result_data_item
+
+
 class ApplyShiftsMenuItemDelegate:
     def __init__(self, api: Facade.API_1) -> None:
         self.__api = api
@@ -472,26 +504,8 @@ class ApplyShiftsMenuItemDelegate:
 
         shift_axis = ApplyShifts.guess_starting_axis(input_di.xdata, shifts_xdata=shifts_xdata)
 
-        data_item = DataItem.DataItem(large_format=True)
-        data_item.title="Shifted {}".format(input_di.title)
-        window._document_controller.document_model.append_data_item(data_item)
-        data_item.reserve_data(data_shape=input_di.xdata.data_shape, data_dtype=input_di.xdata.data_dtype, data_descriptor=input_di.xdata.data_descriptor)
-        data_item.dimensional_calibrations = input_di.xdata.dimensional_calibrations
-        data_item.intensity_calibration = input_di.xdata.intensity_calibration
-        data_item.metadata = copy.deepcopy(input_di.xdata.metadata)
-        result_data_item = self.__api._new_api_object(data_item)
+        apply_shifts(self.__api, window, input_di, shifts_di, shift_axis)
 
-        settings_dict = computation_settings.get("nion.align_and_integrate_image_sequence", dict())
-        inputs = {"input_data_item": {"object": input_di, "type": "data_source"},
-                  "shifts_data_item": {"object": shifts_di, "type": "data_source"},
-                  "axes_description": shift_axis,
-                  "crop_to_valid": settings_dict.get("crop_to_valid", False)
-                  }
-
-        self.__api.library.create_computation("nion.apply_shifts",
-                                              inputs=inputs,
-                                              outputs={"shifted": result_data_item})
-        window.display_data_item(result_data_item)
         return None
 
 
@@ -537,7 +551,7 @@ class IntegrateAlongAxisMenuItemDelegate:
 
 class Crop(MultiDimensionalProcessingComputation):
     computation_id = "nion.crop_multi_dimensional"
-    label = _("Crop")
+    label = _("Multidimensional Crop")
     inputs = {"input_data_item": {"label": _("Input data item"), "data_type": "xdata"},
               "axes_description": {"label": _("Crop along this axis")},
               "crop_graphic": {"label": _("Crop bounds")},
@@ -582,6 +596,30 @@ class Crop(MultiDimensionalProcessingComputation):
         return None
 
 
+def crop_multi_dimensional(api: Facade.API_1, window: Facade.DocumentWindow, data_item: Facade.DataItem, crop_graphic: Facade.Graphic | None, crop_axes: str) -> Facade.DataItem:
+    # Make a result data item with 3 dimensions to ensure we get a large_format data item
+    result_data_item = api.library.create_data_item_from_data(numpy.zeros((1, 1, 1)))
+
+    inputs: typing.MutableMapping[str, typing.Any]
+    inputs = {"input_data_item": {"object": data_item, "type": "data_source"},
+              "axes_description": crop_axes
+              }
+    if crop_graphic:
+        inputs["crop_graphic"] = crop_graphic
+    else:
+        inputs["crop_bounds_left"] = 0
+        inputs["crop_bounds_right"] = -1
+        inputs["crop_bounds_top"] = 0
+        inputs["crop_bounds_bottom"] = -1
+
+    api.library.create_computation("nion.crop_multi_dimensional",
+                                   inputs=inputs,
+                                   outputs={"cropped": result_data_item})
+    window.display_data_item(result_data_item)
+
+    return result_data_item
+
+
 class CropMenuItemDelegate:
     def __init__(self, api: Facade.API_1) -> None:
         self.__api = api
@@ -608,31 +646,14 @@ class CropMenuItemDelegate:
 
         crop_axes = Crop.guess_starting_axis(selected_data_item.xdata, graphic=crop_graphic)
 
-        # Make a result data item with 3 dimensions to ensure we get a large_format data item
-        result_data_item = self.__api.library.create_data_item_from_data(numpy.zeros((1,1,1)), title="Cropped {}".format(selected_data_item.title))
+        crop_multi_dimensional(self.__api, window, selected_data_item, crop_graphic, crop_axes)
 
-        inputs: typing.MutableMapping[str, typing.Any]
-        inputs = {"input_data_item": {"object": selected_data_item, "type": "data_source"},
-                  "axes_description": crop_axes
-                  }
-        if crop_graphic:
-            inputs["crop_graphic"] = crop_graphic
-        else:
-            inputs["crop_bounds_left"] = 0
-            inputs["crop_bounds_right"] = -1
-            inputs["crop_bounds_top"] = 0
-            inputs["crop_bounds_bottom"] = -1
-
-        self.__api.library.create_computation("nion.crop_multi_dimensional",
-                                              inputs=inputs,
-                                              outputs={"cropped": result_data_item})
-        window.display_data_item(result_data_item)
         return None
 
 
 class MakeTableau(Symbolic.ComputationHandlerLike):
     computation_id = "nion.make_tableau_image"
-    label = _("Display Tableau")
+    label = _("Tableau")
     inputs = {"input_data_item": {"label": _("Input data item"), "data_type": "xdata"},
               "scale": {"label": _("Scale")}}
     outputs = {"tableau": {"label": "Tableau"}}
@@ -655,6 +676,21 @@ class MakeTableau(Symbolic.ComputationHandlerLike):
         self.computation.set_referenced_xdata("tableau", self.__result_xdata)
         self.__result_xdata = None
         return None
+
+
+def tableau(api: Facade.API_1, window: Facade.DocumentWindow, data_item: Facade.DataItem, scale: float) -> Facade.DataItem:
+    inputs = {"input_data_item": {"object": data_item, "type": "data_source"}, "scale": scale}
+
+    # Make a result data item with 3 dimensions to ensure we get a large_format data item
+    result_data_item = api.library.create_data_item_from_data(numpy.zeros((1,1,1)))
+
+    api.library.create_computation("nion.make_tableau_image",
+                                   inputs=inputs,
+                                   outputs={"tableau": result_data_item})
+
+    window.display_data_item(result_data_item)
+
+    return result_data_item
 
 
 class MakeTableauMenuItemDelegate:
@@ -686,17 +722,8 @@ class MakeTableauMenuItemDelegate:
             scale = min(1.0, max_result_pixels / (numpy.sqrt(numpy.prod(selected_data_item.xdata.sequence_dimension_shape)) *
                                                   numpy.sqrt(numpy.prod(selected_data_item.xdata.datum_dimension_shape))))
 
-        inputs = {"input_data_item": {"object": selected_data_item, "type": "data_source"},
-                  "scale": scale}
+        tableau(self.__api, window, selected_data_item, scale)
 
-        # Make a result data item with 3 dimensions to ensure we get a large_format data item
-        result_data_item = self.__api.library.create_data_item_from_data(numpy.zeros((1,1,1)), title="Tableau of {}".format(selected_data_item.title))
-
-        self.__api.library.create_computation("nion.make_tableau_image",
-                                              inputs=inputs,
-                                              outputs={"tableau": result_data_item})
-
-        window.display_data_item(result_data_item)
         return None
 
 
@@ -743,7 +770,7 @@ def calculate_valid_area_from_shifts(input_shape: typing.Tuple[int, ...], shifts
 
 class AlignImageSequence(Symbolic.ComputationHandlerLike):
     computation_id = "nion.align_and_integrate_image_sequence"
-    label = _("Align and integrate image sequence")
+    label = _("Align/Integrate")
     inputs = {"input_data_item": {"label": _("Input data item"), "data_type": "xdata"},
               "reference_index": {"label": _("Reference index for shifts")},
               "relative_shifts": {"label": _("Measure shifts relative to previous slice")},
@@ -753,7 +780,7 @@ class AlignImageSequence(Symbolic.ComputationHandlerLike):
               "bounds_graphic": {"label": _("Shift bounds")},
               }
     outputs = {"shifts": {"label": _("Shifts")},
-               "integrated_sequence": {"label": _("Integrated sequence")},
+               "integrated_sequence": {"label": _("Integrated Sequence")},
                "shifted_data": {"label": _("Aligned sequence")}
                }
 
@@ -838,6 +865,46 @@ class AlignImageSequence(Symbolic.ComputationHandlerLike):
         return None
 
 
+def align_image_sequence(api: Facade.API_1, window: Facade.DocumentWindow, data_item: Facade.DataItem,
+                         reference_index: int, relative_shifts: bool, max_shift: int, show_shifted_output: bool,
+                         crop_to_valid: bool, bounds_graphic: Facade.Graphic | None) -> tuple[Facade.DataItem, Facade.DataItem, Facade.DataItem | None]:
+    # Make a result data item with 3 dimensions to ensure we get a large_format data item
+    result_data_item = api.library.create_data_item_from_data(numpy.zeros((1,1,1)))#, title=f"{data_item.title} aligned and integrated")
+    shifts = api.library.create_data_item_from_data(numpy.zeros((2, 2)))#, title=f"{data_item.title} measured shifts")
+    inputs = {"input_data_item": {"object": data_item, "type": "data_source"},
+              "reference_index": reference_index,
+              "relative_shifts": relative_shifts,
+              "max_shift": max_shift,
+              "show_shifted_output": show_shifted_output,
+              "crop_to_valid": crop_to_valid
+              }
+    if bounds_graphic:
+        inputs["bounds_graphic"] = bounds_graphic
+
+    outputs = {"shifts": shifts, "integrated_sequence": result_data_item}
+    if show_shifted_output:
+        shifted_result_data_item = api.library.create_data_item_from_data(numpy.zeros((1,1,1)), title=f"{data_item.title} aligned")
+        outputs["shifted_data"] = shifted_result_data_item
+    else:
+        shifted_result_data_item = None
+
+    api.library.create_computation("nion.align_and_integrate_image_sequence",
+                                   inputs=inputs,
+                                   outputs=outputs)
+    window.display_data_item(result_data_item)
+    window.display_data_item(shifts)
+    if shifted_result_data_item:
+        window.display_data_item(shifted_result_data_item)
+
+    display_item = api.library._document_model.get_display_item_for_data_item(shifts._data_item)
+    assert display_item is not None
+    display_item.display_type = "line_plot"
+    display_item._set_display_layer_properties(0, stroke_color='#1E90FF', stroke_width=2, fill_color=None, label="y")
+    display_item._set_display_layer_properties(1, stroke_color='#F00', stroke_width=2, fill_color=None, label="x")
+
+    return result_data_item, shifts, shifted_result_data_item
+
+
 class AlignImageSequenceMenuItemDelegate:
 
     def __init__(self, api: Facade.API_1) -> None:
@@ -868,40 +935,16 @@ class AlignImageSequenceMenuItemDelegate:
                     if graphic.graphic_type in {"rect-graphic", "interval-graphic"}:
                         bounds_graphic = graphic
 
-            # Make a result data item with 3 dimensions to ensure we get a large_format data item
-            result_data_item = self.__api.library.create_data_item_from_data(numpy.zeros((1,1,1)), title=f"{selected_data_item.title} aligned and integrated")
-            shifts = self.__api.library.create_data_item_from_data(numpy.zeros((2, 2)), title=f"{selected_data_item.title} measured shifts")
             settings_dict = computation_settings.get("nion.align_and_integrate_image_sequence", dict())
-            inputs = {"input_data_item": {"object": selected_data_item, "type": "data_source"},
-                      "reference_index": settings_dict.get("reference_index", 0),
-                      "relative_shifts": settings_dict.get("relative_shifts", False),
-                      "max_shift": settings_dict.get("max_shift", 0),
-                      "show_shifted_output": settings_dict.get("show_shifted_output", False),
-                      "crop_to_valid": settings_dict.get("crop_to_valid", True)
-                      }
-            if bounds_graphic:
-                inputs["bounds_graphic"] = bounds_graphic
 
-            outputs = {"shifts": shifts, "integrated_sequence": result_data_item}
-            if settings_dict.get("show_shifted_output", False):
-                shifted_result_data_item = self.__api.library.create_data_item_from_data(numpy.zeros((1,1,1)), title=f"{selected_data_item.title} aligned")
-                outputs["shifted_data"] = shifted_result_data_item
-
-
-            self.__api.library.create_computation("nion.align_and_integrate_image_sequence",
-                                                  inputs=inputs,
-                                                  outputs=outputs)
-            window.display_data_item(result_data_item)
-            window.display_data_item(shifts)
-            if "shifted_data" in outputs:
-                window.display_data_item(shifted_result_data_item)
-
-            display_item = self.__api.library._document_model.get_display_item_for_data_item(shifts._data_item)
-            assert display_item is not None
-            display_item.display_type = "line_plot"
-            display_item._set_display_layer_properties(0, stroke_color='#1E90FF', stroke_width=2, fill_color=None, label="y")
-            display_item._set_display_layer_properties(1, stroke_color='#F00', stroke_width=2, fill_color=None, label="x")
-
+            align_image_sequence(self.__api, window,
+                                 selected_data_item,
+                                 settings_dict.get("reference_index", 0),
+                                 settings_dict.get("relative_shifts", False),
+                                 settings_dict.get("max_shift", 0),
+                                 settings_dict.get("show_shifted_output", False),
+                                 settings_dict.get("crop_to_valid", True),
+                                 bounds_graphic)
         except Exception as e:
             import traceback
             traceback.print_exc()

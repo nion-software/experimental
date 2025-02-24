@@ -62,7 +62,7 @@ class MakeColorCOM(Symbolic.ComputationHandlerLike):
                 res = scipy.optimize.minimize_scalar(self.__calculate_curl, 0, args=(com_x, com_y), bounds=(0, numpy.pi*2), method='bounded')
                 if res.success:
                     rotation = res.x
-                    logging.info(f'Calculated optimal roation: {rotation*180/numpy.pi:.1f} degree.')
+                    logging.debug(f'Calculated optimal rotation: {rotation*180/numpy.pi:.1f} degree.')
                 else:
                     logging.warning(f'Could not find the optimal rotation. Optimize error: {res.message}\nUsing rotation=0 as default.')
                     rotation = 0
@@ -112,6 +112,37 @@ class MakeColorCOM(Symbolic.ComputationHandlerLike):
             self.computation.set_referenced_xdata("divergence", self.__divergence_xdata)
 
 
+def color_COM(api: API, window: API.DocumentWindow, data_item: Facade.DataItem) -> tuple[Facade.DataItem, Facade.DataItem]:
+    assert data_item.xdata
+    assert data_item.xdata.is_sequence or data_item.xdata.collection_dimension_count == 1
+    assert data_item.xdata.datum_dimension_count == 2
+
+    result_data_items = {
+        "output": api.library.create_data_item(title=f"{data_item.title} (Color COM)"),
+        "divergence": api.library.create_data_item(title=f"{data_item.title} (Divergence)")
+    }
+    crop_region = None
+    for graphic in data_item.graphics:
+        if graphic.graphic_type == 'rect-graphic':
+            crop_region = graphic
+            break
+    if crop_region is None:
+        crop_region = data_item.add_rectangle_region(0.5, 0.5, 0.75, 0.75)
+    crop_region.label = 'Crop'
+    api.library.create_computation("nion.make_color_com",
+                                   inputs={"src": data_item,
+                                           "com_x_index": 0,
+                                           "com_y_index": 1,
+                                           "magnitude_min": 15,
+                                           "magnitude_max": 99,
+                                           "rotation": "None",
+                                           "crop_region": crop_region},
+                                   outputs=result_data_items)
+    for result_data_item in result_data_items.values():
+        window.display_data_item(result_data_item)
+    return result_data_items["output"], result_data_items["divergence"]
+
+
 class MakeColorCOMMenuItem:
     menu_id = "_processing_menu"
     menu_item_name = _("Make color COM image")
@@ -127,30 +158,9 @@ class MakeColorCOMMenuItem:
         if not data_item:
             return
 
-        api_data_item = Facade.DataItem(data_item)
+        if data_item.xdata and (data_item.xdata.is_sequence or data_item.xdata.collection_dimension_count == 1) and data_item.xdata.datum_dimension_count == 2:
+            color_COM(self.__api, window, Facade.DataItem(data_item))
 
-        if api_data_item.xdata and (api_data_item.xdata.is_sequence or api_data_item.xdata.collection_dimension_count == 1) and api_data_item.xdata.datum_dimension_count == 2:
-            result_data_items = {"output": self.__api.library.create_data_item(title="Color COM image of " + data_item.title),
-                                "divergence": self.__api.library.create_data_item(title="Divergence of " + data_item.title)}
-            crop_region = None
-            for graphic in api_data_item.graphics:
-                if graphic.graphic_type == 'rect-graphic':
-                    crop_region = graphic
-                    break
-            if crop_region is None:
-                crop_region = api_data_item.add_rectangle_region(0.5, 0.5, 0.75, 0.75)
-            crop_region.label = 'Crop'
-            self.__api.library.create_computation("nion.make_color_com",
-                                                  inputs={"src": api_data_item,
-                                                          "com_x_index": 0,
-                                                          "com_y_index": 1,
-                                                          "magnitude_min": 15,
-                                                          "magnitude_max": 99,
-                                                          "rotation": "None",
-                                                          "crop_region": crop_region},
-                                                  outputs=result_data_items)
-            for data_item in result_data_items.values():
-                window.display_data_item(data_item)
 
 
 class MakeColorCOMExtension:

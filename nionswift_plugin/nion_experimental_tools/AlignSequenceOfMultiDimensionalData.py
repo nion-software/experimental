@@ -56,6 +56,7 @@ class AlignMultiDimensionalSequence(Symbolic.ComputationHandlerLike):
 
         align_data_shape = haadf_xdata.datum_dimension_shape
         align_axes_start_index: typing.Optional[int] = None
+        # TODO: this algorithm is wrong. it fails for (8,8,8) and (8,8,8,8) shapes.
         for i in range(len(si_xdata.data_shape) - 1):
             if align_data_shape == si_xdata.data_shape[i:i+2]:
                 align_axes_start_index = i
@@ -98,18 +99,11 @@ class AlignMultiDimensionalSequence(Symbolic.ComputationHandlerLike):
             self.computation.set_referenced_xdata("aligned_si", self.__aligned_si_sequence)
 
 
-def align_multi_si(api: API_1_0.API, window: API_1_0.DocumentWindow) -> None:
-    selected_display_items = window._document_controller._get_two_data_sources()
+def align_multi_si(api: API_1_0.API, window: API_1_0.DocumentWindow, data_item1: Facade.DataItem, data_item2: Facade.DataItem) -> tuple[Facade.DataItem | None, Facade.DataItem]:
     error_msg = "Select a sequence of spectrum images and a sequence of scanned images in order to use this computation."
-    assert selected_display_items[0][0] is not None, error_msg
-    assert selected_display_items[1][0] is not None, error_msg
-    assert selected_display_items[0][0].data_item is not None, error_msg
-    assert selected_display_items[1][0].data_item is not None, error_msg
-    assert selected_display_items[0][0].data_item.is_sequence, error_msg
-    assert selected_display_items[1][0].data_item.is_sequence, error_msg
 
-    di_1 = selected_display_items[0][0].data_item
-    di_2 = selected_display_items[1][0].data_item
+    di_1 = data_item1._data_item
+    di_2 = data_item2._data_item
 
     align_collection_index = 0
     aligned_haadf = None
@@ -146,6 +140,7 @@ def align_multi_si(api: API_1_0.API, window: API_1_0.DocumentWindow) -> None:
         haadf_sequence_data_item = api._new_api_object(di_1)
         si_sequence_data_item = haadf_sequence_data_item
         align_collection_index = haadf_sequence_data_item.display._display.display_data_channel.collection_index[0]
+        aligned_haadf = None
         aligned_si = api.library.create_data_item_from_data(numpy.zeros((1,1,1)), title="Aligned {}".format(si_sequence_data_item.title))
         outputs = {"aligned_si": aligned_si}
 
@@ -173,6 +168,8 @@ def align_multi_si(api: API_1_0.API, window: API_1_0.DocumentWindow) -> None:
     if aligned_haadf is not None:
         window.display_data_item(aligned_haadf)
 
+    return aligned_haadf, aligned_si
+
 
 Symbolic.register_computation_type(AlignMultiDimensionalSequence.computation_id, AlignMultiDimensionalSequence)
 
@@ -187,7 +184,17 @@ class AlignSequenceMenuItemDelegate:
         self.menu_item_name = _("Align sequence of multi-dimensional data")  # menu item name
 
     def menu_item_execute(self, window: Facade.DocumentWindow) -> None:
-        align_multi_si(self.__api, window)
+        selected_display_items = window._document_controller._get_two_data_sources()
+        error_msg = "Select a sequence of spectrum images and a sequence of scanned images in order to use this computation."
+        assert selected_display_items[0][0] is not None, error_msg
+        assert selected_display_items[1][0] is not None, error_msg
+        assert selected_display_items[0][0].data_item is not None, error_msg
+        assert selected_display_items[1][0].data_item is not None, error_msg
+        assert selected_display_items[0][0].data_item.is_sequence, error_msg
+        assert selected_display_items[1][0].data_item.is_sequence, error_msg
+        data_item1 = Facade.DataItem(selected_display_items[0][0].data_item)
+        data_item2 = Facade.DataItem(selected_display_items[1][0].data_item)
+        align_multi_si(self.__api, window, data_item1, data_item2)
 
 
 class AlignSequenceExtension:

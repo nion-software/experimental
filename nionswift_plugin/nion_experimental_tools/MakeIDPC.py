@@ -7,9 +7,10 @@ import numpy
 import scipy.optimize
 
 from nion.data import DataAndMetadata
-from nion.swift.model import Symbolic
-from nion.typeshed import API_1_0 as API
 from nion.swift import Facade
+from nion.swift.model import Symbolic
+from nion.typeshed import API_1_0
+
 
 _ = gettext.gettext
 
@@ -67,7 +68,7 @@ class MakeIDPC(Symbolic.ComputationHandlerLike):
                 res = scipy.optimize.minimize_scalar(self.__calculate_curl, 0, args=(gradx, grady), bounds=(0, numpy.pi*2), method='bounded')
                 if res.success:
                     rotation = res.x
-                    logging.info(f'Calculated optimal roation: {rotation*180/numpy.pi:.1f} degree.')
+                    logging.debug(f'Calculated optimal rotation: {rotation*180/numpy.pi:.1f} degree.')
                 else:
                     logging.warning(f'Could not find the optimal rotation. Optimize error: {res.message}\nUsing rotation=0 as default.')
                     rotation = 0
@@ -97,6 +98,33 @@ class MakeIDPC(Symbolic.ComputationHandlerLike):
             self.computation.set_referenced_xdata("output", self.__result_xdata)
 
 
+def iDPC(api: Facade.API_1, window: API_1_0.DocumentWindow, data_item: Facade.DataItem) -> Facade.DataItem:
+    assert data_item.xdata
+    assert data_item.xdata.is_sequence or data_item.xdata.collection_dimension_count == 1
+    assert data_item.xdata.datum_dimension_count == 2
+
+    crop_region = None
+    for graphic in data_item.graphics:
+        if graphic.graphic_type == 'rect-graphic':
+            crop_region = graphic
+            break
+    if crop_region is None:
+        crop_region = data_item.add_rectangle_region(0.5, 0.5, 0.75, 0.75)
+    crop_region.label = 'Crop'
+    result_data_item = api.library.create_data_item(title=f"{data_item.title} (iDPC)")
+    api.library.create_computation("nion.make_idpc",
+                                   inputs={"src": data_item,
+                                           "gradient_x_index": 0,
+                                           "gradient_y_index": 1,
+                                           "flip_x": False,
+                                           "flip_y": False,
+                                           "rotation_str": "None",
+                                           "crop_region": crop_region},
+                                   outputs={"output": result_data_item})
+    window.display_data_item(result_data_item)
+    return result_data_item
+
+
 class MakeIDPCMenuItem:
     menu_id = "_processing_menu"
     menu_item_name = _("Make iDPC from DPC")
@@ -104,37 +132,14 @@ class MakeIDPCMenuItem:
     def __init__(self, api: Facade.API_1) -> None:
         self.__api = api
 
-    def menu_item_execute(self, window: API.DocumentWindow) -> None:
+    def menu_item_execute(self, window: API_1_0.DocumentWindow) -> None:
         document_controller = window._document_controller
         display_item = document_controller.selected_display_item
         data_item = display_item.data_items[0] if display_item and len(display_item.data_items) > 0 else None
-
         if not data_item:
             return
-
-        api_data_item = Facade.DataItem(data_item)
-
-        if api_data_item.xdata and (api_data_item.xdata.is_sequence or api_data_item.xdata.collection_dimension_count == 1) and api_data_item.xdata.datum_dimension_count == 2:
-            crop_region = None
-            for graphic in api_data_item.graphics:
-                if graphic.graphic_type == 'rect-graphic':
-                    crop_region = graphic
-                    break
-            if crop_region is None:
-                crop_region = api_data_item.add_rectangle_region(0.5, 0.5, 0.75, 0.75)
-            crop_region.label = 'Crop'
-            result_data_items = {"output": self.__api.library.create_data_item(title="iDPC of " + data_item.title)}
-            self.__api.library.create_computation("nion.make_idpc",
-                                                  inputs={"src": api_data_item,
-                                                          "gradient_x_index": 0,
-                                                          "gradient_y_index": 1,
-                                                          "flip_x": False,
-                                                          "flip_y": False,
-                                                          "rotation_str": "None",
-                                                          "crop_region": crop_region},
-                                                  outputs=result_data_items)
-            for data_item in result_data_items.values():
-                window.display_data_item(data_item)
+        if data_item.xdata and (data_item.xdata.is_sequence or data_item.xdata.collection_dimension_count == 1) and data_item.xdata.datum_dimension_count == 2:
+            iDPC(self.__api, window, Facade.DataItem(data_item))
 
 
 class MakeIDPCExtension:

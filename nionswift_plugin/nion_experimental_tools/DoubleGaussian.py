@@ -7,12 +7,12 @@ import typing
 import numpy
 
 # local libraries
-from nion.typeshed import API_1_0 as API
 from nion.data import DataAndMetadata
 from nion.data import Calibration
+from nion.swift import Facade
 from nion.swift.model import Symbolic
 from nion.swift.model import Graphics
-from nion.swift import Facade
+from nion.typeshed import API_1_0
 
 _ = gettext.gettext
 
@@ -29,8 +29,8 @@ class DoubleGaussian(Symbolic.ComputationHandlerLike):
     def __init__(self, computation: Facade.Computation, **kwargs: typing.Any) -> None:
         self.computation = computation
 
-    def execute(self, *, src: typing.Optional[API.DataItem] = None, weight2: float = 1.0,
-                ring_graphic: typing.Optional[API.Graphic] = None, **kwargs: typing.Any) -> None:
+    def execute(self, *, src: typing.Optional[API_1_0.DataItem] = None, weight2: float = 1.0,
+                ring_graphic: typing.Optional[API_1_0.Graphic] = None, **kwargs: typing.Any) -> None:
         assert src
         assert ring_graphic
 
@@ -78,6 +78,25 @@ class DoubleGaussian(Symbolic.ComputationHandlerLike):
         self.computation.set_referenced_xdata("filtered_fft", self.__filtered_fft_xdata)
 
 
+def double_gaussian(api: API_1_0.API, window: API_1_0.DocumentWindow, data_item: Facade.DataItem) -> tuple[Facade.DataItem, Facade.DataItem]:
+    result_data_item = api.library.create_data_item(title=f"{data_item.title} (Double Gaussian)")
+    fft_data_item = api.library.create_data_item(title=f"{data_item.title} (Filtered FFT)")
+    graphic = Graphics.RingGraphic()
+    graphic.radius_1 = 0.15
+    graphic.radius_2 = 0.25
+    fft_data_item.display._display_item.add_graphic(graphic)
+    api.library.create_computation("nion.extension.doublegaussian",
+                                   inputs={"src": data_item,
+                                           "weight2": 0.3,
+                                           "ring_graphic": Facade.Graphic(graphic)},
+                                   outputs={"target": result_data_item,
+                                            "filtered_fft": fft_data_item})
+    window.display_data_item(result_data_item)
+    window.display_data_item(fft_data_item)
+
+    return result_data_item, fft_data_item
+
+
 class DoubleGaussianMenuItem:
 
     menu_id = "_processing_menu"  # required, specify menu_id where this item will go
@@ -86,31 +105,13 @@ class DoubleGaussianMenuItem:
     def __init__(self, api: Facade.API_1) -> None:
         self.__api = api
 
-    def menu_item_execute(self, window: API.DocumentWindow) -> None:
+    def menu_item_execute(self, window: API_1_0.DocumentWindow) -> None:
         # document_controller = window._document_controller
         # selected_display_item = document_controller.selected_display_item
         input_data_item = window.target_data_item
         if not input_data_item:
             return
-
-        # data_item = document_controller.document_model.make_data_item_with_computation("nion.extension.doublegaussian", [(selected_display_item, None)])
-        result_data_item = self.__api.library.create_data_item(title="Double Gaussian of {}".format(input_data_item.title))
-        # fft_data_item = self.__api.application.document_controllers[0]._document_controller.document_model.get_fft_new(result_data_item.display._display_item, result_data_item._data_item)
-        api_fft_data_item = self.__api.library.create_data_item(title="Filtered FFT of {}".format(input_data_item.title))
-        #self.__api._new_api_object(fft_data_item)
-        graphic = Graphics.RingGraphic()
-        graphic.radius_1 = 0.15
-        graphic.radius_2 = 0.25
-        api_fft_data_item.display._display_item.add_graphic(graphic)
-        api_graphic = self.__api._new_api_object(graphic)
-        self.__api.library.create_computation("nion.extension.doublegaussian",
-                                              inputs={"src": input_data_item,
-                                                      "weight2": 0.3,
-                                                      "ring_graphic": api_graphic},
-                                              outputs={"target": result_data_item,
-                                                       "filtered_fft": api_fft_data_item})
-        window.display_data_item(result_data_item)
-        window.display_data_item(api_fft_data_item)
+        double_gaussian(self.__api, window, input_data_item)
 
 
 class DoubleGaussianExtension:

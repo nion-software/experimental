@@ -182,7 +182,7 @@ class AlignMultiSI2(Symbolic.ComputationHandlerLike):
         self.computation.set_referenced_xdata("integrated_si", self.__integrated_si_xdata)
 
 
-def align_multi_si(api: API, window: API.DocumentWindow) -> None:
+def menu_item_align_multi_si(api: API, window: API.DocumentWindow) -> None:
     selected_display_items = window._document_controller._get_two_data_sources()
     error_msg = "Select a sequence of spectrum images and a sequence of scanned images in order to use this computation."
     assert selected_display_items[0][0] is not None, error_msg
@@ -193,25 +193,31 @@ def align_multi_si(api: API, window: API.DocumentWindow) -> None:
     assert selected_display_items[1][0].data_item.is_sequence, error_msg
 
     if selected_display_items[0][0].data_item.is_collection:
-        si_sequence_data_item = selected_display_items[0][0].data_item
-        haadf_sequence_data_item = selected_display_items[1][0].data_item
-        align_region = selected_display_items[1][1]
+        si_sequence_data_item = Facade.DataItem(selected_display_items[0][0].data_item)
+        haadf_sequence_data_item = Facade.DataItem(selected_display_items[1][0].data_item)
+        align_region = Facade.Graphic(selected_display_items[1][1]) if selected_display_items[1][1] else None
         align_index = selected_display_items[1][0].display_data_channel.sequence_index
     elif selected_display_items[1][0].data_item.is_collection:
-        si_sequence_data_item = selected_display_items[1][0].data_item
-        haadf_sequence_data_item = selected_display_items[0][0].data_item
-        align_region = selected_display_items[0][1]
+        si_sequence_data_item = Facade.DataItem(selected_display_items[1][0].data_item)
+        haadf_sequence_data_item = Facade.DataItem(selected_display_items[0][0].data_item)
+        align_region = Facade.Graphic(selected_display_items[0][1]) if selected_display_items[0][1] else None
         align_index = selected_display_items[0][0].display_data_channel.sequence_index
     else:
         raise ValueError(error_msg)
 
-    aligned_haadf = api.library.create_data_item_from_data(numpy.zeros((1,1,1)), title="Aligned {}".format(haadf_sequence_data_item.title))
-    aligned_si = api.library.create_data_item_from_data(numpy.zeros((1,1,1)), title="Aligned {}".format(si_sequence_data_item.title))
-    inputs = {"si_sequence_data_item": api._new_api_object(si_sequence_data_item),
-              "haadf_sequence_data_item": api._new_api_object(haadf_sequence_data_item),
+    align_multi_si(api, window, haadf_sequence_data_item, align_region, si_sequence_data_item, align_index)
+
+def align_multi_si(api: API, window: API.DocumentWindow, haadf_sequence_data_item: Facade.DataItem, bounds_graphic: Facade.Graphic | None, si_sequence_data_item: Facade.DataItem, align_index: int) -> tuple[Facade.DataItem, Facade.DataItem]:
+    aligned_haadf = api.library.create_data_item_from_data(numpy.zeros((1,1,1)), title=f"{haadf_sequence_data_item.title} (Aligned)")
+    aligned_si = api.library.create_data_item_from_data(numpy.zeros((1,1,1)), title=f"{si_sequence_data_item.title} (Aligned)")
+
+    inputs = {"si_sequence_data_item": si_sequence_data_item,
+              "haadf_sequence_data_item": haadf_sequence_data_item,
               "align_index": align_index}
-    if align_region:
-        inputs["align_region"] = api._new_api_object(align_region)
+
+    if bounds_graphic:
+        inputs["align_region"] = bounds_graphic
+
     api.library.create_computation("eels.align_multi_si",
                                    inputs=inputs,
                                    outputs={"aligned_haadf": aligned_haadf,
@@ -219,43 +225,21 @@ def align_multi_si(api: API, window: API.DocumentWindow) -> None:
     window.display_data_item(aligned_haadf)
     window.display_data_item(aligned_si)
 
+    return aligned_haadf, aligned_si
 
-def align_multi_si2(api: API, window: API.DocumentWindow) -> None:
-    selected_display_items = window._document_controller._get_two_data_sources()
-    error_msg = "Select a sequence of spectrum images and a sequence of scanned images in order to use this computation."
-    assert selected_display_items[0][0] is not None, error_msg
-    assert selected_display_items[1][0] is not None, error_msg
-    assert selected_display_items[0][0].data_item is not None, error_msg
-    assert selected_display_items[1][0].data_item is not None, error_msg
-    assert selected_display_items[0][0].data_item.is_sequence, error_msg
-    assert selected_display_items[1][0].data_item.is_sequence, error_msg
-    assert selected_display_items[1][0] != selected_display_items[0][0], error_msg
 
-    if selected_display_items[0][0].data_item.is_collection:
-        si_sequence_data_item = selected_display_items[0][0].data_item
-        haadf_sequence_data_item = selected_display_items[1][0].data_item
-        align_region = selected_display_items[1][1]
-    elif selected_display_items[1][0].data_item.is_collection:
-        si_sequence_data_item = selected_display_items[1][0].data_item
-        haadf_sequence_data_item = selected_display_items[0][0].data_item
-        align_region = selected_display_items[0][1]
-    else:
-        raise ValueError(error_msg)
-
-    bounds_graphic = None
-    if align_region:
-        graphic = api._new_api_object(align_region)
-        if graphic.graphic_type == "rect-graphic":
-            bounds_graphic = graphic
-
-    aligned_haadf = api.library.create_data_item(title=f"{haadf_sequence_data_item.title} aligned and integrated")
+def align_multi_si2(api: API, window: API.DocumentWindow, haadf_sequence_data_item: Facade.DataItem, bounds_graphic: Facade.Graphic | None, si_sequence_data_item: Facade.DataItem) -> tuple[Facade.DataItem, Facade.DataItem, Facade.DataItem]:
+    aligned_haadf = api.library.create_data_item(title=f"{haadf_sequence_data_item.title} (Aligned and Integrated)")
     # Make a result data item with 3 dimensions to ensure we get a large_format data item
-    aligned_si = api.library.create_data_item_from_data(numpy.zeros((1,1,1)), title=f"{si_sequence_data_item.title} aligned and integrated")
-    shifts = api.library.create_data_item_from_data(numpy.zeros((2, 2)), title=f"{haadf_sequence_data_item.title} measured shifts")
+    aligned_si = api.library.create_data_item_from_data(numpy.zeros((1,1,1)), title=f"{si_sequence_data_item.title} (Aligned and Integrated)")
+    shifts = api.library.create_data_item_from_data(numpy.zeros((2, 2)), title=f"{haadf_sequence_data_item.title} (Measured Shifts)")
 
-    inputs = {"haadf_data_item": {"object": api._new_api_object(haadf_sequence_data_item), "type": "data_source"},
-              "si_data_item": {"object": api._new_api_object(si_sequence_data_item), "type": "data_source"},
-              "reference_index": haadf_sequence_data_item.xdata.sequence_dimension_shape[0] // 2,
+    haadf_xdata = haadf_sequence_data_item.xdata
+    assert haadf_xdata
+
+    inputs = {"haadf_data_item": {"object": haadf_sequence_data_item, "type": "data_source"},
+              "si_data_item": {"object": si_sequence_data_item, "type": "data_source"},
+              "reference_index": haadf_xdata.sequence_dimension_shape[0] // 2,
               "relative_shifts": False,
               "max_shift": 3,
               }
@@ -276,6 +260,8 @@ def align_multi_si2(api: API, window: API.DocumentWindow) -> None:
     display_item._set_display_layer_properties(0, stroke_color='#1E90FF', stroke_width=2, fill_color=None, label="y")
     display_item._set_display_layer_properties(1, stroke_color='#F00', stroke_width=2, fill_color=None, label="x")
 
+    return aligned_haadf, aligned_si, shifts
+
 
 Symbolic.register_computation_type("eels.align_multi_si", AlignMultiSI)
 Symbolic.register_computation_type(AlignMultiSI2.computation_id, AlignMultiSI2)
@@ -292,7 +278,30 @@ class AlignMultiSIMenuItemDelegate:
 
     def menu_item_execute(self, window: Facade.DocumentWindow) -> None:
         try:
-            align_multi_si2(self.__api, window)
+            selected_display_items = window._document_controller._get_two_data_sources()
+            error_msg = "Select a sequence of spectrum images and a sequence of scanned images in order to use this computation."
+            assert selected_display_items[0][0] is not None, error_msg
+            assert selected_display_items[1][0] is not None, error_msg
+            assert selected_display_items[0][0].data_item is not None, error_msg
+            assert selected_display_items[1][0].data_item is not None, error_msg
+            assert selected_display_items[0][0].data_item.is_sequence, error_msg
+            assert selected_display_items[1][0].data_item.is_sequence, error_msg
+            assert selected_display_items[1][0] != selected_display_items[0][0], error_msg
+
+            if selected_display_items[0][0].data_item.is_collection:
+                si_sequence_data_item = Facade.DataItem(selected_display_items[0][0].data_item)
+                haadf_sequence_data_item = Facade.DataItem(selected_display_items[1][0].data_item)
+                align_region = Facade.Graphic(selected_display_items[1][1]) if selected_display_items[1][1] else None
+            elif selected_display_items[1][0].data_item.is_collection:
+                si_sequence_data_item = Facade.DataItem(selected_display_items[1][0].data_item)
+                haadf_sequence_data_item = Facade.DataItem(selected_display_items[0][0].data_item)
+                align_region = Facade.Graphic(selected_display_items[0][1]) if selected_display_items[0][1] else None
+            else:
+                raise ValueError(error_msg)
+
+            bounds_graphic = align_region if align_region and align_region.graphic_type == "rect-graphic" else None
+
+            align_multi_si2(self.__api, window, haadf_sequence_data_item, bounds_graphic, si_sequence_data_item)
         except Exception as e:
             import traceback
             traceback.print_exc()
