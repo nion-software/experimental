@@ -42,68 +42,62 @@ class MakeColorCOM(Symbolic.ComputationHandlerLike):
                 crop_region: typing.Optional[Facade.Graphic] = None, **kwargs: typing.Any) -> None:
         assert src
         assert crop_region
-        try:
-            com_xdata = src.xdata
-            assert com_xdata
-            assert com_xdata.is_datum_2d
-            assert com_xdata.is_sequence or com_xdata.is_collection
-            com_x = com_xdata.data[com_x_index]
-            com_y = com_xdata.data[com_y_index]
-            top_x = crop_region.bounds[0][1] * com_x.shape[1]
-            top_y = crop_region.bounds[0][0] * com_x.shape[0]
-            crop_slices = (slice(int(top_y), int(top_y + crop_region.bounds[1][0] * com_x.shape[0])),
-                           slice(int(top_x), int(top_x + crop_region.bounds[1][1] * com_x.shape[1])))
+        com_xdata = src.xdata
+        assert com_xdata
+        assert com_xdata.is_datum_2d
+        assert com_xdata.is_sequence or com_xdata.is_collection
+        com_x = com_xdata.data[com_x_index]
+        com_y = com_xdata.data[com_y_index]
+        top_x = crop_region.bounds[0][1] * com_x.shape[1]
+        top_y = crop_region.bounds[0][0] * com_x.shape[0]
+        crop_slices = (slice(int(top_y), int(top_y + crop_region.bounds[1][0] * com_x.shape[0])),
+                       slice(int(top_x), int(top_x + crop_region.bounds[1][1] * com_x.shape[1])))
 
-            # Subtract the mean of each com component so that we remove any global com offset
-            com_x = com_x[crop_slices] - numpy.mean(com_x[crop_slices])
-            com_y = com_y[crop_slices] - numpy.mean(com_y[crop_slices])
-            # Don't use "if rotation" here because that would also calculate rotation for a given value of 0
-            if not rotation_str or rotation_str == "None":
-                res = scipy.optimize.minimize_scalar(self.__calculate_curl, 0, args=(com_x, com_y), bounds=(0, numpy.pi*2), method='bounded')
-                if res.success:
-                    rotation = res.x
-                    logging.debug(f'Calculated optimal rotation: {rotation*180/numpy.pi:.1f} degree.')
-                else:
-                    logging.warning(f'Could not find the optimal rotation. Optimize error: {res.message}\nUsing rotation=0 as default.')
-                    rotation = 0
+        # Subtract the mean of each com component so that we remove any global com offset
+        com_x = com_x[crop_slices] - numpy.mean(com_x[crop_slices])
+        com_y = com_y[crop_slices] - numpy.mean(com_y[crop_slices])
+        # Don't use "if rotation" here because that would also calculate rotation for a given value of 0
+        if not rotation_str or rotation_str == "None":
+            res = scipy.optimize.minimize_scalar(self.__calculate_curl, 0, args=(com_x, com_y), bounds=(0, numpy.pi*2), method='bounded')
+            if res.success:
+                rotation = res.x
+                logging.debug(f'Calculated optimal rotation: {rotation*180/numpy.pi:.1f} degree.')
             else:
-                rotation = float(rotation_str) / 180.0 * numpy.pi
+                logging.warning(f'Could not find the optimal rotation. Optimize error: {res.message}\nUsing rotation=0 as default.')
+                rotation = 0
+        else:
+            rotation = float(rotation_str) / 180.0 * numpy.pi
 
-            com_x_rotated = com_x * numpy.cos(rotation) - com_y * numpy.sin(rotation)
-            com_y_rotated = com_x * numpy.sin(rotation) + com_y * numpy.cos(rotation)
+        com_x_rotated = com_x * numpy.cos(rotation) - com_y * numpy.sin(rotation)
+        com_y_rotated = com_x * numpy.sin(rotation) + com_y * numpy.cos(rotation)
 
-            divergence = numpy.gradient(com_x_rotated, axis=1) + numpy.gradient(com_y_rotated, axis=0)
+        divergence = numpy.gradient(com_x_rotated, axis=1) + numpy.gradient(com_y_rotated, axis=0)
 
-            com_magnitude = numpy.sqrt(com_x_rotated**2 + com_y_rotated**2)
-            com_angle = numpy.arctan2(com_y_rotated, com_x_rotated)
+        com_magnitude = numpy.sqrt(com_x_rotated**2 + com_y_rotated**2)
+        com_angle = numpy.arctan2(com_y_rotated, com_x_rotated)
 
-            com_angle += numpy.pi
-            com_angle *= 255.0 * 0.5 / numpy.pi
-            com_angle = numpy.rint(com_angle).astype(int)
+        com_angle += numpy.pi
+        com_angle *= 255.0 * 0.5 / numpy.pi
+        com_angle = numpy.rint(com_angle).astype(int)
 
-            if magnitude_min != 0 or magnitude_max != 100:
-                percentile_min, percentile_max = numpy.percentile(com_magnitude, (magnitude_min, magnitude_max))
-            if magnitude_min != 0:
-                com_magnitude[com_magnitude < percentile_min] = percentile_min
-            if magnitude_max != 100:
-                com_magnitude[com_magnitude > percentile_max] = percentile_max
+        if magnitude_min != 0 or magnitude_max != 100:
+            percentile_min, percentile_max = numpy.percentile(com_magnitude, (magnitude_min, magnitude_max))
+        if magnitude_min != 0:
+            com_magnitude[com_magnitude < percentile_min] = percentile_min
+        if magnitude_max != 100:
+            com_magnitude[com_magnitude > percentile_max] = percentile_max
 
-            com_magnitude -= numpy.amin(com_magnitude)
-            com_magnitude *= 1.0 / numpy.amax(com_magnitude)
-            com_magnitude = com_magnitude[..., numpy.newaxis]
-            com_magnitude = numpy.repeat(com_magnitude, 3, axis=-1)
-            rgb_angle = hsv_cyclic_colormap[com_angle]
-            combined = ((com_magnitude * rgb_angle)).astype(numpy.uint8)
+        com_magnitude -= numpy.amin(com_magnitude)
+        com_magnitude *= 1.0 / numpy.amax(com_magnitude)
+        com_magnitude = com_magnitude[..., numpy.newaxis]
+        com_magnitude = numpy.repeat(com_magnitude, 3, axis=-1)
+        rgb_angle = hsv_cyclic_colormap[com_angle]
+        combined = ((com_magnitude * rgb_angle)).astype(numpy.uint8)
 
-            self.__result_xdata = DataAndMetadata.new_data_and_metadata(combined,
+        self.__result_xdata = DataAndMetadata.new_data_and_metadata(combined,
+                                                                    dimensional_calibrations=com_xdata.dimensional_calibrations[1:])
+        self.__divergence_xdata = DataAndMetadata.new_data_and_metadata(divergence,
                                                                         dimensional_calibrations=com_xdata.dimensional_calibrations[1:])
-            self.__divergence_xdata = DataAndMetadata.new_data_and_metadata(divergence,
-                                                                            dimensional_calibrations=com_xdata.dimensional_calibrations[1:])
-        except Exception as e:
-            import traceback
-            print(traceback.format_exc())
-            print(e)
-            raise
 
     def commit(self) -> None:
         if self.__result_xdata:

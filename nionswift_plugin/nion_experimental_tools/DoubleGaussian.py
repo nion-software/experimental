@@ -34,8 +34,8 @@ class DoubleGaussian(Symbolic.ComputationHandlerLike):
         assert src
         assert ring_graphic
 
-        sigma1 = ring_graphic._graphic.radius_2 * 2.0
-        sigma2 = ring_graphic._graphic.radius_1 * 2.0
+        sigma1 = ring_graphic.get_property("radius_2") * 2.0
+        sigma2 = ring_graphic.get_property("radius_1") * 2.0
         # get the data
         data = src.data
 

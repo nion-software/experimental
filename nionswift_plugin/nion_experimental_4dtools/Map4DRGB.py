@@ -13,8 +13,6 @@ from nion.swift.model import Symbolic
 from nion.swift.model import DocumentModel
 from nion.ui import UserInterface
 
-from .DataCache import DataCache
-
 _ = gettext.gettext
 
 _DataArrayType = np.typing.NDArray[typing.Any]
@@ -26,11 +24,6 @@ class Map4DRGB:
 
     def __init__(self, computation: Facade.Computation, **kwargs: typing.Any) -> None:
         self.computation = computation
-        if not hasattr(computation, 'data_cache'):
-            def modify_data_fn(data: _DataArrayType) -> _DataArrayType:
-                new_shape = data.shape[:2] + (-1,)
-                return np.reshape(data, new_shape)
-            typing.cast(typing.Any, computation).data_cache = DataCache(modify_data_fn=modify_data_fn)
 
         def create_panel_widget(ui: Facade.UserInterface, document_controller: Facade.DocumentWindow) -> Facade.ColumnWidget:
             def select_button_clicked(channel: str) -> None:
@@ -215,54 +208,35 @@ class Map4DRGB:
         assert map_regions_r is not None
         assert map_regions_g is not None
         assert map_regions_b is not None
-        try:
-            src_data_item = src.data_item
-            assert src_data_item.xdata
-            assert src_data_item.metadata is not None
-            data = typing.cast(DataCache, typing.cast(typing.Any, self.computation).data_cache).get_cached_data(src_data_item)
-            rgb_data = np.zeros(src_data_item.xdata.data_shape[:2] + (3,), dtype=np.uint8)
-            map_regions_rgb = (map_regions_b, map_regions_g, map_regions_r)
-            channels_enabled = (enabled_b, enabled_g, enabled_r)
-            gammas = (gamma_b, gamma_g, gamma_r)
-            for i in range(len(map_regions_rgb)):
-                if not channels_enabled[i]:
-                    continue
-                assert data is not None
-                map_regions = map_regions_rgb[i]
-                mask_data = np.zeros(src_data_item.xdata.data_shape[2:], dtype=np.bool_)
-                for region in map_regions:
-                    mask_data = np.logical_or(mask_data, region.get_mask(src_data_item.xdata.data_shape[2:]))
-                if mask_data.any():
-                    ind = np.arange(mask_data.size)[mask_data.ravel()]
-                    new_data = np.sum(data[..., ind], axis=(-1))
-                    #y = np.unique(np.indices(mask_data.shape)[0][mask_data])
-                    #x = np.unique(np.indices(mask_data.shape)[1][mask_data])
-                    #new_data = np.sum(xdata.data[..., x][..., y, :], axis=(-2, -1))
-                    rgb_data[..., i] = self.convert_to_8_bit(new_data, gammas[i])
+        assert src.xdata
+        src_xdata = src.xdata
+        data = np.reshape(src_xdata.data, src_xdata.data_shape[:2] + (-1,))  # flatten the last two dimensions
+        rgb_data = np.zeros(src_xdata.data_shape[:2] + (3,), dtype=np.uint8)
+        map_regions_rgb = (map_regions_b, map_regions_g, map_regions_r)
+        channels_enabled = (enabled_b, enabled_g, enabled_r)
+        gammas = (gamma_b, gamma_g, gamma_r)
+        for i in range(len(map_regions_rgb)):
+            if not channels_enabled[i]:
+                continue
+            assert data is not None
+            map_regions = map_regions_rgb[i]
+            mask_data = np.zeros(src_xdata.data_shape[2:], dtype=np.bool_)
+            for region in map_regions:
+                mask_data = np.logical_or(mask_data, region.get_mask(src_xdata.data_shape[2:]))
+            if mask_data.any():
+                ind = np.arange(mask_data.size)[mask_data.ravel()]
+                new_data = np.sum(data[..., ind], axis=(-1))
+                #y = np.unique(np.indices(mask_data.shape)[0][mask_data])
+                #x = np.unique(np.indices(mask_data.shape)[1][mask_data])
+                #new_data = np.sum(xdata.data[..., x][..., y, :], axis=(-2, -1))
+                rgb_data[..., i] = self.convert_to_8_bit(new_data, gammas[i])
 
-                else:
-                    rgb_data[..., i] = self.convert_to_8_bit(np.sum(data, axis=-1), gammas[i])
+            else:
+                rgb_data[..., i] = self.convert_to_8_bit(np.sum(data, axis=-1), gammas[i])
 
-            self.__new_xdata = DataAndMetadata.new_data_and_metadata(rgb_data,
-                                                                     dimensional_calibrations=src_data_item.dimensional_calibrations[:2],
-                                                                     intensity_calibration=src_data_item.intensity_calibration)
-            metadata = dict(src_data_item.metadata).copy()
-            metadata['nion.map_4d_rgb.parameters'] = {'src': src_data_item._data_item.write_to_dict(),
-                                                      'map_regions_r': [region.write_to_dict() for region in map_regions_r],
-                                                      'map_regions_g': [region.write_to_dict() for region in map_regions_g],
-                                                      'map_regions_b': [region.write_to_dict() for region in map_regions_b],
-                                                      'gamma_r': gamma_r,
-                                                      'gamma_g': gamma_g,
-                                                      'gamma_b': gamma_b,
-                                                      'channels_enabled': list(channels_enabled)}
-            metadata['nion.map_4d_rgb.parameters']['channels_enabled'].reverse()
-            new_metadata = dict(self.__new_xdata.metadata).copy()
-            new_metadata.update(metadata)
-            self.__new_xdata._set_metadata(new_metadata)
-        except Exception as e:
-            print(str(e))
-            import traceback
-            traceback.print_exc()
+        self.__new_xdata = DataAndMetadata.new_data_and_metadata(rgb_data,
+                                                                 dimensional_calibrations=src_xdata.dimensional_calibrations[:2],
+                                                                 intensity_calibration=src_xdata.intensity_calibration)
 
     def commit(self) -> None:
         self.computation.set_referenced_xdata('target', self.__new_xdata)

@@ -14,8 +14,6 @@ from nion.swift.model import DisplayItem
 from nion.swift.model import Symbolic
 from nion.ui import UserInterface
 
-from .DataCache import DataCache
-
 
 _ = gettext.gettext
 
@@ -29,13 +27,7 @@ class TotalBin4D:
     def execute(self, src: typing.Optional[Facade.DataItem] = None, **kwargs: typing.Any) -> None:
         assert src
         assert src.xdata
-        try:
-            self.__new_xdata = xd.sum(src.xdata, axis=(2, 3))
-        except Exception as e:
-            import traceback
-            traceback.print_exc()
-            print(str(e))
-            raise
+        self.__new_xdata = xd.sum(src.xdata, axis=(2, 3))
 
     def commit(self) -> None:
         self.computation.set_referenced_xdata('target', self.__new_xdata)
@@ -47,8 +39,6 @@ class DarkCorrection4D:
     def __init__(self, api: Facade.API_1, computation: Facade.Computation, **kwargs: typing.Any) -> None:
         self.__api = api
         self.computation = computation
-        if not hasattr(computation, 'data_cache'):
-            typing.cast(typing.Any, computation).data_cache = DataCache()
 
         def create_panel_widget(ui: Facade.UserInterface, document_controller: Facade.DocumentWindow) -> Facade.ColumnWidget:
             def gain_mode_changed(current_item: typing.Any) -> None:
@@ -140,68 +130,55 @@ class DarkCorrection4D:
         assert crop_region
         assert gain_image is not None
         assert gain_mode
-        try:
-            assert src1.xdata
-            assert src1.metadata is not None
-            data = src1.xdata.data
-            assert data is not None
-            metadata = dict(src1.metadata).copy()
-            xdata = src1.xdata
-            data_shape = np.array(xdata.data.shape)
-            dark_area = np.rint(np.array(dark_area_region.bounds) * np.array((data_shape[:2], data_shape[:2]))).astype(np.int_)
-            crop_area = np.rint(np.array(crop_region.bounds) * np.array((data_shape[2:], data_shape[2:]))).astype(np.int_)
+        src1_xdata = src1.xdata
+        src2_xdata = src2.xdata
+        assert src1_xdata
+        assert src2_xdata
+        assert src1_xdata.metadata is not None
+        data = src1_xdata.data
+        assert data is not None
+        metadata = dict(src1_xdata.metadata).copy()
+        data_shape = np.array(src1_xdata.data.shape)
+        dark_area = np.rint(np.array(dark_area_region.bounds) * np.array((data_shape[:2], data_shape[:2]))).astype(np.int_)
+        crop_area = np.rint(np.array(crop_region.bounds) * np.array((data_shape[2:], data_shape[2:]))).astype(np.int_)
 
-            dark_image = xd.sum(xdata[dark_area[0, 0]:dark_area[0, 0]+dark_area[1, 0],
-                                      dark_area[0, 1]:dark_area[0, 1]+dark_area[1, 1],
-                                      crop_area[0, 0]:crop_area[0, 0]+crop_area[1, 0],
-                                      crop_area[0, 1]:crop_area[0, 1]+crop_area[1, 1]], axis=(0, 1))/(dark_area[1,0]*dark_area[1,1])
+        dark_image = xd.sum(src1_xdata[dark_area[0, 0]:dark_area[0, 0]+dark_area[1, 0],
+                                  dark_area[0, 1]:dark_area[0, 1]+dark_area[1, 1],
+                                  crop_area[0, 0]:crop_area[0, 0]+crop_area[1, 0],
+                                  crop_area[0, 1]:crop_area[0, 1]+crop_area[1, 1]], axis=(0, 1))/(dark_area[1,0]*dark_area[1,1])
 
-            self.__new_xdata = xdata[..., crop_area[0, 0]:crop_area[0, 0]+crop_area[1, 0],
-                                          crop_area[0, 1]:crop_area[0, 1]+crop_area[1, 1]] - dark_image
+        self.__new_xdata = src1_xdata[..., crop_area[0, 0]:crop_area[0, 0]+crop_area[1, 0],
+                                      crop_area[0, 1]:crop_area[0, 1]+crop_area[1, 1]] - dark_image
 
-            current_gain_image_uuid = metadata.get('hardware_source', {}).get('current_gain_image')
-            current_gain_image: typing.Optional[Facade.DataItem] = None
-            if current_gain_image_uuid:
-                current_gain_image = self.__api.library.get_data_item_by_uuid(uuid.UUID(current_gain_image_uuid))
-            if metadata.get('hardware_source', {}).get('is_gain_corrected'):
-                if gain_mode in ('custom', 'off') and current_gain_image:
-                    assert current_gain_image.xdata
-                    if current_gain_image.xdata.data_shape == xdata.data_shape[2:]:
-                        self.__new_xdata /= current_gain_image.xdata[crop_area[0, 0]:crop_area[0, 0]+crop_area[1, 0],
-                                                                     crop_area[0, 1]:crop_area[0, 1]+crop_area[1, 1]]
-
-            if ((gain_mode == 'auto' and not metadata.get('hardware_source', {}).get('is_gain_corrected') and current_gain_image) or
-                (gain_mode == 'custom' and gain_image)):
-                assert current_gain_image
+        current_gain_image_uuid = metadata.get('hardware_source', {}).get('current_gain_image')
+        current_gain_image: typing.Optional[Facade.DataItem] = None
+        if current_gain_image_uuid:
+            current_gain_image = self.__api.library.get_data_item_by_uuid(uuid.UUID(current_gain_image_uuid))
+        if metadata.get('hardware_source', {}).get('is_gain_corrected'):
+            if gain_mode in ('custom', 'off') and current_gain_image:
                 assert current_gain_image.xdata
+                if current_gain_image.xdata.data_shape == src1_xdata.data_shape[2:]:
+                    self.__new_xdata /= current_gain_image.xdata[crop_area[0, 0]:crop_area[0, 0]+crop_area[1, 0],
+                                                                 crop_area[0, 1]:crop_area[0, 1]+crop_area[1, 1]]
 
-                gain_xdata = gain_image[0].xdata if gain_mode == 'custom' else current_gain_image.xdata
+        if ((gain_mode == 'auto' and not metadata.get('hardware_source', {}).get('is_gain_corrected') and current_gain_image) or
+            (gain_mode == 'custom' and gain_image)):
+            assert current_gain_image
+            assert current_gain_image.xdata
 
-                if gain_xdata.data_shape == self.__new_xdata.data_shape[2:]:
-                    self.__new_xdata *= gain_xdata
-                elif gain_xdata.data_shape == xdata.data_shape[2:]:
-                    self.__new_xdata *= gain_xdata[crop_area[0, 0]:crop_area[0, 0]+crop_area[1, 0],
-                                                   crop_area[0, 1]:crop_area[0, 1]+crop_area[1, 1]]
-                else:
-                    raise ValueError('Shape of gain image has to match last two dimensions of input data.')
-                del gain_xdata
+            gain_xdata = gain_image[0].xdata if gain_mode == 'custom' else current_gain_image.xdata
 
-            if bin_spectrum:
-                self.__new_xdata = xd.sum(self.__new_xdata, axis=2)
+            if gain_xdata.data_shape == self.__new_xdata.data_shape[2:]:
+                self.__new_xdata *= gain_xdata
+            elif gain_xdata.data_shape == src1_xdata.data_shape[2:]:
+                self.__new_xdata *= gain_xdata[crop_area[0, 0]:crop_area[0, 0]+crop_area[1, 0],
+                                               crop_area[0, 1]:crop_area[0, 1]+crop_area[1, 1]]
+            else:
+                raise ValueError('Shape of gain image has to match last two dimensions of input data.')
+            del gain_xdata
 
-            metadata['nion.dark_correction_4d.parameters'] = {'src1': src1._data_item.write_to_dict(),
-                                                              'src2': src2._data_item.write_to_dict(),
-                                                              'dark_area_region': dark_area_region._graphic.write_to_dict(),
-                                                              'crop_region': crop_region._graphic.write_to_dict(),
-                                                              'bottom_dark_region_region': crop_region._graphic.write_to_dict(),
-                                                              'bin_spectrum': bin_spectrum,
-                                                              'gain_image': gain_image[0].data_item.write_to_dict() if gain_image else None,
-                                                              'gain_mode': gain_mode}
-            self.__new_xdata.metadata.update(metadata)
-        except Exception as e:
-            print(str(e))
-            import traceback
-            traceback.print_exc()
+        if bin_spectrum:
+            self.__new_xdata = xd.sum(self.__new_xdata, axis=2)
 
     def commit(self) -> None:
         self.computation.set_referenced_xdata('target', self.__new_xdata)
@@ -271,6 +248,7 @@ def dark_correction_4D(api: Facade.API_1, window: Facade.DocumentWindow, data_it
     document_controller = window._document_controller
     document_model = document_controller.document_model
     total_bin_data_item = api.library.create_data_item()
+    total_bin_data_item.data = np.zeros(data_item.xdata.data_shape[:2], dtype=float)
     api.library.create_computation('nion.total_bin_4d_SI',
                                    inputs={'src': data_item},
                                    outputs={'target': total_bin_data_item})
