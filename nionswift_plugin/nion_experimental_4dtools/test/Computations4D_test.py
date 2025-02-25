@@ -93,7 +93,7 @@ class TestComputations4D(unittest.TestCase):
         with create_memory_profile_context() as test_context:
             document_controller = test_context.create_document_controller_with_application()
             document_model = document_controller.document_model
-            xdata = DataAndMetadata.new_data_and_metadata(numpy.random.randn(4,4,4,4), data_descriptor=DataAndMetadata.DataDescriptor(False, 2, 2))
+            xdata = DataAndMetadata.new_data_and_metadata(numpy.random.randn(4,4,8,8), data_descriptor=DataAndMetadata.DataDescriptor(False, 2, 2))
             data_item = DataItem.new_data_item(xdata)
             data_item.title = "4D Data"
             document_model.append_data_item(data_item)

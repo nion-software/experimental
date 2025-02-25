@@ -45,53 +45,47 @@ class MakeIDPC(Symbolic.ComputationHandlerLike):
                 **kwargs: typing.Any) -> None:
         assert src
         assert crop_region
-        try:
-            dpc_xdata = src.xdata
-            assert dpc_xdata
-            assert dpc_xdata.is_datum_2d
-            assert dpc_xdata.is_sequence or dpc_xdata.collection_dimension_count == 1
-            gradx = dpc_xdata.data[gradient_x_index]
-            grady = dpc_xdata.data[gradient_y_index]
-            top_x = crop_region.bounds[0][1] * gradx.shape[1]
-            top_y = crop_region.bounds[0][0] * gradx.shape[0]
-            crop_slices = (slice(int(top_y), int(top_y + crop_region.bounds[1][0] * gradx.shape[0])),
-                           slice(int(top_x), int(top_x + crop_region.bounds[1][1] * gradx.shape[1])))
-            # Subtract the mean of each component so that we remove any global offset
-            gradx = gradx[crop_slices] - numpy.mean(gradx[crop_slices])
-            grady = grady[crop_slices] - numpy.mean(grady[crop_slices])
-            if flip_x:
-                gradx *= -1.0
-            if flip_y:
-                grady *= -1.0
-            # Don't use "if rotation" here because that would also calculate rotation for a given value of 0
-            if not rotation_str or rotation_str == "None":
-                res = scipy.optimize.minimize_scalar(self.__calculate_curl, 0, args=(gradx, grady), bounds=(0, numpy.pi*2), method='bounded')
-                if res.success:
-                    rotation = res.x
-                    logging.debug(f'Calculated optimal rotation: {rotation*180/numpy.pi:.1f} degree.')
-                else:
-                    logging.warning(f'Could not find the optimal rotation. Optimize error: {res.message}\nUsing rotation=0 as default.')
-                    rotation = 0
+        dpc_xdata = src.xdata
+        assert dpc_xdata
+        assert dpc_xdata.is_datum_2d
+        assert dpc_xdata.is_sequence or dpc_xdata.collection_dimension_count == 1
+        gradx = dpc_xdata.data[gradient_x_index]
+        grady = dpc_xdata.data[gradient_y_index]
+        top_x = crop_region.bounds[0][1] * gradx.shape[1]
+        top_y = crop_region.bounds[0][0] * gradx.shape[0]
+        crop_slices = (slice(int(top_y), int(top_y + crop_region.bounds[1][0] * gradx.shape[0])),
+                       slice(int(top_x), int(top_x + crop_region.bounds[1][1] * gradx.shape[1])))
+        # Subtract the mean of each component so that we remove any global offset
+        gradx = gradx[crop_slices] - numpy.mean(gradx[crop_slices])
+        grady = grady[crop_slices] - numpy.mean(grady[crop_slices])
+        if flip_x:
+            gradx *= -1.0
+        if flip_y:
+            grady *= -1.0
+        # Don't use "if rotation" here because that would also calculate rotation for a given value of 0
+        if not rotation_str or rotation_str == "None":
+            res = scipy.optimize.minimize_scalar(self.__calculate_curl, 0, args=(gradx, grady), bounds=(0, numpy.pi*2), method='bounded')
+            if res.success:
+                rotation = res.x
+                logging.debug(f'Calculated optimal rotation: {rotation*180/numpy.pi:.1f} degree.')
             else:
-                rotation = float(rotation_str) / 180.0 * numpy.pi
+                logging.warning(f'Could not find the optimal rotation. Optimize error: {res.message}\nUsing rotation=0 as default.')
+                rotation = 0
+        else:
+            rotation = float(rotation_str) / 180.0 * numpy.pi
 
-            gradx_rotated = gradx * numpy.cos(rotation) - grady * numpy.sin(rotation)
-            grady_rotated = gradx * numpy.sin(rotation) + grady * numpy.cos(rotation)
-            freq_v = numpy.fft.fftfreq(gradx.shape[-2], d=dpc_xdata.dimensional_calibrations[-2].scale)
-            freq_u = numpy.fft.fftfreq(gradx.shape[-1], d=dpc_xdata.dimensional_calibrations[-1].scale)
-            freqs = numpy.meshgrid(freq_u, freq_v)
-            with warnings.catch_warnings():
-                warnings.simplefilter('ignore')
-                fft_idpc = (numpy.fft.fft2(gradx_rotated) * freqs[0] + numpy.fft.fft2(grady_rotated) * freqs[1]) / (1j * (freqs[0]**2 + freqs[1]**2))
-            fft_idpc[numpy.isnan(fft_idpc)] = 0
-            self.__result_xdata = DataAndMetadata.new_data_and_metadata(numpy.real(numpy.fft.ifft2(fft_idpc)),
-                                                                        intensity_calibration=dpc_xdata.intensity_calibration,
-                                                                        dimensional_calibrations=dpc_xdata.dimensional_calibrations[1:])
-        except Exception as e:
-            import traceback
-            print(traceback.format_exc())
-            print(e)
-            raise
+        gradx_rotated = gradx * numpy.cos(rotation) - grady * numpy.sin(rotation)
+        grady_rotated = gradx * numpy.sin(rotation) + grady * numpy.cos(rotation)
+        freq_v = numpy.fft.fftfreq(gradx.shape[-2], d=dpc_xdata.dimensional_calibrations[-2].scale)
+        freq_u = numpy.fft.fftfreq(gradx.shape[-1], d=dpc_xdata.dimensional_calibrations[-1].scale)
+        freqs = numpy.meshgrid(freq_u, freq_v)
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore')
+            fft_idpc = (numpy.fft.fft2(gradx_rotated) * freqs[0] + numpy.fft.fft2(grady_rotated) * freqs[1]) / (1j * (freqs[0]**2 + freqs[1]**2))
+        fft_idpc[numpy.isnan(fft_idpc)] = 0
+        self.__result_xdata = DataAndMetadata.new_data_and_metadata(numpy.real(numpy.fft.ifft2(fft_idpc)),
+                                                                    intensity_calibration=dpc_xdata.intensity_calibration,
+                                                                    dimensional_calibrations=dpc_xdata.dimensional_calibrations[1:])
 
     def commit(self) -> None:
         if self.__result_xdata:

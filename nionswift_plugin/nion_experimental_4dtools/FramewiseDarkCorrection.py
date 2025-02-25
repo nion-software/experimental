@@ -18,8 +18,6 @@ from nion.ui import UserInterface
 
 # local libraries
 
-from .DataCache import DataCache
-
 _ = gettext.gettext
 
 
@@ -44,8 +42,6 @@ class FramewiseDarkCorrection:
     def __init__(self, api: Facade.API_1, computation: Facade.Computation, **kwargs: typing.Any) -> None:
         self.__api = api
         self.computation = computation
-        if not hasattr(computation, 'data_cache'):
-            typing.cast(typing.Any, computation).data_cache = DataCache()
 
         def create_panel_widget(ui: Facade.UserInterface, document_controller: Facade.DocumentWindow) -> Facade.ColumnWidget:
             def gain_mode_changed(current_item: typing.Any) -> None:
@@ -139,102 +135,90 @@ class FramewiseDarkCorrection:
         assert bottom_dark_region
         assert gain_image is not None
         assert gain_mode
-        try:
-            assert src1.xdata
-            assert src1.metadata is not None
-            data = src1.xdata.data
-            assert data is not None
-            data_shape = np.array(data.shape)
-            metadata = dict(src1.metadata).copy()
-            sensor_readout_area = metadata.get('hardware_source', {}).get('sensor_readout_area')
-            sensor_dimensions = metadata.get('hardware_source', {}).get('sensor_dimensions')
-            if sensor_readout_area and sensor_dimensions:
-                cam_center = sensor_dimensions['height']/2 - sensor_readout_area['top']
+        src1_xdata = src1.xdata
+        src2_xdata = src2.xdata
+        assert src1_xdata
+        assert src2_xdata
+        assert src1_xdata.metadata is not None
+        data = src1_xdata.data
+        assert data is not None
+        data_shape = np.array(data.shape)
+        metadata = dict(src1_xdata.metadata).copy()
+        sensor_readout_area = metadata.get('hardware_source', {}).get('sensor_readout_area')
+        sensor_dimensions = metadata.get('hardware_source', {}).get('sensor_dimensions')
+        if sensor_readout_area and sensor_dimensions:
+            cam_center = sensor_dimensions['height']/2 - sensor_readout_area['top']
+        else:
+            cam_center = int(round(data_shape[-2]/2))
+        spectrum_area = np.rint(np.array(spectrum_region.bounds) * data_shape[2:]).astype(np.int_)
+        top_dark_area = np.rint(np.array(top_dark_region.bounds) * data_shape[2:]).astype(np.int_)
+        bottom_dark_area = np.rint(np.array(bottom_dark_region.bounds) * data_shape[2:]).astype(np.int_)
+        spectrum_range_y = np.array((spectrum_area[0,0], spectrum_area[0,0] + spectrum_area[1,0]))
+        spectrum_range_x = np.array((spectrum_area[0,1], spectrum_area[0,1] + spectrum_area[1,1]))
+        top_dark_area_range_y = np.array((top_dark_area[0,0], top_dark_area[0,0] + top_dark_area[1, 0]))
+        bottom_dark_area_range_y = np.array((bottom_dark_area[0,0], bottom_dark_area[0,0] + bottom_dark_area[1, 0]))
+        # undo gain correction if neccessary
+        current_gain_image_uuid = metadata.get('hardware_source', {}).get('current_gain_image')
+        current_gain_image: typing.Optional[Facade.DataItem] = None
+        if current_gain_image_uuid:
+            current_gain_image = self.__api.library.get_data_item_by_uuid(uuid.UUID(current_gain_image_uuid))
+        if metadata.get('hardware_source', {}).get('is_gain_corrected') and current_gain_image:
+            assert current_gain_image.xdata
+            if current_gain_image.xdata.data_shape == src1_xdata.data_shape[2:]:
+                data = data/current_gain_image.xdata.data
+
+        if (cam_center >= spectrum_range_y).all(): # spectrum is above center
+            dark_image = np.mean(data[..., top_dark_area_range_y[0]:top_dark_area_range_y[1],
+                                      spectrum_range_x[0]:spectrum_range_x[1]], axis=-2, keepdims=True)
+            corrected_image = (data[..., spectrum_range_y[0]:spectrum_range_y[1], spectrum_range_x[0]:spectrum_range_x[1]] -
+                               np.repeat(dark_image, spectrum_range_y[1]-spectrum_range_y[0], axis=-2))
+        elif (cam_center <= spectrum_range_y).all(): # spectrum is below center
+            dark_image = np.mean(data[..., bottom_dark_area_range_y[0]:bottom_dark_area_range_y[1],
+                                      spectrum_range_x[0]:spectrum_range_x[1]], axis=-2, keepdims=True)
+            corrected_image = (data[..., spectrum_range_y[0]:spectrum_range_y[1], spectrum_range_x[0]:spectrum_range_x[1]] -
+                               np.repeat(dark_image, spectrum_range_y[1]-spectrum_range_y[0], axis=-2))
+        else: # spectrum is on top of center
+            dark_image = np.mean(data[..., top_dark_area_range_y[0]:top_dark_area_range_y[1],
+                                      spectrum_range_x[0]:spectrum_range_x[1]], axis=-2, keepdims=True)
+            corrected_image_top = (data[..., spectrum_range_y[0]:cam_center, spectrum_range_x[0]:spectrum_range_x[1]] -
+                                   np.repeat(dark_image, cam_center-spectrum_range_y[0], axis=-2))
+            dark_image = np.mean(data[..., bottom_dark_area_range_y[0]:bottom_dark_area_range_y[1],
+                                      spectrum_range_x[0]:spectrum_range_x[1]], axis=-2, keepdims=True)
+            corrected_image_bot = (data[..., cam_center:spectrum_range_y[1], spectrum_range_x[0]:spectrum_range_x[1]] -
+                                   np.repeat(dark_image, spectrum_range_y[1]-cam_center, axis=-2))
+            corrected_image = np.concatenate((corrected_image_top, corrected_image_bot), axis=-2)
+            del corrected_image_top
+            del corrected_image_bot
+        del data
+        del dark_image # don't hold references to unused objects so that garbage collector can free the memory
+
+        if ((gain_mode == 'auto' and current_gain_image) or # apply gain correction if needed
+            (gain_mode == 'custom' and gain_image)):
+            assert current_gain_image
+            assert current_gain_image.xdata
+            gain_xdata = gain_image[0].xdata if gain_mode == 'custom' else current_gain_image.xdata
+            assert gain_xdata
+
+            if gain_xdata.data_shape == corrected_image.shape[2:]:
+                corrected_image *= gain_xdata.data
+            elif gain_xdata.data_shape == src1_xdata.data_shape[2:]:
+                corrected_image *= gain_xdata.data[spectrum_range_y[0]:spectrum_range_y[1],
+                                                   spectrum_range_x[0]:spectrum_range_x[1]]
             else:
-                cam_center = int(round(data_shape[-2]/2))
-            spectrum_area = np.rint(np.array(spectrum_region.bounds) * data_shape[2:]).astype(np.int_)
-            top_dark_area = np.rint(np.array(top_dark_region.bounds) * data_shape[2:]).astype(np.int_)
-            bottom_dark_area = np.rint(np.array(bottom_dark_region.bounds) * data_shape[2:]).astype(np.int_)
-            spectrum_range_y = np.array((spectrum_area[0,0], spectrum_area[0,0] + spectrum_area[1,0]))
-            spectrum_range_x = np.array((spectrum_area[0,1], spectrum_area[0,1] + spectrum_area[1,1]))
-            top_dark_area_range_y = np.array((top_dark_area[0,0], top_dark_area[0,0] + top_dark_area[1, 0]))
-            bottom_dark_area_range_y = np.array((bottom_dark_area[0,0], bottom_dark_area[0,0] + bottom_dark_area[1, 0]))
+                raise ValueError('Shape of gain image has to match last two dimensions of input data.')
+            del gain_xdata
 
-            # undo gain correction if neccessary
-            current_gain_image_uuid = metadata.get('hardware_source', {}).get('current_gain_image')
-            current_gain_image: typing.Optional[Facade.DataItem] = None
-            if current_gain_image_uuid:
-                current_gain_image = self.__api.library.get_data_item_by_uuid(uuid.UUID(current_gain_image_uuid))
-            if metadata.get('hardware_source', {}).get('is_gain_corrected') and current_gain_image:
-                assert current_gain_image.xdata
-                if current_gain_image.xdata.data_shape == src1.xdata.data_shape[2:]:
-                    data = data/current_gain_image.xdata.data
+        dimensional_calibrations = copy.deepcopy(list(src1_xdata.dimensional_calibrations))
+        if bin_spectrum:
+            corrected_image = np.sum(corrected_image, axis=-2)
+            dimensional_calibrations = dimensional_calibrations[:2] + dimensional_calibrations[3:]
 
-            if (cam_center >= spectrum_range_y).all(): # spectrum is above center
-                dark_image = np.mean(data[..., top_dark_area_range_y[0]:top_dark_area_range_y[1],
-                                          spectrum_range_x[0]:spectrum_range_x[1]], axis=-2, keepdims=True)
-                corrected_image = (data[..., spectrum_range_y[0]:spectrum_range_y[1], spectrum_range_x[0]:spectrum_range_x[1]] -
-                                   np.repeat(dark_image, spectrum_range_y[1]-spectrum_range_y[0], axis=-2))
-            elif (cam_center <= spectrum_range_y).all(): # spectrum is below center
-                dark_image = np.mean(data[..., bottom_dark_area_range_y[0]:bottom_dark_area_range_y[1],
-                                          spectrum_range_x[0]:spectrum_range_x[1]], axis=-2, keepdims=True)
-                corrected_image = (data[..., spectrum_range_y[0]:spectrum_range_y[1], spectrum_range_x[0]:spectrum_range_x[1]] -
-                                   np.repeat(dark_image, spectrum_range_y[1]-spectrum_range_y[0], axis=-2))
-            else: # spectrum is on top of center
-                dark_image = np.mean(data[..., top_dark_area_range_y[0]:top_dark_area_range_y[1],
-                                          spectrum_range_x[0]:spectrum_range_x[1]], axis=-2, keepdims=True)
-                corrected_image_top = (data[..., spectrum_range_y[0]:cam_center, spectrum_range_x[0]:spectrum_range_x[1]] -
-                                       np.repeat(dark_image, cam_center-spectrum_range_y[0], axis=-2))
-                dark_image = np.mean(data[..., bottom_dark_area_range_y[0]:bottom_dark_area_range_y[1],
-                                          spectrum_range_x[0]:spectrum_range_x[1]], axis=-2, keepdims=True)
-                corrected_image_bot = (data[..., cam_center:spectrum_range_y[1], spectrum_range_x[0]:spectrum_range_x[1]] -
-                                       np.repeat(dark_image, spectrum_range_y[1]-cam_center, axis=-2))
-                corrected_image = np.concatenate((corrected_image_top, corrected_image_bot), axis=-2)
-                del corrected_image_top
-                del corrected_image_bot
-            del data
-            del dark_image # don't hold references to unused objects so that garbage collector can free the memory
+        data_descriptor = DataAndMetadata.DataDescriptor(False, 2, 1 if bin_spectrum else 2)
 
-            if ((gain_mode == 'auto' and current_gain_image) or # apply gain correction if needed
-                (gain_mode == 'custom' and gain_image)):
-                assert current_gain_image
-                assert current_gain_image.xdata
-                gain_xdata = gain_image[0].xdata if gain_mode == 'custom' else current_gain_image.xdata
-                assert gain_xdata
-
-                if gain_xdata.data_shape == corrected_image.shape[2:]:
-                    corrected_image *= gain_xdata.data
-                elif gain_xdata.data_shape == src1.xdata.data_shape[2:]:
-                    corrected_image *= gain_xdata.data[spectrum_range_y[0]:spectrum_range_y[1],
-                                                       spectrum_range_x[0]:spectrum_range_x[1]]
-                else:
-                    raise ValueError('Shape of gain image has to match last two dimensions of input data.')
-                del gain_xdata
-
-            dimensional_calibrations = copy.deepcopy(list(src1.xdata.dimensional_calibrations))
-            if bin_spectrum:
-                corrected_image = np.sum(corrected_image, axis=-2)
-                dimensional_calibrations = dimensional_calibrations[:2] + dimensional_calibrations[3:]
-
-            data_descriptor = DataAndMetadata.DataDescriptor(False, 2, 1 if bin_spectrum else 2)
-            metadata['nion.framewise_dark_correction.parameters'] = {'src1': src1._data_item.write_to_dict(),
-                                                                     'src2': src2._data_item.write_to_dict(),
-                                                                     'spectrum_region': spectrum_region._graphic.write_to_dict(),
-                                                                     'top_dark_region': top_dark_region._graphic.write_to_dict(),
-                                                                     'bottom_dark_region_region': bottom_dark_region._graphic.write_to_dict(),
-                                                                     'bin_spectrum': bin_spectrum,
-                                                                     'gain_image': gain_image[0].data_item.write_to_dict() if gain_image else None,
-                                                                     'gain_mode': gain_mode}
-
-            self.__new_xdata = DataAndMetadata.new_data_and_metadata(corrected_image,
-                                                                     intensity_calibration=src1.xdata.intensity_calibration,
-                                                                     dimensional_calibrations=dimensional_calibrations,
-                                                                     data_descriptor=data_descriptor,
-                                                                     metadata=metadata)
-        except Exception as e:
-            print(str(e))
-            import traceback
-            traceback.print_exc()
+        self.__new_xdata = DataAndMetadata.new_data_and_metadata(corrected_image,
+                                                                 intensity_calibration=src1_xdata.intensity_calibration,
+                                                                 dimensional_calibrations=dimensional_calibrations,
+                                                                 data_descriptor=data_descriptor)
 
     def commit(self) -> None:
         self.computation.set_referenced_xdata('target', self.__new_xdata)
@@ -304,6 +288,7 @@ def framewise_correction_4D(api: Facade.API_1, window: Facade.DocumentWindow, da
     document_controller = window._document_controller
     document_model = document_controller.document_model
     average_data_item = api.library.create_data_item()
+    average_data_item.data = np.zeros(data_item.xdata.data_shape[:2], dtype=float)
     api.library.create_computation('nion.calculate_4d_average',
                                    inputs={'src': data_item},
                                    outputs={'target': average_data_item})

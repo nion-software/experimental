@@ -16,8 +16,6 @@ from nion.swift.model import Graphics
 from nion.swift.model import Symbolic
 from nion.ui import UserInterface
 
-from .DataCache import DataCache
-
 _ = gettext.gettext
 
 _DataArrayType = np.typing.NDArray[typing.Any]
@@ -29,11 +27,6 @@ class CenterOfMass4D:
 
     def __init__(self, computation: Facade.Computation, **kwargs: typing.Any) -> None:
         self.computation = computation
-        if not hasattr(computation, 'data_cache'):
-            def modify_data_fn(data: _DataArrayType) -> _DataArrayType:
-                new_shape = data.shape[:2] + (-1,)
-                return np.reshape(data, new_shape)
-            typing.cast(typing.Any, computation).data_cache = DataCache(modify_data_fn=modify_data_fn)
 
         def create_panel_widget(ui: Facade.UserInterface, document_controller: Facade.DocumentWindow) -> Facade.ColumnWidget:
             def select_button_clicked() -> None:
@@ -71,50 +64,36 @@ class CenterOfMass4D:
     def execute(self, src: Facade.DataSource | None = None, map_regions: typing.Sequence[Graphics.Graphic] | None = None, **kwargs: typing.Any) -> None:
         assert src is not None
         assert map_regions is not None
-        try:
-            src_data_item = src.data_item
-            assert src_data_item.xdata
-            assert src_data_item.metadata is not None
-            data = typing.cast(DataCache, typing.cast(typing.Any, self.computation).data_cache).get_cached_data(src_data_item)
-            mask_data = np.zeros(src_data_item.xdata.data_shape[2:], dtype=np.bool_)
-            for region in map_regions:
-                mask_data = np.logical_or(mask_data, region.get_mask(src_data_item.xdata.data_shape[2:]))
-            grid_y, grid_x = np.mgrid[:mask_data.shape[0], :mask_data.shape[1]]
-            assert data is not None
-            if mask_data.any():
-                ind = np.arange(mask_data.size)[mask_data.ravel()]
-                selected_data = data[..., ind]
-                selected_data_sum = np.sum(selected_data, axis=-1)
-                com_y = (grid_y[mask_data]).ravel()
-                com_x = (grid_x[mask_data]).ravel()
-                new_data = np.array((np.sum(com_y*selected_data, axis=-1)/selected_data_sum,
-                                     np.sum(com_x*selected_data, axis=-1)/selected_data_sum), dtype=np.float32)
-                # y = np.unique(np.indices(mask_data.shape)[0][mask_data])
-                # x = np.unique(np.indices(mask_data.shape)[1][mask_data])
-                # new_data = np.sum(xdata.data[..., x][..., y, :], axis=(-2, -1))
-            else:
-                data_sum = np.sum(data, axis=-1)
-                new_data = np.array((np.sum(data * grid_y.ravel(), axis=-1)/data_sum,
-                                     np.sum(data * grid_x.ravel(), axis=-1))/data_sum, dtype=np.float32)
-            data_descriptor = DataAndMetadata.DataDescriptor(True, 0, 2)
-            empty_calibration = Calibration.Calibration()
-            intensity_calibration = Calibration.Calibration(units='px')
-            dimensional_calibrations = [empty_calibration] + list(src_data_item.dimensional_calibrations)[:2]
-            self.__new_xdata = DataAndMetadata.new_data_and_metadata(new_data,
-                                                                     dimensional_calibrations=dimensional_calibrations,
-                                                                     intensity_calibration=intensity_calibration,
-                                                                     data_descriptor=data_descriptor)
-            metadata = dict(src_data_item.metadata).copy()
-            metadata['nion.center_of_mass_4d.parameters'] = {'src': src_data_item._data_item.write_to_dict(),
-                                                             'map_regions': [region.write_to_dict() for region in map_regions]}
-            new_metadata = dict(self.__new_xdata.metadata).copy()
-            new_metadata.update(metadata)
-            self.__new_xdata._set_metadata(new_metadata)
-        except Exception as e:
-            print("-----------")
-            print(str(e))
-            import traceback
-            traceback.print_exc()
+        src_xdata = src.xdata
+        assert src_xdata is not None
+        src_data = np.reshape(src_xdata.data, src_xdata.data_shape[:2] + (-1,))  # flatten the last two dimensions
+        mask_data = np.zeros(src_xdata.data_shape[2:], dtype=np.bool_)
+        for region in map_regions:
+            mask_data = np.logical_or(mask_data, region.get_mask(src_xdata.data_shape[2:]))
+        grid_y, grid_x = np.mgrid[:mask_data.shape[0], :mask_data.shape[1]]
+        if mask_data.any():
+            ind = np.arange(mask_data.size)[mask_data.ravel()]
+            selected_data = src_data[..., ind]
+            selected_data_sum = np.sum(selected_data, axis=-1)
+            com_y = (grid_y[mask_data]).ravel()
+            com_x = (grid_x[mask_data]).ravel()
+            new_data = np.array((np.sum(com_y * selected_data, axis=-1) / selected_data_sum,
+                                 np.sum(com_x * selected_data, axis=-1) / selected_data_sum), dtype=np.float32)
+            # y = np.unique(np.indices(mask_data.shape)[0][mask_data])
+            # x = np.unique(np.indices(mask_data.shape)[1][mask_data])
+            # new_data = np.sum(xdata.src_data[..., x][..., y, :], axis=(-2, -1))
+        else:
+            data_sum = np.sum(src_data, axis=-1)
+            new_data = np.array((np.sum(src_data * grid_y.ravel(), axis=-1) / data_sum,
+                                 np.sum(src_data * grid_x.ravel(), axis=-1)) / data_sum, dtype=np.float32)
+        data_descriptor = DataAndMetadata.DataDescriptor(True, 0, 2)
+        empty_calibration = Calibration.Calibration()
+        intensity_calibration = Calibration.Calibration(units='px')
+        dimensional_calibrations = [empty_calibration] + list(src_xdata.dimensional_calibrations)[:2]
+        self.__new_xdata = DataAndMetadata.new_data_and_metadata(new_data,
+                                                                 dimensional_calibrations=dimensional_calibrations,
+                                                                 intensity_calibration=intensity_calibration,
+                                                                 data_descriptor=data_descriptor)
 
     def commit(self) -> None:
         self.computation.set_referenced_xdata('target', self.__new_xdata)

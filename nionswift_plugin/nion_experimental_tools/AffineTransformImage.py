@@ -37,65 +37,60 @@ class AffineTransformImage(Symbolic.ComputationHandlerLike):
         assert src_data_item
         assert vector_a is not None
         assert vector_b is not None
-        try:
-            vector_a_graphic = vector_a[0]
-            vector_b_graphic = vector_b[0]
-            vector_1 = (numpy.array(vector_a_graphic.end) - numpy.array(vector_a_graphic.start)) * 4.0
-            vector_2 = (numpy.array(vector_b_graphic.end) - numpy.array(vector_b_graphic.start)) * 4.0
+        vector_a_graphic = vector_a[0]
+        vector_b_graphic = vector_b[0]
+        vector_1 = (numpy.array(vector_a_graphic.end) - numpy.array(vector_a_graphic.start)) * 4.0
+        vector_2 = (numpy.array(vector_b_graphic.end) - numpy.array(vector_b_graphic.start)) * 4.0
 
-            matrix = numpy.array(((vector_1[1], vector_2[1]),
-                                  (vector_1[0], vector_2[0])))
-            xdata = src_data_item.xdata
-            if not xdata:
-                return
-            index: typing.Tuple[typing.Union[int, slice, numpy.signedinteger[typing.Any]], ...]
-            if (xdata.is_sequence or xdata.is_collection) and xdata.collection_dimension_count != 2:
-                navigation_dimensions = 0
-                if xdata.is_sequence:
-                    navigation_dimensions += 1
-                navigation_dimensions += xdata.collection_dimension_count
-                navigation_dimensions_shape = xdata.data.shape[:navigation_dimensions]
-                result_data = numpy.zeros_like(xdata.data)
-                new_coords = Core.calculate_coordinates_for_affine_transform(xdata.data[numpy.unravel_index(0, navigation_dimensions_shape)], matrix)
-                for i in range(numpy.prod(navigation_dimensions_shape)):
-                    index = numpy.unravel_index(i, navigation_dimensions_shape)
-                    transformed = xd.warp(xdata.data[index], new_coords)
-                    result_data[index] = transformed.data
-                self._affine_transformed_xdata = DataAndMetadata.new_data_and_metadata(result_data,
-                                                                                        intensity_calibration=xdata.intensity_calibration,
-                                                                                        dimensional_calibrations=xdata.dimensional_calibrations,
-                                                                                        data_descriptor=xdata.data_descriptor)
-            elif xdata.collection_dimension_count == 2: # Assume we want to distort allong the collection dimension in this case
-                navigation_dimensions_shape = tuple()
-                if xdata.is_sequence:
-                    navigation_dimensions_shape = (xdata.data_shape[0],) + xdata.data_shape[3:]
-                else:
-                    navigation_dimensions_shape = xdata.data_shape[2:]
-
-                if xdata.is_data_rgb_type:
-                    navigation_dimensions_shape = navigation_dimensions_shape[:-1]
-                index = numpy.unravel_index(0, navigation_dimensions_shape)
-                index = ((index[0],) if xdata.is_sequence else tuple()) + (slice(None), slice(None)) + index[-xdata.datum_dimension_count:]
-                new_coords = Core.calculate_coordinates_for_affine_transform(xdata.data[index], matrix)
-                result_data = numpy.zeros_like(xdata.data)
-                for i in range(numpy.prod(navigation_dimensions_shape)):
-                    index = numpy.unravel_index(i, navigation_dimensions_shape)
-                    index = ((index[0],) if xdata.is_sequence else tuple()) + (slice(None), slice(None)) + index[-xdata.datum_dimension_count:]
-                    transformed = xd.warp(xdata.data[index], new_coords)
-                    result_data[index] = transformed.data
-                self._affine_transformed_xdata = DataAndMetadata.new_data_and_metadata(result_data,
-                                                                                        intensity_calibration=xdata.intensity_calibration,
-                                                                                        dimensional_calibrations=xdata.dimensional_calibrations,
-                                                                                        data_descriptor=xdata.data_descriptor)
+        matrix = numpy.array(((vector_1[1], vector_2[1]),
+                              (vector_1[0], vector_2[0])))
+        xdata = src_data_item.xdata
+        if not xdata:
+            return
+        index: typing.Tuple[typing.Union[int, slice, numpy.signedinteger[typing.Any]], ...]
+        if (xdata.is_sequence or xdata.is_collection) and xdata.collection_dimension_count != 2:
+            navigation_dimensions = 0
+            if xdata.is_sequence:
+                navigation_dimensions += 1
+            navigation_dimensions += xdata.collection_dimension_count
+            navigation_dimensions_shape = xdata.data.shape[:navigation_dimensions]
+            result_data = numpy.zeros_like(xdata.data)
+            new_coords = Core.calculate_coordinates_for_affine_transform(xdata.data[numpy.unravel_index(0, navigation_dimensions_shape)], matrix)
+            for i in range(numpy.prod(navigation_dimensions_shape)):
+                index = numpy.unravel_index(i, navigation_dimensions_shape)
+                transformed = xd.warp(xdata.data[index], new_coords)
+                result_data[index] = transformed.data
+            self._affine_transformed_xdata = DataAndMetadata.new_data_and_metadata(result_data,
+                                                                                    intensity_calibration=xdata.intensity_calibration,
+                                                                                    dimensional_calibrations=xdata.dimensional_calibrations,
+                                                                                    data_descriptor=xdata.data_descriptor)
+        elif xdata.collection_dimension_count == 2: # Assume we want to distort allong the collection dimension in this case
+            navigation_dimensions_shape = tuple()
+            if xdata.is_sequence:
+                navigation_dimensions_shape = (xdata.data_shape[0],) + xdata.data_shape[3:]
             else:
-                self._affine_transformed_xdata = xd.affine_transform(xdata, matrix)
-            metadata = dict(self._affine_transformed_xdata.metadata).copy()
-            metadata["nion.affine_transform_image.transformation_matrix"] = matrix.tolist()
-            self._affine_transformed_xdata._set_metadata(metadata)
-        except:
-            import traceback
-            traceback.print_exc()
-            raise
+                navigation_dimensions_shape = xdata.data_shape[2:]
+
+            if xdata.is_data_rgb_type:
+                navigation_dimensions_shape = navigation_dimensions_shape[:-1]
+            index = numpy.unravel_index(0, navigation_dimensions_shape)
+            index = ((index[0],) if xdata.is_sequence else tuple()) + (slice(None), slice(None)) + index[-xdata.datum_dimension_count:]
+            new_coords = Core.calculate_coordinates_for_affine_transform(xdata.data[index], matrix)
+            result_data = numpy.zeros_like(xdata.data)
+            for i in range(numpy.prod(navigation_dimensions_shape)):
+                index = numpy.unravel_index(i, navigation_dimensions_shape)
+                index = ((index[0],) if xdata.is_sequence else tuple()) + (slice(None), slice(None)) + index[-xdata.datum_dimension_count:]
+                transformed = xd.warp(xdata.data[index], new_coords)
+                result_data[index] = transformed.data
+            self._affine_transformed_xdata = DataAndMetadata.new_data_and_metadata(result_data,
+                                                                                    intensity_calibration=xdata.intensity_calibration,
+                                                                                    dimensional_calibrations=xdata.dimensional_calibrations,
+                                                                                    data_descriptor=xdata.data_descriptor)
+        else:
+            self._affine_transformed_xdata = xd.affine_transform(xdata, matrix)
+        metadata = dict(self._affine_transformed_xdata.metadata).copy()
+        metadata["nion.affine_transform_image.transformation_matrix"] = matrix.tolist()
+        self._affine_transformed_xdata._set_metadata(metadata)
 
     def commit(self) -> None:
         self.computation.set_referenced_xdata("target", self._affine_transformed_xdata)

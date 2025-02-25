@@ -380,9 +380,9 @@ class ApplyShifts(MultiDimensionalProcessingComputation):
     def execute(self, *, input_data_item: Symbolic.DataSource, shifts_data_item: Symbolic.DataSource, axes_description: str, crop_to_valid: bool) -> None: # type: ignore
         input_xdata = input_data_item.xdata
         assert input_xdata is not None
-        assert shifts_data_item.display_item is not None
+        assert shifts_data_item.xdata is not None
         assert shifts_data_item.data is not None
-        if shifts_data_item.display_item.display_type == "line_plot":
+        if shifts_data_item.xdata.data_descriptor.datum_dimension_count == 1:
             shifts = shifts_data_item.data.T
         else:
             shifts  = shifts_data_item.data
@@ -664,12 +664,7 @@ class MakeTableau(Symbolic.ComputationHandlerLike):
 
     def execute(self, *, input_data_item: Facade.DataItem, scale: float) -> None: # type: ignore
         assert input_data_item.xdata is not None
-        try:
-            self.__result_xdata = MultiDimensionalProcessing.function_make_tableau_image(input_data_item.xdata, scale)
-        except:
-            import traceback
-            traceback.print_exc()
-            raise
+        self.__result_xdata = MultiDimensionalProcessing.function_make_tableau_image(input_data_item.xdata, scale)
         return None
 
     def commit(self) -> None:
@@ -811,8 +806,6 @@ class AlignImageSequence(Symbolic.ComputationHandlerLike):
         self.__integrated_input_xdata._set_metadata(input_xdata.metadata)
         if show_shifted_output:
             self.__shifted_xdata = aligned_input_xdata
-            assert input_data_item.data_item is not None
-            self.__input_title = input_data_item.data_item.title
         settings_dict = computation_settings.setdefault(self.computation._computation.processing_id, dict())
         # Reference index cannot be None, otherwise the computation will fail to run the next time we start it
         settings_dict["reference_index"] = reference_index or 0
@@ -851,7 +844,7 @@ class AlignImageSequence(Symbolic.ComputationHandlerLike):
             shifted_result_data_item = self.computation.get_result("shifted_data")
             if not shifted_result_data_item:
                 api = Facade.API_1(None, ApplicationModule.app)
-                shifted_result_data_item = api.library.create_data_item_from_data(numpy.zeros((1,1,1)), title=f"{self.__input_title} aligned")
+                shifted_result_data_item = api.library.create_data_item_from_data(numpy.zeros((1,1,1)))
                 api.application.document_windows[0].display_data_item(shifted_result_data_item)
                 self.computation.set_result("shifted_data", shifted_result_data_item)
             self.computation.set_referenced_xdata("shifted_data", shifted_xdata)
@@ -869,8 +862,8 @@ def align_image_sequence(api: Facade.API_1, window: Facade.DocumentWindow, data_
                          reference_index: int, relative_shifts: bool, max_shift: int, show_shifted_output: bool,
                          crop_to_valid: bool, bounds_graphic: Facade.Graphic | None) -> tuple[Facade.DataItem, Facade.DataItem, Facade.DataItem | None]:
     # Make a result data item with 3 dimensions to ensure we get a large_format data item
-    result_data_item = api.library.create_data_item_from_data(numpy.zeros((1,1,1)))#, title=f"{data_item.title} aligned and integrated")
-    shifts = api.library.create_data_item_from_data(numpy.zeros((2, 2)))#, title=f"{data_item.title} measured shifts")
+    result_data_item = api.library.create_data_item_from_data(numpy.zeros((1,1,1)))
+    shifts = api.library.create_data_item_from_data(numpy.zeros((2, 2)))
     inputs = {"input_data_item": {"object": data_item, "type": "data_source"},
               "reference_index": reference_index,
               "relative_shifts": relative_shifts,
@@ -883,7 +876,7 @@ def align_image_sequence(api: Facade.API_1, window: Facade.DocumentWindow, data_
 
     outputs = {"shifts": shifts, "integrated_sequence": result_data_item}
     if show_shifted_output:
-        shifted_result_data_item = api.library.create_data_item_from_data(numpy.zeros((1,1,1)), title=f"{data_item.title} aligned")
+        shifted_result_data_item = api.library.create_data_item_from_data(numpy.zeros((1,1,1)))
         outputs["shifted_data"] = shifted_result_data_item
     else:
         shifted_result_data_item = None

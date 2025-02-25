@@ -24,13 +24,8 @@ class SequenceJoin(Symbolic.ComputationHandlerLike):
         self.computation = computation
 
     def execute(self, *, src_list: typing.Optional[typing.Sequence[Facade.DataItem]] = None, **kwargs: typing.Any) -> None:
-        try:
-            src_list = src_list or list()
-            self.__new_xdata = xd.sequence_join([data_item.xdata for data_item in src_list if data_item.xdata])
-        except Exception as e:
-            print(str(e))
-            import traceback
-            traceback.print_exc()
+        src_list = src_list or list()
+        self.__new_xdata = xd.sequence_join([data_item.xdata for data_item in src_list if data_item.xdata])
 
     def commit(self) -> None:
         self.computation.set_referenced_xdata("target", self.__new_xdata)
@@ -46,13 +41,8 @@ class SequenceSplit(Symbolic.ComputationHandlerLike):
         self.computation = computation
 
     def execute(self, *, src: typing.Optional[Facade.DataItem] = None, **kwargs: typing.Any) -> None:
-        try:
-            assert src and src.xdata
-            self.__new_xdata_list = xd.sequence_split(src.xdata)
-        except Exception as e:
-            print(str(e))
-            import traceback
-            traceback.print_exc()
+        assert src and src.xdata
+        self.__new_xdata_list = xd.sequence_split(src.xdata)
 
     def commit(self) -> None:
         if self.__new_xdata_list:
