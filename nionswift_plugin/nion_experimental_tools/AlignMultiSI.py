@@ -15,6 +15,12 @@ _ = gettext.gettext
 
 
 class AlignMultiSI(Symbolic.ComputationHandlerLike):
+    label = _("Align and Integrate SI Sequence")
+    outputs = {"shifts": {"label": _("Measured Shifts")},
+               "aligned_haadf": {"label": _("Aligned HAADF")},
+               "aligned_si": {"label": _("Aligned SI")},
+               }
+
     def __init__(self, computation: Facade.Computation, **kwargs: typing.Any) -> None:
         self.computation = computation
         self.progress_updated_event = Event.Event()
@@ -135,7 +141,7 @@ class AlignMultiSI(Symbolic.ComputationHandlerLike):
 
 class AlignMultiSI2(Symbolic.ComputationHandlerLike):
     computation_id = "eels.align_multi_si2"
-    label = _("Align and integrate SI sequence")
+    label = _("Align and Integrate SI Sequence")
     inputs = {"haadf_data_item": {"label": _("HHADF data item"), "data_type": "xdata"},
               "si_data_item": {"label": _("SI data item"), "data_type": "xdata"},
               "reference_index": {"label": _("Reference index for shifts")},
@@ -143,7 +149,7 @@ class AlignMultiSI2(Symbolic.ComputationHandlerLike):
               "max_shift": {"label": _("Max shift between consecutive frames (in pixels, <= 0 to disable)")},
               "bounds_graphic": {"label": _("Shift bounds")},
               }
-    outputs = {"shifts": {"label": _("Shifts")},
+    outputs = {"shifts": {"label": _("Measured Shifts")},
                "integrated_haadf": {"label": _("Integrated HAADF")},
                "integrated_si": {"label": _("Integrated SI")},
                }
@@ -208,8 +214,8 @@ def menu_item_align_multi_si(api: API, window: API.DocumentWindow) -> None:
     align_multi_si(api, window, haadf_sequence_data_item, align_region, si_sequence_data_item, align_index)
 
 def align_multi_si(api: API, window: API.DocumentWindow, haadf_sequence_data_item: Facade.DataItem, bounds_graphic: Facade.Graphic | None, si_sequence_data_item: Facade.DataItem, align_index: int) -> tuple[Facade.DataItem, Facade.DataItem]:
-    aligned_haadf = api.library.create_data_item_from_data(numpy.zeros((1,1,1)), title=f"{haadf_sequence_data_item.title} (Aligned)")
-    aligned_si = api.library.create_data_item_from_data(numpy.zeros((1,1,1)), title=f"{si_sequence_data_item.title} (Aligned)")
+    aligned_haadf = api.library.create_data_item_from_data(numpy.zeros((1,1,1)))
+    aligned_si = api.library.create_data_item_from_data(numpy.zeros((1,1,1)))
 
     inputs = {"si_sequence_data_item": si_sequence_data_item,
               "haadf_sequence_data_item": haadf_sequence_data_item,
@@ -229,10 +235,10 @@ def align_multi_si(api: API, window: API.DocumentWindow, haadf_sequence_data_ite
 
 
 def align_multi_si2(api: API, window: API.DocumentWindow, haadf_sequence_data_item: Facade.DataItem, bounds_graphic: Facade.Graphic | None, si_sequence_data_item: Facade.DataItem) -> tuple[Facade.DataItem, Facade.DataItem, Facade.DataItem]:
-    aligned_haadf = api.library.create_data_item(title=f"{haadf_sequence_data_item.title} (Aligned and Integrated)")
+    aligned_haadf = api.library.create_data_item()
     # Make a result data item with 3 dimensions to ensure we get a large_format data item
-    aligned_si = api.library.create_data_item_from_data(numpy.zeros((1,1,1)), title=f"{si_sequence_data_item.title} (Aligned and Integrated)")
-    shifts = api.library.create_data_item_from_data(numpy.zeros((2, 2)), title=f"{haadf_sequence_data_item.title} (Measured Shifts)")
+    aligned_si = api.library.create_data_item_from_data(numpy.zeros((1,1,1)))
+    shifts = api.library.create_data_item_from_data(numpy.zeros((2, 2)))
 
     haadf_xdata = haadf_sequence_data_item.xdata
     assert haadf_xdata

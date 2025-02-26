@@ -296,46 +296,6 @@ class Map4DRGBMenuItem:
             except Exception as e:
                 self.__show_tool_tips(str(e))
 
-    def old_menu_item_execute(self, window: Facade.DocumentWindow) -> None:
-        document_controller = window._document_controller
-        selected_display_item = document_controller.selected_display_item
-        data_item = (selected_display_item.data_items[0] if
-                     selected_display_item and len(selected_display_item.data_items) > 0 else None)
-
-        if data_item:
-            api_data_item = Facade.DataItem(data_item)
-            if not (api_data_item.xdata and api_data_item.xdata.is_data_4d):
-                self.__show_tool_tips('wrong_shape')
-                return
-            map_data_item = self.__api.library.create_data_item(title='Map 4D (RGB) of ' + data_item.title)
-            # the following uses internal API and should not be used as example code.
-            computation = document_controller.document_model.create_computation()
-            computation.create_input_item("src", Symbolic.make_item(data_item))
-            computation.create_input_item("map_regions_r", Symbolic.make_item_list([]))
-            computation.create_input_item("map_regions_g", Symbolic.make_item_list([]))
-            computation.create_input_item("map_regions_b", Symbolic.make_item_list([]))
-            computation.create_variable("gamma_r", value_type="real", value=1.0)
-            computation.create_variable("gamma_g", value_type="real", value=1.0)
-            computation.create_variable("gamma_b", value_type="real", value=1.0)
-            computation.create_variable("enabled_r", value_type="boolean", value=True)
-            computation.create_variable("enabled_g", value_type="boolean", value=True)
-            computation.create_variable("enabled_b", value_type="boolean", value=True)
-            computation.processing_id = "nion.map_4d_rgb.2"
-            document_controller.document_model.set_data_item_computation(map_data_item._data_item, computation)
-            map_display_item = document_controller.document_model.get_display_item_for_data_item(map_data_item._data_item)
-            assert map_display_item
-            document_controller.show_display_item(map_display_item)
-            graphic = Graphics.PointGraphic()
-            graphic.label = "Pick"
-            graphic.role = "collection_index"
-            map_display_item.add_graphic(graphic)
-            # see note above.
-            self.__computation_data_items.update({str(data_item.uuid): 'source',
-                                                  str(map_data_item._data_item.uuid): 'map_4d'})
-            self.__show_tool_tips()
-            self.__display_item_changed_event_listener = (
-                           document_controller.focused_display_item_changed_event.listen(self.__display_item_changed))
-
 
 def map_4D_RGB(api: Facade.API_1, window: Facade.DocumentWindow, display_item: Facade.Display,
                map_regions_r: typing.Sequence[Facade.Graphic], map_regions_g: typing.Sequence[Facade.Graphic],

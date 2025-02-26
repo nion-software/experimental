@@ -105,7 +105,7 @@ def iDPC(api: Facade.API_1, window: API_1_0.DocumentWindow, data_item: Facade.Da
     if crop_region is None:
         crop_region = data_item.add_rectangle_region(0.5, 0.5, 0.75, 0.75)
     crop_region.label = 'Crop'
-    result_data_item = api.library.create_data_item(title=f"{data_item.title} (iDPC)")
+    result_data_item = api.library.create_data_item()
     api.library.create_computation("nion.make_idpc",
                                    inputs={"src": data_item,
                                            "gradient_x_index": 0,

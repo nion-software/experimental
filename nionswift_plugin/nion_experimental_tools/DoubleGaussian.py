@@ -79,8 +79,8 @@ class DoubleGaussian(Symbolic.ComputationHandlerLike):
 
 
 def double_gaussian(api: API_1_0.API, window: API_1_0.DocumentWindow, data_item: Facade.DataItem) -> tuple[Facade.DataItem, Facade.DataItem]:
-    result_data_item = api.library.create_data_item(title=f"{data_item.title} (Double Gaussian)")
-    fft_data_item = api.library.create_data_item(title=f"{data_item.title} (Filtered FFT)")
+    result_data_item = api.library.create_data_item()
+    fft_data_item = api.library.create_data_item()
     graphic = Graphics.RingGraphic()
     graphic.radius_1 = 0.15
     graphic.radius_2 = 0.25
