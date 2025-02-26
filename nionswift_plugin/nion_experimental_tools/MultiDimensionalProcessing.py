@@ -313,7 +313,7 @@ class MeasureShiftsMenuItemDelegate:
 
 class ApplyShifts(MultiDimensionalProcessingComputation):
     computation_id = "nion.apply_shifts"
-    label = _("Apply shifts")
+    label = _("Apply Shifts")
     inputs = {"input_data_item": {"label": _("Input data item"), "data_type": "xdata"},
               "shifts_data_item": {"label": _("Shifts data item"), "data_type": "xdata"},
               "axes_description": {"label": _("Apply shift along this axis")},
@@ -435,7 +435,6 @@ class ApplyShifts(MultiDimensionalProcessingComputation):
 
 def apply_shifts(api: Facade.API_1, window: Facade.DocumentWindow, input_di: Facade.DataItem, shifts_di: Facade.DataItem, shift_axis: str) -> Facade.DataItem:
     data_item = DataItem.DataItem(large_format=True)
-    data_item.title = f"{input_di.title} (Shifted)"
     window._document_controller.document_model.append_data_item(data_item)
     input_xdata = input_di.xdata
     assert input_xdata
@@ -533,7 +532,7 @@ class IntegrateAlongAxisMenuItemDelegate:
         integration_axes = IntegrateAlongAxis.guess_starting_axis(selected_data_item.xdata, graphic=integrate_graphic)
 
         # Make a result data item with 3 dimensions to ensure we get a large_format data item
-        result_data_item = self.__api.library.create_data_item_from_data(numpy.zeros((1,1,1)), title="Integrated {}".format(selected_data_item.title))
+        result_data_item = self.__api.library.create_data_item_from_data(numpy.zeros((1,1,1)))
 
         inputs: typing.MutableMapping[str, typing.Any]
         inputs = {"input_data_item": {"object": selected_data_item, "type": "data_source"},

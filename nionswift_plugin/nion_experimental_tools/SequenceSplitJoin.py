@@ -16,7 +16,7 @@ _ = gettext.gettext
 
 class SequenceJoin(Symbolic.ComputationHandlerLike):
     computation_id = "nion.join_sequence"
-    label = _("Join Sequence(s)")
+    label = _("Join Sequence")
     inputs = {"src_list": {"label": _("Source data item list")}}
     outputs = {"target": {"label": _("Joined sequence")}}
 
@@ -80,7 +80,7 @@ def sequence_join(api: Facade.API_1, window: Facade.DocumentWindow, display_item
     if not data_items:
         return None
 
-    result_data_item = api.library.create_data_item_from_data(numpy.zeros((1, 1, 1)), title=f"{data_items[0].title} (Joined)")
+    result_data_item = api.library.create_data_item_from_data(numpy.zeros((1, 1, 1)))
     api.library.create_computation("nion.join_sequence",
                                    inputs={"src_list": data_items},
                                    outputs={"target": result_data_item})

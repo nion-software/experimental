@@ -14,15 +14,15 @@ _ = gettext.gettext
 
 class AlignMultiDimensionalSequence(Symbolic.ComputationHandlerLike):
     computation_id = "nion.align_multi_d_sequence"
-    label = _("Align multi-dimensional sequence")
+    label = _("Align Multi-Dimensional Sequence")
     inputs = {"si_sequence_data_item": {"label": _("Multi-dimensional sequence data item"), "data_type": "xdata"},
               "haadf_sequence_data_item": {"label": _("HAADF sequence data item"), "data_type": "xdata"},
               "align_index": {"label": _("Align to this slice")},
               "align_region": {"label": _("Alignment bounds")},
               "align_collection_index": {"label": _("Calculate shifts from this slice")}
               }
-    outputs = {"aligned_haadf": {"label": _("Aligned HAADF sequence")},
-               "aligned_si": {"label": _("Aligned multi-dimensional sequence")}}
+    outputs = {"aligned_haadf": {"label": _("Aligned HAADF Sequence")},
+               "aligned_si": {"label": _("Aligned Multi-Dimensional Sequence")}}
 
     def __init__(self, computation: Facade.Computation, **kwargs: typing.Any) -> None:
         self.computation = computation
@@ -131,8 +131,8 @@ def align_multi_si(api: API_1_0.API, window: API_1_0.DocumentWindow, data_item1:
         else:
             raise ValueError(error_msg)
 
-        aligned_haadf = api.library.create_data_item_from_data(numpy.zeros((1,1,1)), title="Aligned {}".format(haadf_sequence_data_item.title))
-        aligned_si = api.library.create_data_item_from_data(numpy.zeros((1,1,1)), title="Aligned {}".format(si_sequence_data_item.title))
+        aligned_haadf = api.library.create_data_item_from_data(numpy.zeros((1,1,1)))
+        aligned_si = api.library.create_data_item_from_data(numpy.zeros((1,1,1)))
         outputs = {"aligned_haadf": aligned_haadf,
                    "aligned_si": aligned_si}
     else:
@@ -141,7 +141,7 @@ def align_multi_si(api: API_1_0.API, window: API_1_0.DocumentWindow, data_item1:
         si_sequence_data_item = haadf_sequence_data_item
         align_collection_index = haadf_sequence_data_item.display._display.display_data_channel.collection_index[0]
         aligned_haadf = None
-        aligned_si = api.library.create_data_item_from_data(numpy.zeros((1,1,1)), title="Aligned {}".format(si_sequence_data_item.title))
+        aligned_si = api.library.create_data_item_from_data(numpy.zeros((1,1,1)))
         outputs = {"aligned_si": aligned_si}
 
     align_region = None

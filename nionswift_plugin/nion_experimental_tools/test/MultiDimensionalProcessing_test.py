@@ -225,8 +225,8 @@ class TestMultiDimensionalProcessing(unittest.TestCase):
             # check results
             self.assertEqual(4, len(document_model.data_items))
             self.assertFalse(any(computation.error_text for computation in document_model.computations))
-            self.assertIn("Aligned", aligned_haadf.title)
-            self.assertIn("Aligned", aligned_si.title)
+            self.assertIn("(Align and Integrate SI Sequence - Aligned HAADF)", aligned_haadf.title)
+            self.assertIn("(Align and Integrate SI Sequence - Aligned SI)", aligned_si.title)
 
     def test_align_si2_computation(self) -> None:
         with create_memory_profile_context() as test_context:
@@ -253,8 +253,8 @@ class TestMultiDimensionalProcessing(unittest.TestCase):
             # check results
             self.assertEqual(5, len(document_model.data_items))
             self.assertFalse(any(computation.error_text for computation in document_model.computations))
-            self.assertIn("Aligned and Integrated", aligned_haadf.title)
-            self.assertIn("Aligned and Integrated", aligned_si.title)
+            self.assertIn("(Align and Integrate SI Sequence - Integrated HAADF)", aligned_haadf.title)
+            self.assertIn("(Align and Integrate SI Sequence - Integrated SI)", aligned_si.title)
             self.assertIn("Measured Shifts", shifts.title)
 
     def test_align_sequence_of_multi_dim_data_computation(self) -> None:
@@ -388,7 +388,7 @@ class TestMultiDimensionalProcessing(unittest.TestCase):
             document_controller.periodic()
             self.assertEqual(3, len(document_model.data_items))
             self.assertFalse(any(computation.error_text for computation in document_model.computations))
-            self.assertIn("Shifted", shifted_data_item.title)
+            self.assertIn("(Apply Shifts)", shifted_data_item.title)
 
     def test_crop_multidimensional_computation(self) -> None:
         with create_memory_profile_context() as test_context:
@@ -471,7 +471,7 @@ class TestMultiDimensionalProcessing(unittest.TestCase):
             # check results
             self.assertEqual(3, len(document_model.data_items))
             self.assertFalse(any(computation.error_text for computation in document_model.computations))
-            self.assertIn("Joined", result_data_item.title)
+            self.assertIn("(Join Sequence)", result_data_item.title)
 
     def test_sequence_split_computation(self) -> None:
         with create_memory_profile_context() as test_context:

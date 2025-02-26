@@ -24,7 +24,10 @@ class MakeColorCOM(Symbolic.ComputationHandlerLike):
               "rotation": {"label": _("Rotation (deg) or 'None' for automatic")},
               "crop_region": {"label": _("Crop")},
               }
-    outputs = {"output": {"label": _("Color COM")}}
+    outputs = {
+        "output": {"label": _("Color COM")},
+        "divergence": {"label": _("Divergence")}
+    }
 
     def __init__(self, computation: Facade.Computation, **kwargs: typing.Any) -> None:
         self.computation = computation
@@ -112,8 +115,8 @@ def color_COM(api: API, window: API.DocumentWindow, data_item: Facade.DataItem) 
     assert data_item.xdata.datum_dimension_count == 2
 
     result_data_items = {
-        "output": api.library.create_data_item(title=f"{data_item.title} (Color COM)"),
-        "divergence": api.library.create_data_item(title=f"{data_item.title} (Divergence)")
+        "output": api.library.create_data_item(),
+        "divergence": api.library.create_data_item()
     }
     crop_region = None
     for graphic in data_item.graphics:

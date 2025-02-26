@@ -118,7 +118,7 @@ class AffineTransformMenuItem:
 
         assert data_item.xdata
 
-        result_data_item = self.__api.library.create_data_item_from_data_and_metadata(DataAndMetadata.new_data_and_metadata(numpy.zeros_like(data_item.data), data_descriptor=data_item.xdata.data_descriptor), title="Affine Transformed {}".format(data_item.title))
+        result_data_item = self.__api.library.create_data_item_from_data_and_metadata(DataAndMetadata.new_data_and_metadata(numpy.zeros_like(data_item.data), data_descriptor=data_item.xdata.data_descriptor))
         self.__api.library.create_computation("nion.affine_transform_image",
                                               inputs={"src_data_item": data_item, "vector_a": [vector_a], "vector_b": [vector_b]},
                                               outputs={"target": result_data_item})
@@ -175,7 +175,7 @@ class CopyAffineTransformMenuItem:
             typing.cast(Graphics.LineGraphic, vector_b._graphic).end_arrow_enabled = True
 
             assert data_item_.xdata
-            result_data_item = self.__api.library.create_data_item_from_data_and_metadata(DataAndMetadata.new_data_and_metadata(numpy.zeros_like(data_item_.data), data_descriptor=data_item_.xdata.data_descriptor), title="Affine Transformed {}".format(data_item_.title))
+            result_data_item = self.__api.library.create_data_item_from_data_and_metadata(DataAndMetadata.new_data_and_metadata(numpy.zeros_like(data_item_.data), data_descriptor=data_item_.xdata.data_descriptor))
             self.__api.library.create_computation("nion.affine_transform_image",
                                                   inputs={"src_data_item": data_item_, "vector_a": [vector_a], "vector_b": [vector_b]},
                                                   outputs={"target": result_data_item})

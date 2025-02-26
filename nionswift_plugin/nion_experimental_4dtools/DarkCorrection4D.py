@@ -36,8 +36,8 @@ class TotalBin4D:
 class DarkCorrection4D:
     label = _("4D Dark Correction")
 
-    def __init__(self, api: Facade.API_1, computation: Facade.Computation, **kwargs: typing.Any) -> None:
-        self.__api = api
+    def __init__(self, computation: Facade.Computation, **kwargs: typing.Any) -> None:
+        self.__api = getattr(computation, "api")
         self.computation = computation
 
         def create_panel_widget(ui: Facade.UserInterface, document_controller: Facade.DocumentWindow) -> Facade.ColumnWidget:
@@ -263,7 +263,6 @@ def dark_correction_4D(api: Facade.API_1, window: Facade.DocumentWindow, data_it
     crop_region._graphic.is_bounds_constrained = True
     dark_corrected_data_item = Facade.DataItem(DataItem.DataItem(large_format=True))
     dark_corrected_data_item._data_item.session_id = document_model.session_id
-    dark_corrected_data_item._data_item.title = f"{data_item._data_item.title} ({DarkCorrection4D.label})"  # explicit because auto doesn't handle multiple inputs
     document_model.append_data_item(dark_corrected_data_item._data_item)
     api.library.create_computation('nion.dark_correction_4d',
                                    inputs={'src1': data_item,
@@ -280,9 +279,9 @@ def dark_correction_4D(api: Facade.API_1, window: Facade.DocumentWindow, data_it
     return total_bin_data_item, dark_corrected_data_item
 
 
-def register_computations(api: Facade.API_1) -> None:
+def register_computations() -> None:
     Symbolic.register_computation_type('nion.total_bin_4d_SI', TotalBin4D)
-    Symbolic.register_computation_type('nion.dark_correction_4d', functools.partial(DarkCorrection4D, api))
+    Symbolic.register_computation_type('nion.dark_correction_4d', DarkCorrection4D)
 
 
 class DarkCorrection4DExtension:
@@ -295,7 +294,7 @@ class DarkCorrection4DExtension:
         api = api_broker.get_api(version="1", ui_version="1")
         # be sure to keep a reference or it will be closed immediately.
         self.__menu_item_ref = api.create_menu_item(DarkCorrection4DMenuItem(api))
-        register_computations(api)
+        register_computations()
 
     def close(self) -> None:
         self.__menu_item_ref.close()

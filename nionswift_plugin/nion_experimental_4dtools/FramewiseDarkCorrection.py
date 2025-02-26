@@ -39,8 +39,8 @@ class CalculateAverage4D:
 class FramewiseDarkCorrection:
     label = _("Framewise Dark Correction")
 
-    def __init__(self, api: Facade.API_1, computation: Facade.Computation, **kwargs: typing.Any) -> None:
-        self.__api = api
+    def __init__(self, computation: Facade.Computation, **kwargs: typing.Any) -> None:
+        self.__api = getattr(computation, "api")
         self.computation = computation
 
         def create_panel_widget(ui: Facade.UserInterface, document_controller: Facade.DocumentWindow) -> Facade.ColumnWidget:
@@ -308,7 +308,6 @@ def framewise_correction_4D(api: Facade.API_1, window: Facade.DocumentWindow, da
     dark_corrected_data_item = Facade.DataItem(DataItem.DataItem(large_format=True))
     document_model.append_data_item(dark_corrected_data_item._data_item)
     dark_corrected_data_item._data_item.session_id = document_model.session_id
-    dark_corrected_data_item._data_item.title = f"{data_item._data_item.title} ({FramewiseDarkCorrection.label})"  # explicit because auto doesn't handle multiple inputs
     api.library.create_computation('nion.framewise_dark_correction',
                                    inputs={'src1': data_item,
                                            'src2': average_data_item,
@@ -325,9 +324,9 @@ def framewise_correction_4D(api: Facade.API_1, window: Facade.DocumentWindow, da
     return average_data_item, dark_corrected_data_item
 
 
-def register_computations(api: Facade.API_1) -> None:
+def register_computations() -> None:
     Symbolic.register_computation_type('nion.calculate_4d_average', CalculateAverage4D)
-    Symbolic.register_computation_type('nion.framewise_dark_correction', functools.partial(FramewiseDarkCorrection, api))
+    Symbolic.register_computation_type('nion.framewise_dark_correction', FramewiseDarkCorrection)
 
 
 class FramewiseDarkExtension:
@@ -340,7 +339,7 @@ class FramewiseDarkExtension:
         api = api_broker.get_api(version="1", ui_version="1")
         # be sure to keep a reference or it will be closed immediately.
         self.__menu_item_ref = api.create_menu_item(FramewiseDarkMenuItem(api))
-        register_computations(api)
+        register_computations()
 
     def close(self) -> None:
         self.__menu_item_ref.close()
