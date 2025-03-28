@@ -27,7 +27,7 @@ class TestFindLocalMaxima(unittest.TestCase):
 
     def setUp(self):
         self._test_setup = TestContext.TestSetup(set_global=True)
-        self.app.workspace_dir = str()
+        self._test_setup.app.workspace_dir = str()
 
     def tearDown(self):
         self._test_setup = typing.cast(typing.Any, None)
