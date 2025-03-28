@@ -1,4 +1,5 @@
 import gettext
+import typing
 import unittest
 
 import numpy
@@ -35,11 +36,11 @@ def create_memory_profile_context() -> TestContext.MemoryProfileContext:
 class TestMultiDimensionalProcessing(unittest.TestCase):
 
     def setUp(self):
-        self.app = Application.Application(TestUI.UserInterface(), set_global=True)
+        self._test_setup = TestContext.TestSetup(set_global=True)
         self.app.workspace_dir = str()
 
     def tearDown(self):
-        pass
+        self._test_setup = typing.cast(typing.Any, None)
 
     def test_function_crop_along_axis_3d(self):
         with self.subTest("Test for a sequence of 2D images. Crop sequence axis."):

@@ -1,4 +1,5 @@
 import gettext
+import typing
 import unittest
 
 import numpy
@@ -25,11 +26,11 @@ def create_memory_profile_context() -> TestContext.MemoryProfileContext:
 class TestFindLocalMaxima(unittest.TestCase):
 
     def setUp(self):
-        self.app = Application.Application(TestUI.UserInterface(), set_global=True)
+        self._test_setup = TestContext.TestSetup(set_global=True)
         self.app.workspace_dir = str()
 
     def tearDown(self):
-        pass
+        self._test_setup = typing.cast(typing.Any, None)
 
     def test_function_find_local_maxima_for_1D_data(self):
         data = numpy.zeros(100)
