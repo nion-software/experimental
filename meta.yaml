@@ -1,9 +1,9 @@
 package:
   name: 'nionswift-experimental'
-  version: '0.7.15'
+  version: '0.7.16'
 
 source:
-  git_rev: 0.7.15
+  git_rev: 0.7.16
   git_url: https://github.com/nion-software/experimental.git
 
 build:
@@ -19,8 +19,8 @@ requirements:
     - setuptools
   run:
     - python >=3.11
-    - nionswift >=16.13,<17.0
-    - nionui >=9.0,<10.0
+    - nionswift >=16.15,<17.0
+    - nionui >=10.0,<11.0
 
 test:
   imports:

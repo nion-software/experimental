@@ -1,6 +1,11 @@
 Changelog (nionswift-experimental)
 ==================================
 
+0.7.16 (2025-04-23)
+-------------------
+- Package dependencies updated.
+- Modify computations to use auto-titling.
+
 0.7.15 (2025-01-06)
 -------------------
 - Update to use latest nionswift dependency.
