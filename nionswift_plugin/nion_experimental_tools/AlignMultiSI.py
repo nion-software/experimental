@@ -214,8 +214,8 @@ def menu_item_align_multi_si(api: API, window: API.DocumentWindow) -> None:
     align_multi_si(api, window, haadf_sequence_data_item, align_region, si_sequence_data_item, align_index)
 
 def align_multi_si(api: API, window: API.DocumentWindow, haadf_sequence_data_item: Facade.DataItem, bounds_graphic: Facade.Graphic | None, si_sequence_data_item: Facade.DataItem, align_index: int) -> tuple[Facade.DataItem, Facade.DataItem]:
-    aligned_haadf = api.library.create_data_item_from_data(numpy.zeros((1,1,1)))
-    aligned_si = api.library.create_data_item_from_data(numpy.zeros((1,1,1)))
+    aligned_haadf = api.library.create_data_item()
+    aligned_si = api.library.create_data_item()
 
     inputs = {"si_sequence_data_item": si_sequence_data_item,
               "haadf_sequence_data_item": haadf_sequence_data_item,
@@ -236,8 +236,7 @@ def align_multi_si(api: API, window: API.DocumentWindow, haadf_sequence_data_ite
 
 def align_multi_si2(api: API, window: API.DocumentWindow, haadf_sequence_data_item: Facade.DataItem, bounds_graphic: Facade.Graphic | None, si_sequence_data_item: Facade.DataItem) -> tuple[Facade.DataItem, Facade.DataItem, Facade.DataItem]:
     aligned_haadf = api.library.create_data_item()
-    # Make a result data item with 3 dimensions to ensure we get a large_format data item
-    aligned_si = api.library.create_data_item_from_data(numpy.zeros((1,1,1)))
+    aligned_si = api.library.create_data_item()
     shifts = api.library.create_data_item_from_data(numpy.zeros((2, 2)))
 
     haadf_xdata = haadf_sequence_data_item.xdata

@@ -261,8 +261,7 @@ class MeasureShifts(MultiDimensionalProcessingComputation):
 
 
 def measure_shifts(api: Facade.API_1, window: Facade.DocumentWindow, data_item: Facade.DataItem, bounds_graphic: Facade.Graphic | None, shift_axis: str) -> Facade.DataItem:
-    # Make a result data item with 3 dimensions to ensure we get a large_format data item
-    result_data_item = api.library.create_data_item_from_data(numpy.zeros((1,1,1)))
+    result_data_item = api.library.create_data_item()
 
     settings_dict = computation_settings.get("nion.measure_shifts", dict())
     inputs = {"input_data_item": {"object": data_item, "type": "data_source"},
@@ -531,8 +530,7 @@ class IntegrateAlongAxisMenuItemDelegate:
 
         integration_axes = IntegrateAlongAxis.guess_starting_axis(selected_data_item.xdata, graphic=integrate_graphic)
 
-        # Make a result data item with 3 dimensions to ensure we get a large_format data item
-        result_data_item = self.__api.library.create_data_item_from_data(numpy.zeros((1,1,1)))
+        result_data_item = self.__api.library.create_data_item()
 
         inputs: typing.MutableMapping[str, typing.Any]
         inputs = {"input_data_item": {"object": selected_data_item, "type": "data_source"},
@@ -596,8 +594,7 @@ class Crop(MultiDimensionalProcessingComputation):
 
 
 def crop_multi_dimensional(api: Facade.API_1, window: Facade.DocumentWindow, data_item: Facade.DataItem, crop_graphic: Facade.Graphic | None, crop_axes: str) -> Facade.DataItem:
-    # Make a result data item with 3 dimensions to ensure we get a large_format data item
-    result_data_item = api.library.create_data_item_from_data(numpy.zeros((1, 1, 1)))
+    result_data_item = api.library.create_data_item()
 
     inputs: typing.MutableMapping[str, typing.Any]
     inputs = {"input_data_item": {"object": data_item, "type": "data_source"},
@@ -675,8 +672,7 @@ class MakeTableau(Symbolic.ComputationHandlerLike):
 def tableau(api: Facade.API_1, window: Facade.DocumentWindow, data_item: Facade.DataItem, scale: float) -> Facade.DataItem:
     inputs = {"input_data_item": {"object": data_item, "type": "data_source"}, "scale": scale}
 
-    # Make a result data item with 3 dimensions to ensure we get a large_format data item
-    result_data_item = api.library.create_data_item_from_data(numpy.zeros((1,1,1)))
+    result_data_item = api.library.create_data_item()
 
     api.library.create_computation("nion.make_tableau_image",
                                    inputs=inputs,
@@ -843,7 +839,7 @@ class AlignImageSequence(Symbolic.ComputationHandlerLike):
             shifted_result_data_item = self.computation.get_result("shifted_data")
             if not shifted_result_data_item:
                 api = Facade.API_1(None, ApplicationModule.app)
-                shifted_result_data_item = api.library.create_data_item_from_data(numpy.zeros((1,1,1)))
+                shifted_result_data_item = api.library.create_data_item()
                 api.application.document_windows[0].display_data_item(shifted_result_data_item)
                 self.computation.set_result("shifted_data", shifted_result_data_item)
             self.computation.set_referenced_xdata("shifted_data", shifted_xdata)
@@ -860,9 +856,8 @@ class AlignImageSequence(Symbolic.ComputationHandlerLike):
 def align_image_sequence(api: Facade.API_1, window: Facade.DocumentWindow, data_item: Facade.DataItem,
                          reference_index: int, relative_shifts: bool, max_shift: int, show_shifted_output: bool,
                          crop_to_valid: bool, bounds_graphic: Facade.Graphic | None) -> tuple[Facade.DataItem, Facade.DataItem, Facade.DataItem | None]:
-    # Make a result data item with 3 dimensions to ensure we get a large_format data item
-    result_data_item = api.library.create_data_item_from_data(numpy.zeros((1,1,1)))
-    shifts = api.library.create_data_item_from_data(numpy.zeros((2, 2)))
+    result_data_item = api.library.create_data_item()
+    shifts = api.library.create_data_item_from_data(numpy.zeros((2, 2)))  # create real data so we can update the display below
     inputs = {"input_data_item": {"object": data_item, "type": "data_source"},
               "reference_index": reference_index,
               "relative_shifts": relative_shifts,
@@ -875,7 +870,7 @@ def align_image_sequence(api: Facade.API_1, window: Facade.DocumentWindow, data_
 
     outputs = {"shifts": shifts, "integrated_sequence": result_data_item}
     if show_shifted_output:
-        shifted_result_data_item = api.library.create_data_item_from_data(numpy.zeros((1,1,1)))
+        shifted_result_data_item = api.library.create_data_item()
         outputs["shifted_data"] = shifted_result_data_item
     else:
         shifted_result_data_item = None
