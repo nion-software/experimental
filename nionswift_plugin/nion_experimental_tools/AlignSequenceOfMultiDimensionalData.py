@@ -131,8 +131,8 @@ def align_multi_si(api: API_1_0.API, window: API_1_0.DocumentWindow, data_item1:
         else:
             raise ValueError(error_msg)
 
-        aligned_haadf = api.library.create_data_item_from_data(numpy.zeros((1,1,1)))
-        aligned_si = api.library.create_data_item_from_data(numpy.zeros((1,1,1)))
+        aligned_haadf = api.library.create_data_item()
+        aligned_si = api.library.create_data_item()
         outputs = {"aligned_haadf": aligned_haadf,
                    "aligned_si": aligned_si}
     else:
@@ -141,7 +141,7 @@ def align_multi_si(api: API_1_0.API, window: API_1_0.DocumentWindow, data_item1:
         si_sequence_data_item = haadf_sequence_data_item
         align_collection_index = haadf_sequence_data_item.display._display.display_data_channel.collection_index[0]
         aligned_haadf = None
-        aligned_si = api.library.create_data_item_from_data(numpy.zeros((1,1,1)))
+        aligned_si = api.library.create_data_item()
         outputs = {"aligned_si": aligned_si}
 
     align_region = None
