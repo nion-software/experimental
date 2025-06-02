@@ -1,6 +1,10 @@
 Changelog (nionswift-experimental)
 ==================================
 
+0.7.17 (2025-06-02)
+-------------------
+- Maintenance release.
+
 0.7.16 (2025-04-23)
 -------------------
 - Package dependencies updated.
