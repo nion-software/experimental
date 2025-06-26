@@ -180,7 +180,7 @@ class TestMultiDimensionalProcessing(unittest.TestCase):
             api = Facade.get_api("~1.0", "~1.0")
             document_model = document_controller.document_model
 
-            data = numpy.ones((5, 3, 4))
+            data = numpy.ones((5, 4, 5))
 
             data_descriptor = DataAndMetadata.DataDescriptor(True, 0, 2)
             xdata = DataAndMetadata.new_data_and_metadata(data, data_descriptor=data_descriptor)
@@ -199,6 +199,8 @@ class TestMultiDimensionalProcessing(unittest.TestCase):
             self.assertEqual(len(document_model.data_items), 2)
             integrated = document_model.data_items[1].xdata
             self.assertSequenceEqual(integrated.data_shape, (5,))
+
+            # the region will cover the centers of the middle two pixels vertically x three pixels horizontally = 6.0
             self.assertTrue(numpy.allclose(integrated.data, 6.0))
 
     def test_align_si_computation(self) -> None:
