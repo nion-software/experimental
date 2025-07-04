@@ -368,30 +368,57 @@ class TestMultiDimensionalProcessing(unittest.TestCase):
             self.assertIn("iDPC", idpc_data_item.title)
 
     def test_measure_shifts_computation_and_apply_shifts_computation(self) -> None:
-        with create_memory_profile_context() as test_context:
-            document_controller = test_context.create_document_controller_with_application()
-            document_model = document_controller.document_model
-            api = Facade.get_api("~1.0", "~1.0")
-            # setup
-            xdata = DataAndMetadata.new_data_and_metadata(numpy.random.randn(8,8,8), data_descriptor=DataAndMetadata.DataDescriptor(True, 0, 2))
-            data_item = DataItem.new_data_item(xdata)
-            data_item.title = "HAADF"
-            document_model.append_data_item(data_item)
-            # make computation and execute
-            shifts_data_item = MultiDimensionalProcessing.measure_shifts(api, Facade.DocumentWindow(document_controller), Facade.DataItem(data_item), None, "data")
-            document_model.recompute_all()
-            document_controller.periodic()
-            # check results
-            self.assertEqual(2, len(document_model.data_items))
-            self.assertFalse(any(computation.error_text for computation in document_model.computations))
-            self.assertIn("Measure Shifts", shifts_data_item.title)
-            # make computation and execute
-            shifted_data_item = MultiDimensionalProcessing.apply_shifts(api, Facade.DocumentWindow(document_controller), Facade.DataItem(data_item), shifts_data_item, "data")
-            document_model.recompute_all()
-            document_controller.periodic()
-            self.assertEqual(3, len(document_model.data_items))
-            self.assertFalse(any(computation.error_text for computation in document_model.computations))
-            self.assertIn("(Apply Shifts)", shifted_data_item.title)
+        with self.subTest(msg="Test for a sequence of 2D data. Measure shifts in data axis."):
+            with create_memory_profile_context() as test_context:
+                document_controller = test_context.create_document_controller_with_application()
+                document_model = document_controller.document_model
+                api = Facade.get_api("~1.0", "~1.0")
+                # setup
+                xdata = DataAndMetadata.new_data_and_metadata(numpy.random.randn(8,8,8), data_descriptor=DataAndMetadata.DataDescriptor(True, 0, 2))
+                data_item = DataItem.new_data_item(xdata)
+                data_item.title = "HAADF"
+                document_model.append_data_item(data_item)
+                # make computation and execute
+                shifts_data_item = MultiDimensionalProcessing.measure_shifts(api, Facade.DocumentWindow(document_controller), Facade.DataItem(data_item), None, "data")
+                document_model.recompute_all()
+                document_controller.periodic()
+                # check results
+                self.assertEqual(2, len(document_model.data_items))
+                self.assertFalse(any(computation.error_text for computation in document_model.computations))
+                self.assertIn("Measure Shifts", shifts_data_item.title)
+                # make computation and execute
+                shifted_data_item = MultiDimensionalProcessing.apply_shifts(api, Facade.DocumentWindow(document_controller), Facade.DataItem(data_item), shifts_data_item, "data")
+                document_model.recompute_all()
+                document_controller.periodic()
+                self.assertEqual(3, len(document_model.data_items))
+                self.assertFalse(any(computation.error_text for computation in document_model.computations))
+                self.assertIn("(Apply Shifts)", shifted_data_item.title)
+
+        with self.subTest(msg="Test for a 2D collection of 2D data. Measure shifts in data axis."):
+            with create_memory_profile_context() as test_context:
+                document_controller = test_context.create_document_controller_with_application()
+                document_model = document_controller.document_model
+                api = Facade.get_api("~1.0", "~1.0")
+                # setup
+                xdata = DataAndMetadata.new_data_and_metadata(numpy.random.randn(7,8,9,10), data_descriptor=DataAndMetadata.DataDescriptor(False, 2, 2))
+                data_item = DataItem.new_data_item(xdata)
+                data_item.title = "HAADF"
+                document_model.append_data_item(data_item)
+                # make computation and execute
+                shifts_data_item = MultiDimensionalProcessing.measure_shifts(api, Facade.DocumentWindow(document_controller), Facade.DataItem(data_item), None, "data")
+                document_model.recompute_all()
+                document_controller.periodic()
+                # check results
+                self.assertEqual(2, len(document_model.data_items))
+                self.assertFalse(any(computation.error_text for computation in document_model.computations))
+                self.assertIn("Measure Shifts", shifts_data_item.title)
+                # make computation and execute
+                shifted_data_item = MultiDimensionalProcessing.apply_shifts(api, Facade.DocumentWindow(document_controller), Facade.DataItem(data_item), shifts_data_item, "data")
+                document_model.recompute_all()
+                document_controller.periodic()
+                self.assertEqual(3, len(document_model.data_items))
+                self.assertFalse(any(computation.error_text for computation in document_model.computations))
+                self.assertIn("(Apply Shifts)", shifted_data_item.title)
 
     def test_crop_multidimensional_computation(self) -> None:
         with create_memory_profile_context() as test_context:

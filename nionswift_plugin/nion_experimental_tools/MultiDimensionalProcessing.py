@@ -381,8 +381,13 @@ class ApplyShifts(MultiDimensionalProcessingComputation):
         assert input_xdata is not None
         assert shifts_data_item.xdata is not None
         assert shifts_data_item.data is not None
-        if shifts_data_item.xdata.data_descriptor.datum_dimension_count == 1:
-            shifts = shifts_data_item.data.T
+        shifts_shape = shifts_data_item.xdata.data_shape
+        # Handle the special case of shifts created by "AlignImageSequence" here: This computation calculates the shifts
+        # for a 1D collection or a sequence of 2D data and transposes the result so that Swift can display it as a
+        # line plot. Try to detect that case and transpose back.
+        if len(shifts_shape) == 2 and shifts_shape[0] == 2 and shifts_shape[-1] == input_xdata.data_shape[0]:
+            # HDF5 datasets don't implement .T, so convert to real numpy array first
+            shifts = numpy.asarray(shifts_data_item.data).T
         else:
             shifts  = shifts_data_item.data
         split_description = axes_description.split("-")
@@ -495,7 +500,11 @@ class ApplyShiftsMenuItemDelegate:
         else:
             raise ValueError(error_msg)
 
-        if shifts_display.display_type == "line_plot":
+        # Handle the special case of shifts created by "AlignImageSequence" here: This computation calculates the shifts
+        # for a 1D collection or a sequence of 2D data and transposes the result so that Swift can display it as a
+        # line plot. Try to detect that case and transpose back for guessing the starting axis.
+        shifts_shape = shifts_di.xdata.data_shape
+        if shifts_display.display_type == "line_plot" and len(shifts_shape) == 2 and shifts_shape[0] == 2 and shifts_shape[-1] == input_di.xdata.data_shape[0]:
             shifts_xdata = Core.function_transpose_flip(shifts_di.xdata, transpose=True, flip_v=False, flip_h=False)
         else:
             shifts_xdata = shifts_di.xdata
