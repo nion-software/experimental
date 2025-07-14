@@ -1,6 +1,10 @@
 Changelog (nionswift-experimental)
 ==================================
 
+0.7.18 (2025-07-14)
+-------------------
+- Fix regression in apply shifts computation.
+
 0.7.17 (2025-06-02)
 -------------------
 - Maintenance release.
