@@ -478,7 +478,7 @@ class TestMultiDimensionalProcessing(unittest.TestCase):
             self.assertIn("Align/Integrate - Integrated Sequence", result_data_item.title)
             self.assertIn("Align/Integrate - Shifts", shifts.title)
 
-    def test_sequence_join_computation(self) -> None:
+    def test_sequence_join_computation_2d(self) -> None:
         with create_memory_profile_context() as test_context:
             document_controller = test_context.create_document_controller_with_application()
             document_model = document_controller.document_model
@@ -490,6 +490,31 @@ class TestMultiDimensionalProcessing(unittest.TestCase):
             document_model.append_data_item(data_item1)
             display_item1 = document_model.get_display_item_for_data_item(data_item1)
             xdata2 = DataAndMetadata.new_data_and_metadata(numpy.random.randn(8,8,8), data_descriptor=DataAndMetadata.DataDescriptor(True, 0, 2))
+            data_item2 = DataItem.new_data_item(xdata2)
+            data_item2.title = "A"
+            document_model.append_data_item(data_item2)
+            display_item2 = document_model.get_display_item_for_data_item(data_item2)
+            # make computation and execute
+            result_data_item = SequenceSplitJoin.sequence_join(api, Facade.DocumentWindow(document_controller), [Facade.Display(display_item1), Facade.Display(display_item2)])
+            document_model.recompute_all()
+            document_controller.periodic()
+            # check results
+            self.assertEqual(3, len(document_model.data_items))
+            self.assertFalse(any(computation.error_text for computation in document_model.computations))
+            self.assertIn("(Join Sequence)", result_data_item.title)
+
+    def test_sequence_join_computation_1d(self) -> None:
+        with create_memory_profile_context() as test_context:
+            document_controller = test_context.create_document_controller_with_application()
+            document_model = document_controller.document_model
+            api = Facade.get_api("~1.0", "~1.0")
+            # setup
+            xdata1 = DataAndMetadata.new_data_and_metadata(numpy.random.randn(8,8), data_descriptor=DataAndMetadata.DataDescriptor(True, 0, 1))
+            data_item1 = DataItem.new_data_item(xdata1)
+            data_item1.title = "A"
+            document_model.append_data_item(data_item1)
+            display_item1 = document_model.get_display_item_for_data_item(data_item1)
+            xdata2 = DataAndMetadata.new_data_and_metadata(numpy.random.randn(8,8), data_descriptor=DataAndMetadata.DataDescriptor(True, 0, 1))
             data_item2 = DataItem.new_data_item(xdata2)
             data_item2.title = "A"
             document_model.append_data_item(data_item2)
