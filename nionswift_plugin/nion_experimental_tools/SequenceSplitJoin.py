@@ -57,7 +57,7 @@ def sequence_join(api: Facade.API_1, window: Facade.DocumentWindow, display_item
     # For line plots with multiple display layers we want to copy the display properties so that the joined item
     # look like the original display items. We copy the display properties of the first display item, but only
     # if the number of display layers is the same for all input display items.
-    display_layers = None
+    display_layers_list = None
     legend_position = None
     display_type = None
     copy_display_properties = False
@@ -69,18 +69,18 @@ def sequence_join(api: Facade.API_1, window: Facade.DocumentWindow, display_item
             data_item_xdata = data_item.xdata
             if (data_item_xdata is not None and len(display_item.data_items) == 1 and len(data_item_xdata.data_shape) > 1 and
                     (data_item_xdata.datum_dimension_count == 1 or display_item.display_type == 'line_plot')):
-                if i== 0:
-                    display_layers = copy.deepcopy(display_item._display_item.display_layers)
+                if i == 0:
+                    display_layers_list = display_item._display_item.display_layers_list
                     legend_position = display_item._display_item.get_display_property('legend_position')
                     display_type = display_item._display_item.display_type
                     copy_display_properties = True
-                elif display_layers is not None:
-                    copy_display_properties &= len(display_layers) == len(display_item._display_item.display_layers)
+                elif display_layers_list is not None:
+                    copy_display_properties &= len(display_layers_list) == len(display_item._display_item.display_layers)
 
     if not data_items:
         return None
 
-    result_data_item = api.library.create_data_item_from_data(numpy.zeros((1, 1, 1)))
+    result_data_item = api.library.create_data_item()
     api.library.create_computation("nion.join_sequence",
                                    inputs={"src_list": data_items},
                                    outputs={"target": result_data_item})
@@ -89,11 +89,8 @@ def sequence_join(api: Facade.API_1, window: Facade.DocumentWindow, display_item
         window._document_controller.show_display_item(result_display_item)
 
         if copy_display_properties:
-            if display_layers is not None:
-                while result_display_item.display_layers:
-                    result_display_item.remove_display_layer(0)
-                for display_layer in display_layers:
-                    result_display_item.append_display_layer(display_layer)
+            if display_layers_list:
+                result_display_item.display_layers_list = display_layers_list
             if legend_position is not None:
                 result_display_item.set_display_property('legend_position', legend_position)
             if display_type is not None:
