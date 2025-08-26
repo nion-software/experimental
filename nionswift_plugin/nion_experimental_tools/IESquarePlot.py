@@ -23,7 +23,7 @@ class IESquarePlotMenuItemDelegate:
 
     def menu_item_execute(self, window: Facade.DocumentWindow) -> None:
         selected_display_item = window._document_window.selected_display_item
-        if not selected_display_item or not selected_display_item.data_item or not selected_display_item.data_item.xdata:
+        if not selected_display_item or not selected_display_item.data_item or not selected_display_item.data_item.has_data:
             return
         window._document_window.document_model.get_processing_new("nion.processing.i_e_square_plot", selected_display_item, selected_display_item.data_item)
 
