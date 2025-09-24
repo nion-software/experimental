@@ -4,7 +4,6 @@ from nion.swift.model import DocumentModel
 from nion.swift.model import Symbolic
 
 from . import DoubleGaussian
-from . import GraphicsTools
 from . import SequenceSplitJoin
 from . import AlignMultiSI
 from . import MakeIDPC
