@@ -1,6 +1,11 @@
 Changelog (nionswift-experimental)
 ==================================
 
+0.7.19 (2025-09-25)
+-------------------
+- Removed 'center graphics' command, now available in nionswift.
+- Fix #52. Fix issues with copying layers when joining 1d sequences.
+
 0.7.18 (2025-07-14)
 -------------------
 - Fix regression in apply shifts computation.
