@@ -9,6 +9,7 @@ import typing
 from nion.typeshed import API_1_0 as API
 from nion.data import xdata_1_0 as xd
 from nion.swift import Facade
+from nion.swift.model import DisplayItem
 from nion.swift.model import Symbolic
 
 _ = gettext.gettext
@@ -117,7 +118,7 @@ def sequence_split(api: Facade.API_1, window: Facade.DocumentWindow, display_ite
     # For line plots with multiple display layers we want to copy the display properties so that the split items
     # look like the original display item. Exclude case where the display layers are generated from the sequence
     # dimension because in this case the display layers are not valid anymore.
-    display_layers = None
+    display_layers: list[DisplayItem.DisplayLayer] | None = None
     legend_position = None
     display_type = None
     data_item_ = display_item._display_item.data_item
@@ -127,7 +128,7 @@ def sequence_split(api: Facade.API_1, window: Facade.DocumentWindow, display_ite
     if not data_item_xdata:
         return list()
     if data_item_xdata and len(data_item_xdata.data_shape) > 2 and (data_item_xdata.datum_dimension_count == 1 or display_item.display_type == 'line_plot'):
-        display_layers = copy.deepcopy(display_item._display_item.display_layers)
+        display_layers = typing.cast(list[DisplayItem.DisplayLayer], display_item._display_item.display_layers)
         legend_position = display_item._display_item.get_display_property('legend_position')
         display_type = display_item.display_type
 
@@ -147,12 +148,8 @@ def sequence_split(api: Facade.API_1, window: Facade.DocumentWindow, display_ite
             result_display_item = window._document_controller.document_model.get_display_item_for_data_item(result_data_item._data_item)
             if result_display_item:
                 window._document_controller.show_display_item(result_display_item)
-
                 if display_layers:
-                    while result_display_item.display_layers:
-                        result_display_item.remove_display_layer(0)
-                    for display_layer in display_layers:
-                        result_display_item.append_display_layer(display_layer)
+                    result_display_item.display_layers_list = display_layers
                 if legend_position is not None:
                     result_display_item.set_display_property('legend_position', legend_position)
                 if display_type is not None:
