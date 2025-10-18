@@ -551,3 +551,25 @@ class TestMultiDimensionalProcessing(unittest.TestCase):
 
             # print([computation.error_text for computation in document_model.computations])
             # print([data_item.title for data_item in document_model.data_items])
+
+    def test_sequence_split_computation_sequence(self) -> None:
+        with create_memory_profile_context() as test_context:
+            document_controller = test_context.create_document_controller_with_application()
+            document_model = document_controller.document_model
+            api = Facade.get_api("~1.0", "~1.0")
+            # setup
+            xdata = DataAndMetadata.new_data_and_metadata(numpy.random.randn(10,16,16,512), data_descriptor=DataAndMetadata.DataDescriptor(True, 2, 1))
+            data_item = DataItem.new_data_item(xdata)
+            data_item.title = "Sequence"
+            document_model.append_data_item(data_item)
+            display_item = document_model.get_display_item_for_data_item(data_item)
+            # make computation and execute
+            result_data_items = SequenceSplitJoin.sequence_split(api, Facade.DocumentWindow(document_controller), Facade.Display(display_item))
+            document_model.recompute_all()
+            document_controller.periodic()
+            # check results
+            self.assertEqual(11, len(document_model.data_items))
+            self.assertFalse(any(computation.error_text for computation in document_model.computations))
+            self.assertIn("Split 1/10", result_data_items[0].title)
+            self.assertIn("Split 2/10", result_data_items[1].title)
+            self.assertIn("Split 10/10", result_data_items[9].title)
