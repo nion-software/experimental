@@ -2,6 +2,51 @@
 requires = ["setuptools", "wheel"]
 build-backend = "setuptools.build_meta"
 
+[project]
+name = "nionswift-experimental"
+version = "0.7.19"
+authors = [
+    { name = "Nion Software", email = "swift@nion.com" }
+]
+description = "Experimental tools package for Nion Swift."
+readme = "README.rst"
+requires-python = ">=3.12"
+license = "GPL-3.0-only"
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14"
+]
+urls = { "Homepage" = "https://github.com/nion-software/experimental" }
+dependencies = [
+    "nionswift >=16.16,<17.0",
+    "niondata >=15.9,<16.0",
+    "nionui >=10.2,<11.0"
+]
+
+[tool.setuptools.packages.find]
+include = [
+    "nionswift_plugin",
+    "nionswift_plugin.nion_experimental_tools",
+    "nionswift_plugin.nion_experimental_tools.test",
+    "nionswift_plugin.nion_experimental_4dtools",
+    "nion.experimental",
+    "nion.experimental.test",
+    "nionswift_plugin.drift_correction"
+]
+
+[tool.setuptools.package-data]
+"nion.experimental" = ["py.typed"]
+"nionswift_plugin.drift_correction" = [
+    "resources/*.png",
+    "resources/html/*.html",
+    "resources/html/*.js",
+    "resources/html/_images/*.png",
+    "resources/html/_static/*.*"
+]
+
 [tool.pytest.ini_options]
 testpaths = [
     "nionswift_plugin/nion_experimental_tools/test",
