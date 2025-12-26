@@ -442,6 +442,7 @@ def apply_shifts(api: Facade.API_1, window: Facade.DocumentWindow, input_di: Fac
     window._document_controller.document_model.append_data_item(data_item)
     input_xdata = input_di.xdata
     assert input_xdata
+    assert input_xdata.data_dtype
     data_item.reserve_data(data_shape=input_xdata.data_shape, data_dtype=input_xdata.data_dtype, data_descriptor=input_xdata.data_descriptor)
     data_item.dimensional_calibrations = input_xdata.dimensional_calibrations
     data_item.intensity_calibration = input_xdata.intensity_calibration
