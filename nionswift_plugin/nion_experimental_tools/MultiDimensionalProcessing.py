@@ -485,14 +485,18 @@ class ApplyShiftsMenuItemDelegate:
         di_2 = display_2.data_item
         assert di_1 is not None, error_msg
         assert di_2 is not None, error_msg
-        assert di_1.data_shape is not None, error_msg
-        assert di_2.data_shape is not None, error_msg
+        di_1_data_metadata = di_1.data_metadata
+        di_2_data_metadata = di_2.data_metadata
+        assert di_1_data_metadata is not None, error_msg
+        assert di_2_data_metadata is not None, error_msg
+        assert di_1_data_metadata.data_shape is not None, error_msg
+        assert di_2_data_metadata.data_shape is not None, error_msg
 
-        if len(di_1.data_shape) < len(di_2.data_shape):
+        if len(di_1_data_metadata.data_shape) < len(di_2_data_metadata.data_shape):
             shifts_di = self.__api._new_api_object(di_1)
             shifts_display = display_1
             input_di = self.__api._new_api_object(di_2)
-        elif len(di_2.data_shape) < len(di_1.data_shape):
+        elif len(di_2_data_metadata.data_shape) < len(di_1_data_metadata.data_shape):
             shifts_di = self.__api._new_api_object(di_2)
             shifts_display = display_2
             input_di = self.__api._new_api_object(di_1)

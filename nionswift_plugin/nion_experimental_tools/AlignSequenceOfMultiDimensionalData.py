@@ -108,12 +108,18 @@ def align_multi_si(api: API_1_0.API, window: API_1_0.DocumentWindow, data_item1:
     align_collection_index = 0
     aligned_haadf = None
 
+    di_1_data_metadata = di_1.data_metadata
+    di_2_data_metadata = di_2.data_metadata
+
+    assert di_1_data_metadata is not None, error_msg
+    assert di_2_data_metadata is not None, error_msg
+
     if di_1 != di_2:
         haadf_footprint = (2, True, 0, True)
-        di_1_footprint = (di_1.datum_dimension_count, di_1.is_sequence, di_1.collection_dimension_count,
-                          di_1.metadata.get("hardware_source", {}).get("harwdare_source_id", "") == "superscan")
-        di_2_footprint = (di_2.datum_dimension_count, di_2.is_sequence, di_2.collection_dimension_count,
-                          di_2.metadata.get("hardware_source", {}).get("harwdare_source_id", "") == "superscan")
+        di_1_footprint = (di_1_data_metadata.datum_dimension_count, di_1_data_metadata.is_sequence, di_1_data_metadata.collection_dimension_count,
+                          di_1_data_metadata.metadata.get("hardware_source", {}).get("harwdare_source_id", "") == "superscan")
+        di_2_footprint = (di_2_data_metadata.datum_dimension_count, di_2_data_metadata.is_sequence, di_2_data_metadata.collection_dimension_count,
+                          di_2_data_metadata.metadata.get("hardware_source", {}).get("harwdare_source_id", "") == "superscan")
 
         di_1_points = 0
         di_2_points = 0
@@ -136,7 +142,7 @@ def align_multi_si(api: API_1_0.API, window: API_1_0.DocumentWindow, data_item1:
         outputs = {"aligned_haadf": aligned_haadf,
                    "aligned_si": aligned_si}
     else:
-        assert di_1.collection_dimension_count == 1, error_msg
+        assert di_1_data_metadata.collection_dimension_count == 1, error_msg
         haadf_sequence_data_item = api._new_api_object(di_1)
         si_sequence_data_item = haadf_sequence_data_item
         align_collection_index = haadf_sequence_data_item.display._display.display_data_channel.collection_index[0]
@@ -190,8 +196,10 @@ class AlignSequenceMenuItemDelegate:
         assert selected_display_items[1][0] is not None, error_msg
         assert selected_display_items[0][0].data_item is not None, error_msg
         assert selected_display_items[1][0].data_item is not None, error_msg
-        assert selected_display_items[0][0].data_item.is_sequence, error_msg
-        assert selected_display_items[1][0].data_item.is_sequence, error_msg
+        assert selected_display_items[0][0].data_item.data_metadata is not None, error_msg
+        assert selected_display_items[1][0].data_item.data_metadata is not None, error_msg
+        assert selected_display_items[0][0].data_item.data_metadata.is_sequence, error_msg
+        assert selected_display_items[1][0].data_item.data_metadata.is_sequence, error_msg
         data_item1 = Facade.DataItem(selected_display_items[0][0].data_item)
         data_item2 = Facade.DataItem(selected_display_items[1][0].data_item)
         align_multi_si(self.__api, window, data_item1, data_item2)

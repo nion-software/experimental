@@ -289,15 +289,17 @@ class AlignMultiSIMenuItemDelegate:
             assert selected_display_items[1][0] is not None, error_msg
             assert selected_display_items[0][0].data_item is not None, error_msg
             assert selected_display_items[1][0].data_item is not None, error_msg
-            assert selected_display_items[0][0].data_item.is_sequence, error_msg
-            assert selected_display_items[1][0].data_item.is_sequence, error_msg
+            assert selected_display_items[0][0].data_item.data_metadata is not None, error_msg
+            assert selected_display_items[1][0].data_item.data_metadata is not None, error_msg
+            assert selected_display_items[0][0].data_item.data_metadata.is_sequence, error_msg
+            assert selected_display_items[1][0].data_item.data_metadata.is_sequence, error_msg
             assert selected_display_items[1][0] != selected_display_items[0][0], error_msg
 
-            if selected_display_items[0][0].data_item.is_collection:
+            if selected_display_items[0][0].data_item.data_metadata.is_collection:
                 si_sequence_data_item = Facade.DataItem(selected_display_items[0][0].data_item)
                 haadf_sequence_data_item = Facade.DataItem(selected_display_items[1][0].data_item)
                 align_region = Facade.Graphic(selected_display_items[1][1]) if selected_display_items[1][1] else None
-            elif selected_display_items[1][0].data_item.is_collection:
+            elif selected_display_items[1][0].data_item.data_metadata.is_collection:
                 si_sequence_data_item = Facade.DataItem(selected_display_items[1][0].data_item)
                 haadf_sequence_data_item = Facade.DataItem(selected_display_items[0][0].data_item)
                 align_region = Facade.Graphic(selected_display_items[0][1]) if selected_display_items[0][1] else None
