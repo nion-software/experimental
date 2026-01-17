@@ -376,7 +376,7 @@ class ApplyShifts(MultiDimensionalProcessingComputation):
 
         return shift_axis
 
-    def execute(self, *, input_data_item: Symbolic.DataSource, shifts_data_item: Symbolic.DataSource, axes_description: str, crop_to_valid: bool) -> None: # type: ignore
+    def execute(self, *, input_data_item: Symbolic.DataSource, shifts_data_item: Symbolic.DataSource, axes_description: str, crop_to_valid: bool, **kwargs: typing.Any) -> None: # type: ignore
         input_xdata = input_data_item.xdata
         assert input_xdata is not None
         assert shifts_data_item.xdata is not None
@@ -670,7 +670,7 @@ class MakeTableau(Symbolic.ComputationHandlerLike):
         self.computation = computation
         self.__result_xdata: typing.Optional[DataAndMetadata.DataAndMetadata] = None
 
-    def execute(self, *, input_data_item: Facade.DataItem, scale: float) -> None: # type: ignore
+    def execute(self, *, input_data_item: Facade.DataItem, scale: float, **kwargs: typing.Any) -> None: # type: ignore
         assert input_data_item.xdata is not None
         self.__result_xdata = MultiDimensionalProcessing.function_make_tableau_image(input_data_item.xdata, scale)
         return None
@@ -789,7 +789,7 @@ class AlignImageSequence(Symbolic.ComputationHandlerLike):
     def __init__(self, computation: typing.Any, **kwargs: typing.Any) -> None:
         self.computation = computation
 
-    def execute(self, *, input_data_item: Symbolic.DataSource, reference_index: typing.Optional[int] = None, relative_shifts: bool=True, max_shift: int=0, show_shifted_output: bool = False, crop_to_valid: bool = True, bounds_graphic: typing.Optional[Facade.Graphic]=None) -> None: # type: ignore
+    def execute(self, *, input_data_item: Symbolic.DataSource, reference_index: typing.Optional[int] = None, relative_shifts: bool=True, max_shift: int=0, show_shifted_output: bool = False, crop_to_valid: bool = True, bounds_graphic: typing.Optional[Facade.Graphic]=None, **kwargs: typing.Any) -> None: # type: ignore
         input_xdata = input_data_item.xdata
         assert input_xdata is not None
         bounds = None
