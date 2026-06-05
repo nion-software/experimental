@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "nionswift-experimental"
-version = "0.7.20"
+version = "0.7.21"
 authors = [
     { name = "Nion Software", email = "swift@nion.com" }
 ]
@@ -23,7 +23,7 @@ urls = { "Homepage" = "https://github.com/nion-software/experimental" }
 dependencies = [
     "nionswift >=16.17,<17.0",
     "niondata >=15.9,<16.0",
-    "nionui >=10.2,<11.0"
+    "nionui >=10.2,<12.0"
 ]
 
 [tool.setuptools.packages.find]

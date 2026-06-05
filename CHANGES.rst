@@ -1,6 +1,12 @@
 Changelog (nionswift-experimental)
 ==================================
 
+0.7.21 (2026-06-05)
+-------------------
+- Update typing.
+- Remove conda build support.
+- Minor wizard improvements.
+
 0.7.20 (2026-03-19)
 -------------------
 - Fix issues with copying display layers when splitting SI sequences.
