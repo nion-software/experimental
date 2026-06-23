@@ -56,7 +56,7 @@ class AffineTransformImage(Symbolic.ComputationHandlerLike):
             navigation_dimensions_shape = xdata.data.shape[:navigation_dimensions]
             result_data = numpy.zeros_like(xdata.data)
             new_coords = Core.calculate_coordinates_for_affine_transform(xdata.data[numpy.unravel_index(0, navigation_dimensions_shape)], matrix)
-            for i in range(numpy.prod(navigation_dimensions_shape)):
+            for i in range(numpy.prod(navigation_dimensions_shape, dtype=numpy.uint64)):
                 index = numpy.unravel_index(i, navigation_dimensions_shape)
                 transformed = xd.warp(xdata.data[index], new_coords)
                 result_data[index] = transformed.data
