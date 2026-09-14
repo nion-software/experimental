@@ -291,15 +291,15 @@ class OverviewSamplePanelHandler(Declarative.Handler):
         self.cancel_enabled.value = True
 
         success, tv_pixel_angle_rad = stem_controller.TryGetVal("TVPixelAngle")  # if success is False, the plugin is likely being run on uSim
+        matrix = self.find_matrix()
 
-        if success:
-            # this branch will run where the plugin is used on an actual microscope OR when AS2 is running locally alongside uSim
+        if success and matrix is not None and numpy.linalg.det(matrix) != 0 and len(matrix) != 0:  #even if success is True, it could still be on usim- this would give an empty or singular matrix so can guard against non-uSim controls being used
+            # this branch will run where the plugin is used on an actual microscope
             shift_x_control_name = "SShft.sx"
             shift_y_control_name = "SShft.sy"
-            matrix = self.find_matrix()
 
         else:
-            #  this allows the plugin to run on uSim without AS2 locally
+            #  this allows the plugin to run on uSim
             shift_x_control_name = "stage_position_m.x"
             shift_y_control_name = "stage_position_m.y"
             matrix = None
@@ -359,7 +359,7 @@ class OverviewSamplePanelHandler(Declarative.Handler):
                         self.cancel_enabled.value = False
                         return None if not timer else (0, 0.0)
 
-                    if matrix is None or numpy.linalg.det(matrix) == 0 or len(matrix) == 0:  # if the plugin is being run on uSim then correction for stage axis is not needed as can move straight along the camera axis
+                    if shift_x_control_name == "stage_position_m.x":  # if the plugin is being run on uSim then correction for stage axis is not needed as can move straight along the camera axis
                         delta_x = - sub_area_shift * (column - dimensions[1] // 2)
                         delta_y = - sub_area_shift * (row - dimensions[0] // 2)
                     else:  # if the plugin is being run on a microscope need to transform every movement from the stage axis to the camera axis
@@ -372,14 +372,16 @@ class OverviewSamplePanelHandler(Declarative.Handler):
                         delta_y = float(delta_fast[1])
 
                     counter += 1
-
                     attempts = 0
+
                     while attempts < 4:
                         if self._cancel_requested:
                             self._append_output_threadsafe("Acquisition Cancelled.")
                             self.cancel_enabled.value = False
                             return None if not timer else (0, 0.0)
+
                         attempts += 1
+
                         try:  # try to move the stage to the desired position, if it times out then try again up to 4 times
                             tolerance_factor = 0.0001
                             stem_controller.set_control_output(shift_x_control_name, sx - delta_x, {"confirm": True, "confirm_tolerance_factor": tolerance_factor})
@@ -403,6 +405,7 @@ class OverviewSamplePanelHandler(Declarative.Handler):
                     if not timer:  # if performing the actual acquisition then update the progress bar and output window
                         pct = int(100 * counter / total_images)
                         self._set_progress_threadsafe(pct, total_images, f"Progress:\nAcquiring frame {counter} of {total_images}")
+
             t2 = time.time()
             time_total = t2 - t1
 
@@ -454,17 +457,17 @@ class OverviewSamplePanelHandler(Declarative.Handler):
 
         stem_controller = self.stem_controller
         camera = self.camera
-
         target_width = (width, height)
+
         result = self.acquisition(stem_controller, camera, defocus, target_width, timer=True, binning=binning)
         if result is None or len(result) != 3:
             return
+
         master_data, total_images, t_total = result
         image_size = master_data.shape
         time_taken = t_total * total_images / 2  # average time to move the stage
-        self._append_output(
-            f"This acquisition will take approximately {(time_taken // 3600):.0f}h {((time_taken % 3600) / 60):.0f}min {(time_taken % 60):.0f}s"
-        )
+        self._append_output(f"This acquisition will take approximately {(time_taken // 3600):.0f}h {((time_taken % 3600) / 60):.0f}min {(time_taken % 60):.0f}s")
+
         if any(dimension > max_size for dimension in image_size):
             self._append_output("The final data item is too large to be used in the sample navigation window. Consider increasing the binning or reducing the size of the acquisition.\n")
             return
