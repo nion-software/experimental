@@ -41,13 +41,10 @@ class OverviewScanPanelUI:
 
 class OverviewSamplePanelHandler(Declarative.Handler):
 
-    def __init__(
-            self,
-
-            api: "API_1_0.API",
-            event_loop: typing.Optional[asyncio.AbstractEventLoop],
-            document_controller: typing.Any,
-    ) -> None:
+    def __init__(self,
+                 api: "API_1_0.API",
+                 event_loop: typing.Optional[asyncio.AbstractEventLoop],
+                 document_controller: typing.Any) -> None:
         super().__init__()
         self._api = api
         self._event_loop = event_loop or asyncio.get_event_loop()
@@ -71,7 +68,7 @@ class OverviewSamplePanelHandler(Declarative.Handler):
 
     def _set_progress(self, value: int, maximum: int, text: str) -> None:
         """
-        Set the progress value, maximum, and text for the progress bar
+        Set the progress value, maximum, and text for the progress bar.
         """
         self.progress_value = value
         self.progress_max = max(1, int(maximum))
@@ -82,7 +79,7 @@ class OverviewSamplePanelHandler(Declarative.Handler):
 
     def _set_progress_threadsafe(self, value: int, maximum: int, text: str) -> None:
         """
-        Thread-safe method to set the progress value, maximum, and text for the progress bar, so it can be updated during acquisition
+        Thread-safe method to set the progress value, maximum, and text for the progress bar, so it can be updated during acquisition.
         """
         self._event_loop.call_soon_threadsafe(self._set_progress, value, maximum, text)
 
@@ -102,9 +99,9 @@ class OverviewSamplePanelHandler(Declarative.Handler):
         height_label = u.create_label(text="Height (um):", width=80)
         height_field = u.create_line_edit(text="@binding(height_value)", width=50, editable=True)
         defocus_label = u.create_label(text="Defocus (nm):", width=80)
-        defocus = u.create_line_edit(text="@binding(defocus)", width=50, editable=True)
-        reduce_label = u.create_label(text="Binning:")
-        reduce_val = u.create_line_edit(text="@binding(binning)", width=50, editable=True)
+        defocus_field = u.create_line_edit(text="@binding(defocus)", width=50, editable=True)
+        binning_label = u.create_label(text="Binning:")
+        binning_field = u.create_line_edit(text="@binding(binning)", width=50, editable=True)
         output_label = u.create_label(text="Output:")
         output_box = u.create_text_edit(text="@binding(output_text)", editable=False, height=200)
         progress_label = u.create_label(text="@binding(progress_text)")
@@ -112,14 +109,14 @@ class OverviewSamplePanelHandler(Declarative.Handler):
         cancel_button = u.create_push_button(text="Cancel", on_clicked="handle_cancel_acquisition_clicked", enabled="@binding(cancel_enabled.value)")
         clear_button = u.create_push_button(text="Clear minimap", on_clicked="handle_clear_minimap_clicked")
 
-        return typing.cast(typing.Mapping[str, typing.Any], u.create_column(
+        overview_scan_ui = u.create_column(
             title,
             properties_label,
             u.create_row(
                 u.create_row(u.create_column(width_label, spacing=0), u.create_column(width_field, spacing=0), spacing=2),
                 u.create_row(u.create_column(height_label, spacing=0), u.create_column(height_field, spacing=0), spacing=2),
-                u.create_row(u.create_column(defocus_label, spacing=0), u.create_column(defocus, spacing=0), spacing=2),
-                u.create_row(u.create_column(reduce_label, spacing=0), u.create_column(reduce_val, spacing=0), spacing=8),
+                u.create_row(u.create_column(defocus_label, spacing=0), u.create_column(defocus_field, spacing=0), spacing=2),
+                u.create_row(u.create_column(binning_label, spacing=0), u.create_column(binning_field, spacing=0), spacing=8),
             ),
             u.create_row(time_button, acq_button, max_button, spacing=4),
             u.create_spacing(8),
@@ -133,25 +130,33 @@ class OverviewSamplePanelHandler(Declarative.Handler):
             u.create_stretch(),
             margin=6,
             spacing=4
-        ))
+        )
+
+        return typing.cast(typing.Mapping[str, typing.Any], overview_scan_ui)
 
     def _append_output(self, message: str) -> None:
         """
-        Add text to the output window
+        Add text to the output window.
         """
         self.output_text += f"{message}\n"
         self.property_changed_event.fire("output_text")
 
     def _append_output_threadsafe(self, message: str) -> None:
         """
-        Update output window contemporaneously with acquisition
+        Update output window contemporaneously with acquisition.
         """
         self._event_loop.call_soon_threadsafe(self._append_output, message)
 
     def find_matrix(self, ds: float = 16e-6) -> numpy.ndarray:
         """
         Calculate the transformation matrix from stage coordinates to camera coordinates by moving the stage in small increments and measuring the resulting changes in camera coordinates.
-        This is done because moving along the stage axis is much faster than moving along the camera axis as it requires fewer moves
+        This is done because moving along the stage axis is much faster than moving along the camera axis as it requires fewer moves.
+
+        Args:
+        - ds: the step size by which the stage is moved in the x and y directions to measure the resulting changes in camera coordinates.
+
+        Returns:
+        - matrix: a 2x2 numpy array representing the transformation matrix from stage coordinates to camera coordinates.
         """
         stem_controller = self.stem_controller
 
@@ -175,7 +180,7 @@ class OverviewSamplePanelHandler(Declarative.Handler):
         stem_controller.set_control_output("SShft.x", x0)
         stem_controller.set_control_output("SShft.y", y0)
 
-        #  Move a small amount in x direction in the stage axis and then measure the change in x and y in the camera axis
+        # Move a small amount in y direction in the stage axis and then measure the change in x and y in the camera axis
         stem_controller.set_control_output("SShft.sy", sy0 + ds)
         x2 = stem_controller.get_control_output("SShft.x")
         y2 = stem_controller.get_control_output("SShft.y")
@@ -190,57 +195,95 @@ class OverviewSamplePanelHandler(Declarative.Handler):
         stem_controller.set_control_output("SShft.y", y0)
 
         # Construct the transformation matrix from stage coordinates to camera coordinates
-        mat = numpy.array([
+        matrix = numpy.array([
             [dx_from_sx / ds, dx_from_sy / ds],
             [dy_from_sx / ds, dy_from_sy / ds],
         ])
 
-        return mat
+        return matrix
 
     @staticmethod
     def find_dimensions(stem_controller: stem_controller_module.STEMController,
                         camera: camera_base.CameraHardwareSource,
                         defocus: float,
                         tv_pixel_angle_rad: float,
-                        reduce: float = 1.0) -> tuple[float, tuple[int, int], float, tuple[tuple[int, int], tuple[int, int]], tuple[int, int], float, tuple[tuple[int, int], tuple[int, int]]]:
+                        binning: float = 1.0) -> tuple[float, tuple[int, int], float, tuple[tuple[int, int], tuple[int, int]], tuple[int, int], float, tuple[tuple[int, int], tuple[int, int]]]:
         """
-        Calculate the pixel size, image size, image width, master sub-area, master sub-area size, sub-area shift, and sub-area based on the provided defocus and TV pixel angle.
+        Calculate the relevant properties of each frame based on the provided defocus and TV pixel angle.
+
+        Args:
+        - stem_controller: the instrument used to control the STEM microscope.
+        - camera: the Ronchigram camera used to capture images.
+        - defocus: the desired defocus value in meters.
+        - tv_pixel_angle_rad: the TV pixel angle in radians.
+        - binning: the binning factor for the camera, which reduces the resolution of the captured images by combining adjacent pixels.
+
+        Returns:
+        - pixel_size: real-world size of each pixel in the image in meters.
+        - frame_size: dimensions of each frame in pixels
+        - frame_width: real-world width of the image in meters.
+        - master_sub_area: the full-size crop taken from the frame
+        - master_sub_area_size: the size of that crop in pixels
+        - sub_area_shift: the real-world distance in meters that the stage needs to move to capture the next frame in the snake pattern.
+        - sub_area: the binned crop taken from the frame, which is used to construct the final image
         """
         stem_controller.set_control_output("C10", defocus)  # set the defocus to the desired value
 
         # Get pixel size, image size, and image width based on the defocus and TV pixel angle
-        pixel_size_nm = abs(defocus) * math.tan(tv_pixel_angle_rad)
-        image_size = camera.get_expected_dimensions(camera.get_current_frame_parameters())
-        image_width_um = abs(defocus) * math.sin(tv_pixel_angle_rad * image_size[0])
+        pixel_size = abs(defocus) * math.tan(tv_pixel_angle_rad)
+        frame_size = camera.get_expected_dimensions(camera.get_current_frame_parameters())
+        frame_width = abs(defocus) * math.sin(tv_pixel_angle_rad * frame_size[0])
 
         # Calculate the area of the image and the master sub-area based on the image size and reduce factor
-        master_sub_area_size = image_size[0], image_size[1]
-        master_sub_area = (image_size[0] // 2 - master_sub_area_size[0] // 2,
-                           image_size[1] // 2 - master_sub_area_size[1] // 2), master_sub_area_size
-        reduce = max(1, int(reduce))
+        master_sub_area_size = frame_size[0], frame_size[1]
+        master_sub_area = (frame_size[0] // 2 - master_sub_area_size[0] // 2,
+                           frame_size[1] // 2 - master_sub_area_size[1] // 2), master_sub_area_size
+        binning = max(1, int(binning))
 
-        sub_area_shift_um = image_width_um * (master_sub_area[1][0] / image_size[0])
-        sub_area_height = len(range(master_sub_area[0][0], master_sub_area[0][0] + master_sub_area[1][0], reduce))
-        sub_area_width = len(range(master_sub_area[0][1], master_sub_area[0][1] + master_sub_area[1][1], reduce))
+        sub_area_shift = frame_width * (master_sub_area[1][0] / frame_size[0])
+        sub_area_height = len(range(master_sub_area[0][0], master_sub_area[0][0] + master_sub_area[1][0], binning))
+        sub_area_width = len(range(master_sub_area[0][1], master_sub_area[0][1] + master_sub_area[1][1], binning))
 
         sub_area = (
-            (master_sub_area[0][0] // reduce, master_sub_area[0][1] // reduce),
+            (master_sub_area[0][0] // binning, master_sub_area[0][1] // binning),
             (sub_area_height, sub_area_width),
         )
 
-        return pixel_size_nm, image_size, image_width_um, master_sub_area, master_sub_area_size, sub_area_shift_um, sub_area
+        return pixel_size, frame_size, frame_width, master_sub_area, master_sub_area_size, sub_area_shift, sub_area
 
     def acquisition(self,
                     stem_controller: stem_controller_module.STEMController,
                     camera: camera_base.CameraHardwareSource,
                     defocus: float,
-                    target_width_um: tuple[float | int, float | int], timer: bool = False,
-                    reduce: float = 1.0) -> (tuple[npt.NDArray[numpy.float64], int, float] |
-                                             tuple[npt.NDArray[numpy.float64], tuple[tuple[int, int], tuple[int, int]], float, float, float, float, float] |
-                                             tuple[int, float] | None):
+                    target_width: tuple[float | int, float | int], timer: bool = False,
+                    binning: float = 1.0) -> (tuple[npt.NDArray[numpy.float64], int, float] |
+                                              tuple[npt.NDArray[numpy.float64], tuple[tuple[int, int], tuple[int, int]], float, float, float, float, float] |
+                                              tuple[int, float] | None):
         """
         Move across the sample in a snake pattern, acquiring images at each position, and return the resulting data and relevant parameters.
         If timer is True, return an estimate of how long the full acquisition will take.
+
+        Args:
+        - stem_controller: the instrument used to control the STEM microscope.
+        - camera: the Ronchigram camera used to capture images.
+        - defocus: the desired defocus value in meters.
+        - target_width: the desired width and height of the final image in micrometers.
+        - binning: the binning factor for the camera, which reduces the resolution of the captured images by combining adjacent pixels.
+        - timer: if True, the function will only acquire two frames to estimate the time required for the full acquisition.
+               if False, the function will perform the full acquisition.
+
+        Returns:
+        if timer is True:
+            - master_data: the acquired data
+            - total_images: the total number of images the acquisition needs
+            - time_total: the total time for the acquisition of two frames
+        if timer is False:
+            - master_data: the acquired data
+            - sub_area: the binned crop taken from the frame, which is used to construct the final image
+            - sub_area_shift: the real-world distance in meters that the stage needs to move to capture the next frame in the snake pattern.
+            - pixel_size: real-world size of each pixel in the image in meters.
+            - total_image_height: the real_world height of the final data item in metres
+            - sx, sy: the original stage coordinates.
         """
         counter = 0
         self._cancel_requested = False
@@ -266,31 +309,31 @@ class OverviewSamplePanelHandler(Declarative.Handler):
             tv_pixel_angle_rad = float(frame.dimensional_calibrations[0].scale)
 
         # grab stage original location and original defocus
-        sx_um = stem_controller.get_control_output(shift_x_control_name)
-        sy_um = stem_controller.get_control_output(shift_y_control_name)
+        sx = stem_controller.get_control_output(shift_x_control_name)
+        sy = stem_controller.get_control_output(shift_y_control_name)
         df_original = stem_controller.get_control_output("C10")
 
         assert tv_pixel_angle_rad is not None
         stem_controller.set_control_output("C10", defocus)
 
-        pixel_size_nm, image_size, image_width_um, master_sub_area, master_sub_area_size, sub_area_shift_um, sub_area = self.find_dimensions(stem_controller, camera, defocus, tv_pixel_angle_rad, reduce)
+        pixel_size, frame_size, frame_width, master_sub_area, master_sub_area_size, sub_area_shift, sub_area = self.find_dimensions(stem_controller, camera, defocus, tv_pixel_angle_rad, binning)
 
-        # calculate the number of frames to cover the targe
-        frames_needed_width = math.ceil(target_width_um[0] * 1e-6 / sub_area_shift_um)
-        frames_needed_height = math.ceil(target_width_um[1] * 1e-6 / sub_area_shift_um)
-        size = (frames_needed_width, frames_needed_height)
+        # calculate the number of frames to cover the target area
+        frames_needed_width = math.ceil(target_width[0] * 1e-6 / sub_area_shift)
+        frames_needed_height = math.ceil(target_width[1] * 1e-6 / sub_area_shift)
+        dimensions = (frames_needed_width, frames_needed_height)
 
-        total_image_height = size[1] * image_width_um  # calculate the height of the image in um
+        total_image_height = dimensions[1] * frame_width  # calculate the height of the image in um
         total_images = frames_needed_width * frames_needed_height  # calculate the total number of frames required for the image
 
-        master_data = numpy.empty((sub_area[1][0] * size[0], sub_area[1][1] * size[1]))  # create an empty array to hold the final image data
+        master_data = numpy.empty((sub_area[1][0] * dimensions[0], sub_area[1][1] * dimensions[1]))  # create an empty array to hold the final image data
 
         if not timer:  # if performing the full acquisition instead of just estimating the time, update the progress bar and output window
-            self._append_output_threadsafe(f"Stage starting position: {sx_um * 1e6, sy_um * 1e6} um")
-            self._append_output_threadsafe(f"Pixel size: {(pixel_size_nm * 1e9):.3f} nm")
+            self._append_output_threadsafe(f"Stage starting position: {sx * 1e6, sy * 1e6} um")
+            self._append_output_threadsafe(f"Pixel size: {(pixel_size * 1e9):.3f} nm")
             self._append_output_threadsafe(f"Defocus: {(defocus * 1e9):.0f} nm")
 
-            self._append_output_threadsafe(f"Frame width: {image_width_um * 1e6} um")
+            self._append_output_threadsafe(f"Frame width: {frame_width * 1e6} um")
             self._append_output_threadsafe(f"Master size: {master_data.shape}\n")
 
             self._set_progress_threadsafe(0, total_images, "Progress:\nStarting acquisition...")
@@ -298,10 +341,10 @@ class OverviewSamplePanelHandler(Declarative.Handler):
         t1 = time.time()
 
         if timer:
-            size = (2, 1)  # for timing purposes, only need to acquire 2 frames and average the time to take them both
+            dimensions = (2, 1)  # for timing purposes, only need to acquire 2 frames and average the time to take them both
 
         try:
-            for row in range(size[0]):
+            for row in range(dimensions[0]):
                 #  cancel mechanism
                 if self._cancel_requested:
                     self._append_output_threadsafe("Acquisition Cancelled.")
@@ -309,7 +352,7 @@ class OverviewSamplePanelHandler(Declarative.Handler):
                     return None if not timer else (0, 0.0)
 
                 # acquisition algorithm in a snake pattern
-                col_iter = range(size[1]) if (row % 2 == 0) else range(size[1] - 1, -1, -1)
+                col_iter = range(dimensions[1]) if (row % 2 == 0) else range(dimensions[1] - 1, -1, -1)
                 for column in col_iter:
                     if self._cancel_requested:
                         self._append_output_threadsafe("Acquisition Cancelled.")
@@ -317,16 +360,16 @@ class OverviewSamplePanelHandler(Declarative.Handler):
                         return None if not timer else (0, 0.0)
 
                     if matrix is None or numpy.linalg.det(matrix) == 0 or len(matrix) == 0:  # if the plugin is being run on uSim then correction for stage axis is not needed as can move straight along the camera axis
-                        delta_x_um = - sub_area_shift_um * (column - size[1] // 2)
-                        delta_y_um = - sub_area_shift_um * (row - size[0] // 2)
+                        delta_x = - sub_area_shift * (column - dimensions[1] // 2)
+                        delta_y = - sub_area_shift * (row - dimensions[0] // 2)
                     else:  # if the plugin is being run on a microscope need to transform every movement from the stage axis to the camera axis
-                        delta_x_um = - sub_area_shift_um * (column - size[1] // 2)
-                        delta_y_um = - sub_area_shift_um * (row - size[0] // 2)
-                        delta_camera = numpy.array([delta_x_um, delta_y_um], dtype=numpy.float64)
+                        delta_x = - sub_area_shift * (column - dimensions[1] // 2)
+                        delta_y = - sub_area_shift * (row - dimensions[0] // 2)
+                        delta_camera = numpy.array([delta_x, delta_y], dtype=numpy.float64)
                         delta_fast = numpy.linalg.solve(matrix, delta_camera)
 
-                        delta_x_um = float(delta_fast[0])
-                        delta_y_um = float(delta_fast[1])
+                        delta_x = float(delta_fast[0])
+                        delta_y = float(delta_fast[1])
 
                     counter += 1
 
@@ -339,8 +382,8 @@ class OverviewSamplePanelHandler(Declarative.Handler):
                         attempts += 1
                         try:  # try to move the stage to the desired position, if it times out then try again up to 4 times
                             tolerance_factor = 0.0001
-                            stem_controller.set_control_output(shift_x_control_name, sx_um - delta_x_um, {"confirm": True, "confirm_tolerance_factor": tolerance_factor})
-                            stem_controller.set_control_output(shift_y_control_name, sy_um - delta_y_um, {"confirm": True, "confirm_tolerance_factor": tolerance_factor})
+                            stem_controller.set_control_output(shift_x_control_name, sx - delta_x, {"confirm": True, "confirm_tolerance_factor": tolerance_factor})
+                            stem_controller.set_control_output(shift_y_control_name, sy - delta_y, {"confirm": True, "confirm_tolerance_factor": tolerance_factor})
                         except TimeoutError:
                             self._append_output_threadsafe(f"Timeout row= {row} column= {column}")
                             continue
@@ -350,7 +393,7 @@ class OverviewSamplePanelHandler(Declarative.Handler):
                     supradata = camera.grab_next_to_start()[0]
                     assert supradata is not None
 
-                    data = supradata.data[master_sub_area[0][0]:master_sub_area[0][0] + master_sub_area[1][0]:reduce, master_sub_area[0][1]:master_sub_area[0][1] + master_sub_area[1][1]:reduce]
+                    data = supradata.data[master_sub_area[0][0]:master_sub_area[0][0] + master_sub_area[1][0]:binning, master_sub_area[0][1]:master_sub_area[0][1] + master_sub_area[1][1]:binning]
                     slice_row = row
                     slice_column = column
                     slice0 = slice(slice_row * sub_area[1][0], (slice_row + 1) * sub_area[1][0])
@@ -365,8 +408,8 @@ class OverviewSamplePanelHandler(Declarative.Handler):
 
         finally:
             # restore stage to original location
-            stem_controller.set_control_output(shift_x_control_name, sx_um)
-            stem_controller.set_control_output(shift_y_control_name, sy_um)
+            stem_controller.set_control_output(shift_x_control_name, sx)
+            stem_controller.set_control_output(shift_y_control_name, sy)
 
             stem_controller.set_control_output("C10", df_original)  # restore defocus to original value
             self._set_progress_threadsafe(0, 100, "Progress:\n Idle")  # reset progress bar to idle state
@@ -376,11 +419,11 @@ class OverviewSamplePanelHandler(Declarative.Handler):
             return master_data, total_images, time_total
         else:
             self.cancel_enabled.value = False
-            return master_data, sub_area, sub_area_shift_um, pixel_size_nm, total_image_height, sx_um, sy_um
+            return master_data, sub_area, sub_area_shift, pixel_size, total_image_height, sx, sy
 
     def handle_cancel_acquisition_clicked(self, widget: typing.Any) -> None:
         """
-        Cancel button: off when the acquisition is not running, on when it is
+        Cancel button: off when the acquisition is not running, on when it is.
         """
         if self._is_running:
             self._cancel_requested = True
@@ -392,28 +435,28 @@ class OverviewSamplePanelHandler(Declarative.Handler):
         """
         #  guardrails to make sure width, height, defocus and binning are all integers and within sensible limits
         try:
-            width_um = int(self.width_value)
-            height_um = int(self.height_value)
-            defocus_nm = int(self.defocus) * 1e-9
-            reduce = int(self.binning)
+            width = int(self.width_value)
+            height = int(self.height_value)
+            defocus = int(self.defocus) * 1e-9
+            binning = int(self.binning)
         except ValueError:
             self._append_output("Please enter width, height, binning and defocus as integers.")
             return
-        if width_um < 1 or height_um < 1 or reduce < 1:
+        if width < 1 or height < 1 or binning < 1:
             self._append_output("Please ensure width and height are positive.")
             return
-        if width_um >= 1000 or height_um >= 1000:
+        if width >= 1000 or height >= 1000:
             self._append_output("Warning: Requested scan size is outside of sensible limit")
             return
-        if abs(defocus_nm * 1e9) < 1000 or abs(defocus_nm * 1e9) > 500000:
+        if abs(defocus * 1e9) < 1000 or abs(defocus * 1e9) > 500000:
             self._append_output("Warning: Requested defocus is outside of safe limit")
             return
 
         stem_controller = self.stem_controller
         camera = self.camera
 
-        target_width_um = (width_um, height_um)
-        result = self.acquisition(stem_controller, camera, defocus_nm, target_width_um, timer=True, reduce=reduce)
+        target_width = (width, height)
+        result = self.acquisition(stem_controller, camera, defocus, target_width, timer=True, binning=binning)
         if result is None or len(result) != 3:
             return
         master_data, total_images, t_total = result
@@ -422,7 +465,7 @@ class OverviewSamplePanelHandler(Declarative.Handler):
         self._append_output(
             f"This acquisition will take approximately {(time_taken // 3600):.0f}h {((time_taken % 3600) / 60):.0f}min {(time_taken % 60):.0f}s"
         )
-        if any(dim > max_size for dim in image_size):
+        if any(dimension > max_size for dimension in image_size):
             self._append_output("The final data item is too large to be used in the sample navigation window. Consider increasing the binning or reducing the size of the acquisition.\n")
             return
         else:
@@ -431,24 +474,30 @@ class OverviewSamplePanelHandler(Declarative.Handler):
     async def _run_acquisition_async(self,
                                      stem_controller: stem_controller_module.STEMController,
                                      camera: camera_base.CameraHardwareSource,
-                                     defocus_nm: float,
-                                     target_width_um: tuple[int, int],
-                                     reduce: int) -> None:
+                                     defocus: float,
+                                     target_width: tuple[int, int],
+                                     binning: int) -> None:
         """
-        Performs acquisition asynchronously to avoid blocking the UI thread, then pushes results to the sample navigaiton map
+        Performs acquisition asynchronously to avoid blocking the UI thread, then pushes results to the sample navigation map in AS2.
+        Calculates dimensional calibrations for the final data item and creates a new data item in the library.
+        Uses REST API calls to get and set the cartridge properties for the sample navigation map.
+
+        Args:
+        - stem_controller: the instrument used to control the STEM microscope.
+        - camera: the Ronchigram camera used to capture images.
+        - defocus: the desired defocus value in meters.
+        - binning: the binning factor for the camera, which reduces the resolution of the captured images by combining adjacent pixels.
         """
         loop = self._event_loop
 
         self._append_output_threadsafe("Starting acquisition...\n")
         try:
-            result = await loop.run_in_executor(
-                None, self.acquisition, stem_controller, camera, defocus_nm, target_width_um, False, reduce
-            )
+            result = await loop.run_in_executor(None, self.acquisition, stem_controller, camera, defocus, target_width, False, binning)
             if result is None or len(result) != 7:
                 self._set_progress(0, 100, "Progress:\nIdle")
                 return
 
-            master_data, sub_area, sub_area_shift_m, pixel_size_m, total_image_height, sx_um, sy_um = result
+            master_data, sub_area, sub_area_shift, pixel_size, total_image_height, sx, sy = result
         except Exception as e:
             self._append_output(f"Acquisition failed: {e!r}")
             self.cancel_enabled.value = False
@@ -457,17 +506,14 @@ class OverviewSamplePanelHandler(Declarative.Handler):
         try:
             # dimensional calibrations for the final data item
             library = self._api.library
-            y_scale_um = (sub_area_shift_m / sub_area[1][0]) * 1e6
-            x_scale_um = (sub_area_shift_m / sub_area[1][1]) * 1e6
+            y_scale = (sub_area_shift / sub_area[1][0]) * 1e6
+            x_scale = (sub_area_shift / sub_area[1][1]) * 1e6
             dimensional_calibrations = [
-                self._api.create_calibration(0.0, y_scale_um, "um"),
-                self._api.create_calibration(0.0, x_scale_um, "um"),
+                self._api.create_calibration(0.0, y_scale, "um"),
+                self._api.create_calibration(0.0, x_scale, "um"),
             ]
 
-            xdata = self._api.create_data_and_metadata(
-                master_data,
-                dimensional_calibrations=dimensional_calibrations,
-            )
+            xdata = self._api.create_data_and_metadata(master_data, dimensional_calibrations=dimensional_calibrations)
 
             # create final data item
             library.create_data_item_from_data_and_metadata(xdata, "Composite Survey")
@@ -476,7 +522,7 @@ class OverviewSamplePanelHandler(Declarative.Handler):
 
             self._append_output("Image properties:")
             self._append_output_threadsafe(f"Total image height: {total_image_height * 1e3} mm")
-            self._append_output_threadsafe(f"Original stage coordinates: {sx_um * 1e6, sy_um * 1e6} um")
+            self._append_output_threadsafe(f"Original stage coordinates: {sx * 1e6, sy * 1e6} um")
 
             # convert the data to uint8 and save as a jpg
             data_array = numpy.array(xdata)
@@ -505,7 +551,7 @@ class OverviewSamplePanelHandler(Declarative.Handler):
                 cartridge_string = cartridge_result.value
                 self._append_output_threadsafe(f"Cartridge in stage: {cartridge_string}")
 
-                properties: JSONDict = {"ImageScaleRad_m": total_image_height, "ImageOffsetX_px": sx_um / pixel_size_m, "ImageOffsetY_px": sy_um / pixel_size_m, "ImageFile": str(export_path)}
+                properties: JSONDict = {"ImageScaleRad_m": total_image_height, "ImageOffsetX_px": sx / pixel_size, "ImageOffsetY_px": sy / pixel_size, "ImageFile": str(export_path)}
 
                 # Set the values on the cartridge
 
@@ -523,26 +569,26 @@ class OverviewSamplePanelHandler(Declarative.Handler):
 
     def handle_perform_acquisition_clicked(self, widget: typing.Any) -> None:
         """
-        Start the acquisition process by validating input parameters and initiating the asynchronous acquisition task when the button is clicked
+        Starts the acquisition process by validating input parameters.
+        Initiates the asynchronous acquisition task.
         """
-
         # guardrails to make sure width, height, defocus and binning are all integers and within sensible limits
         try:
-            width_um = int(self.width_value)
-            height_um = int(self.height_value)
-            defocus_nm = int(self.defocus) * 1e-9
-            reduce = int(self.binning)
+            width = int(self.width_value)
+            height = int(self.height_value)
+            defocus = int(self.defocus) * 1e-9
+            binning = int(self.binning)
         except ValueError:
             self._append_output("Please enter width, height, binning and defocus as integers.")
             return
 
-        if width_um < 1 or height_um < 1 or reduce < 1:
+        if width < 1 or height < 1 or binning < 1:
             self._append_output("Please ensure width and height are positive.")
             return
-        if width_um >= 1000 or height_um >= 1000:
+        if width >= 1000 or height >= 1000:
             self._append_output("Warning: Requested scan size is outside of sensible limit")
             return
-        if abs(defocus_nm * 1e9) < 1000 or abs(defocus_nm * 1e9) > 500000:
+        if abs(defocus * 1e9) < 1000 or abs(defocus * 1e9) > 500000:
             self._append_output("Warning: Requested defocus is outside of safe limit")
             return
 
@@ -552,25 +598,26 @@ class OverviewSamplePanelHandler(Declarative.Handler):
 
         stem_controller = self.stem_controller
         camera = self.camera
-        target_width_um = (width_um, height_um)
+        target_width = (width, height)
 
         self._acq_task = self._event_loop.create_task(
-            self._run_acquisition_async(stem_controller, camera, defocus_nm, target_width_um, reduce)
+            self._run_acquisition_async(stem_controller, camera, defocus, target_width, binning)
         )
         self.cancel_enabled.value = False
 
     def handle_max_clicked(self, widget: typing.Any) -> None:
         """
-        Calculates the maximum scan size at the specified defocus/binning for the image to be pushed to the sample navigation map, estimates the time it will take and performs the acquisition when the button is clicked
+        Calculates the maximum scan size at the specified defocus/binning for the image to be pushed to the sample navigation map.
+        Estimates the time it will take and performs the acquisition.
         """
         # guardrails to make sure defocus and binning are both integers and within sensible limits
         try:
-            defocus_nm = int(self.defocus) * 1e-9
-            reduce = int(self.binning)
+            defocus = int(self.defocus) * 1e-9
+            binning = int(self.binning)
         except ValueError:
             self._append_output("Please enter defocus and binning as integers.")
             return
-        if abs(defocus_nm * 1e9) < 1000 or abs(defocus_nm * 1e9) > 500000:
+        if abs(defocus * 1e9) < 1000 or abs(defocus * 1e9) > 500000:
             self._append_output("Warning: Requested defocus is outside of sensible limit")
             return
 
@@ -595,20 +642,20 @@ class OverviewSamplePanelHandler(Declarative.Handler):
 
         assert tv_pixel_angle_rad is not None
 
-        pixel_size_nm, image_size, image_width_um, master_sub_area, master_sub_area_size, sub_area_shift_um, sub_area = self.find_dimensions(stem_controller, camera, defocus_nm, tv_pixel_angle_rad, reduce)
+        pixel_size, frame_size, frame_width, master_sub_area, master_sub_area_size, sub_area_shift, sub_area = self.find_dimensions(stem_controller, camera, defocus, tv_pixel_angle_rad, binning)
 
-        size1 = max_size // sub_area[1][0]
-        size2 = max_size // sub_area[1][1]
+        dimension_y = max_size // sub_area[1][0]
+        dimension_x = max_size // sub_area[1][1]
 
         # putting the calculated maximum scan size into the width and height fields in the UI
-        self.width_value = str(int(size1 * sub_area_shift_um * 1e6))
-        self.height_value = str(int(size2 * sub_area_shift_um * 1e6))
+        self.width_value = str(int(dimension_x * sub_area_shift * 1e6))
+        self.height_value = str(int(dimension_y * sub_area_shift * 1e6))
         self.property_changed_event.fire("width_value")
         self.property_changed_event.fire("height_value")
 
-        target_width_um = (int(self.width_value), int(self.height_value))
+        target_width = (int(self.width_value), int(self.height_value))
 
-        result = self.acquisition(stem_controller, camera, defocus_nm, target_width_um, timer=True, reduce=reduce)
+        result = self.acquisition(stem_controller, camera, defocus, target_width, timer=True, binning=binning)
         if result is None or len(result) != 3:
             return
         master_data, total_images, t_total = result
@@ -618,13 +665,13 @@ class OverviewSamplePanelHandler(Declarative.Handler):
         )
 
         self._acq_task = self._event_loop.create_task(
-            self._run_acquisition_async(stem_controller, camera, defocus_nm, target_width_um, reduce)
+            self._run_acquisition_async(stem_controller, camera, defocus, target_width, binning)
         )
         self.cancel_enabled.value = False
 
     def handle_clear_minimap_clicked(self, widget: typing.Any) -> None:
         """
-        Clears the image, scale height and offsets from the sample navigation map when the button is clicked
+        Clears the image, scale height and offsets from the sample navigation map.
         """
         stem_controller = self.stem_controller
         try:
