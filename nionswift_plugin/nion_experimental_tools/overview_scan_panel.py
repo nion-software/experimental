@@ -22,7 +22,7 @@ from nion.utils import Registry
 
 _ = gettext.gettext
 JSONDict = dict[str, typing.Any]
-max_size = 20000  # this is the maximum size of the final image in pixels that can be pushed to the sample navigation window. Placeholder value at the moment because something weird is happening with AS2 where the max possible size is decreasing
+max_size = 32000  # this is the maximum size of the final image in pixels that can be pushed to the sample navigation window. Placeholder value at the moment because something weird is happening with AS2 where the max possible size is decreasing
 
 
 class OverviewScanPanelUI:
@@ -64,6 +64,7 @@ class OverviewSamplePanelHandler(Declarative.Handler):
         self._cancel_requested: bool = False
         self._is_running: bool = False
         self.cancel_enabled = Model.PropertyModel(False)
+        self.scan_buttons_enabled = Model.PropertyModel(True)
         self.ui_view = self._build_ui()
 
     def _set_progress(self, value: int, maximum: int, text: str) -> None:
@@ -90,9 +91,9 @@ class OverviewSamplePanelHandler(Declarative.Handler):
         """
         u = Declarative.DeclarativeUI()
         title = u.create_label(text="Overview Scan", font="bold")
-        time_button = u.create_push_button(text="Estimate scan size and duration", on_clicked="handle_estimate_time_clicked")
-        acq_button = u.create_push_button(text="Scan", on_clicked="handle_perform_acquisition_clicked")
-        max_button = u.create_push_button(text="Maximum scan at defocus", on_clicked="handle_max_clicked")
+        time_button = u.create_push_button(text="Estimate scan size and duration", on_clicked="handle_estimate_time_clicked", enabled="@binding(scan_buttons_enabled.value)")
+        acq_button = u.create_push_button(text="Scan", on_clicked="handle_perform_acquisition_clicked", enabled="@binding(scan_buttons_enabled.value)")
+        max_button = u.create_push_button(text="Calculate maximum scan", on_clicked="handle_max_clicked", enabled="@binding(scan_buttons_enabled.value)")
         properties_label = u.create_label(text="Desired properties of image:")
         width_label = u.create_label(text="Width (um):", width=80)
         width_field = u.create_line_edit(text="@binding(width_value)", width=50, editable=True)
@@ -107,7 +108,7 @@ class OverviewSamplePanelHandler(Declarative.Handler):
         progress_label = u.create_label(text="@binding(progress_text)")
         progress_bar = u.create_progress_bar(value="@binding(progress_value)", minimum=0, maximum=100, width=600)
         cancel_button = u.create_push_button(text="Cancel", on_clicked="handle_cancel_acquisition_clicked", enabled="@binding(cancel_enabled.value)")
-        clear_button = u.create_push_button(text="Clear minimap", on_clicked="handle_clear_minimap_clicked")
+        clear_button = u.create_push_button(text="Clear minimap", on_clicked="handle_clear_minimap_clicked", enabled="@binding(scan_buttons_enabled.value)")
 
         overview_scan_ui = u.create_column(
             title,
@@ -118,13 +119,14 @@ class OverviewSamplePanelHandler(Declarative.Handler):
                 u.create_row(u.create_column(defocus_label, spacing=0), u.create_column(defocus_field, spacing=0), spacing=2),
                 u.create_row(u.create_column(binning_label, spacing=0), u.create_column(binning_field, spacing=0), spacing=8),
             ),
-            u.create_row(time_button, acq_button, max_button, spacing=4),
+            u.create_row(max_button, time_button, acq_button, spacing=4),
             u.create_spacing(8),
             progress_label,
             progress_bar,
             u.create_spacing(8),
-            u.create_row(cancel_button, u.create_spacing(4), clear_button),
-            u.create_spacing(8),
+            u.create_row(cancel_button),
+            u.create_spacing(4),
+            u.create_row(clear_button),
             output_label,
             output_box,
             u.create_stretch(),
@@ -289,6 +291,7 @@ class OverviewSamplePanelHandler(Declarative.Handler):
         self._cancel_requested = False
         self._is_running = True
         self.cancel_enabled.value = True
+        self.scan_buttons_enabled.value = False
 
         success, tv_pixel_angle_rad = stem_controller.TryGetVal("TVPixelAngle")  # if success is False, the plugin is likely being run on uSim
         matrix = self.find_matrix()
@@ -328,11 +331,9 @@ class OverviewSamplePanelHandler(Declarative.Handler):
         master_data = numpy.empty((sub_area[1][0] * dimensions[0], sub_area[1][1] * dimensions[1]))  # create an empty array to hold the final image data
 
         if not timer:  # if performing the full acquisition instead of just estimating the time, update the progress bar and output window
-            self._append_output_threadsafe(f"Stage starting position: {sx * 1e6, sy * 1e6} um")
+            self._append_output_threadsafe(f"Stage starting position: {(sx * 1e6):.3f}, {(sy * 1e6):.3f} um")
             self._append_output_threadsafe(f"Pixel size: {(pixel_size * 1e9):.3f} nm")
-            self._append_output_threadsafe(f"Defocus: {(defocus * 1e9):.0f} nm")
-
-            self._append_output_threadsafe(f"Frame width: {frame_width * 1e6} um")
+            self._append_output_threadsafe(f"Frame width: {(frame_width * 1e6):.3f} um")
             self._append_output_threadsafe(f"Master size: {master_data.shape}\n")
 
             self._set_progress_threadsafe(0, total_images, "Progress:\nStarting acquisition...")
@@ -348,6 +349,7 @@ class OverviewSamplePanelHandler(Declarative.Handler):
                 if self._cancel_requested:
                     self._append_output_threadsafe("Acquisition Cancelled.")
                     self.cancel_enabled.value = False
+                    self.scan_buttons_enabled.value = True
                     return None if not timer else (0, 0.0)
 
                 # acquisition algorithm in a snake pattern
@@ -356,6 +358,7 @@ class OverviewSamplePanelHandler(Declarative.Handler):
                     if self._cancel_requested:
                         self._append_output_threadsafe("Acquisition Cancelled.")
                         self.cancel_enabled.value = False
+                        self.scan_buttons_enabled.value = True
                         return None if not timer else (0, 0.0)
 
                     if shift_x_control_name == "stage_position_m.x":  # if the plugin is being run on uSim then correction for stage axis is not needed as can move straight along the camera axis
@@ -377,6 +380,7 @@ class OverviewSamplePanelHandler(Declarative.Handler):
                         if self._cancel_requested:
                             self._append_output_threadsafe("Acquisition Cancelled.")
                             self.cancel_enabled.value = False
+                            self.scan_buttons_enabled.value = True
                             return None if not timer else (0, 0.0)
 
                         attempts += 1
@@ -418,9 +422,11 @@ class OverviewSamplePanelHandler(Declarative.Handler):
 
         if timer:
             self.cancel_enabled.value = False
+            self.scan_buttons_enabled.value = True
             return master_data, total_images, time_total
         else:
             self.cancel_enabled.value = False
+            self.scan_buttons_enabled.value = True
             return master_data, sub_area, sub_area_shift, pixel_size, total_image_height, sx, sy
 
     def handle_cancel_acquisition_clicked(self, widget: typing.Any) -> None:
@@ -430,6 +436,7 @@ class OverviewSamplePanelHandler(Declarative.Handler):
         if self._is_running:
             self._cancel_requested = True
             self._set_progress_threadsafe(self.progress_value, 100, "Cancel requested...")
+
 
     def handle_estimate_time_clicked(self, widget: typing.Any) -> None:
         """
@@ -446,9 +453,6 @@ class OverviewSamplePanelHandler(Declarative.Handler):
             return
         if width < 1 or height < 1 or binning < 1:
             self._append_output("Please ensure width and height are positive.")
-            return
-        if width >= 1000 or height >= 1000:
-            self._append_output("Warning: Requested scan size is outside of sensible limit")
             return
         if abs(defocus * 1e9) < 1000 or abs(defocus * 1e9) > 500000:
             self._append_output("Warning: Requested defocus is outside of safe limit")
@@ -471,6 +475,7 @@ class OverviewSamplePanelHandler(Declarative.Handler):
             self._append_output("The final data item is too large to be used in the sample navigation window. Consider increasing the binning or reducing the size of the acquisition.\n")
             return
         else:
+            self._append_output(f"The final data item will have dimensions {image_size[0]} x {image_size[1]} pixels.\n")
             return
 
     async def _run_acquisition_async(self,
@@ -503,6 +508,7 @@ class OverviewSamplePanelHandler(Declarative.Handler):
         except Exception as e:
             self._append_output(f"Acquisition failed: {e!r}")
             self.cancel_enabled.value = False
+            self.scan_buttons_enabled.value = True
             return
 
         try:
@@ -523,8 +529,8 @@ class OverviewSamplePanelHandler(Declarative.Handler):
             self._append_output("Acquisition complete.\n")
 
             self._append_output("Image properties:")
-            self._append_output_threadsafe(f"Total image height: {total_image_height * 1e3} mm")
-            self._append_output_threadsafe(f"Original stage coordinates: {sx * 1e6, sy * 1e6} um")
+            self._append_output_threadsafe(f"Total image height: {(total_image_height * 1e3):.3f} mm")
+            self._append_output_threadsafe(f"Original stage coordinates: {(sx * 1e6):.3f}, {(sy * 1e6):.3f} um")
 
             # convert the data to uint8 and save as a jpg
             data_array = numpy.array(xdata)
@@ -544,6 +550,7 @@ class OverviewSamplePanelHandler(Declarative.Handler):
         except Exception as e:
             self._append_output(f"Failed to publish result: {e!r}")
             self.cancel_enabled.value = False
+            self.scan_buttons_enabled.value = True
             return
 
         # push the image, scale height and offsets to the sample navigation map
@@ -552,8 +559,7 @@ class OverviewSamplePanelHandler(Declarative.Handler):
             if cartridge_result.is_valid:
                 cartridge_string = cartridge_result.value
                 self._append_output_threadsafe(f"Cartridge in stage: {cartridge_string}")
-
-                properties: JSONDict = {"ImageScaleRad_m": total_image_height // 2, "ImageOffsetX_px": sx / pixel_size, "ImageOffsetY_px": sy / pixel_size, "ImageFile": str(export_path)}
+                properties: JSONDict = {"ImageScaleRad_m": total_image_height / 2, "ImageOffsetX_px": sx / pixel_size, "ImageOffsetY_px": sy / pixel_size, "ImageFile": str(export_path)}
 
                 # Set the values on the cartridge
 
@@ -567,6 +573,7 @@ class OverviewSamplePanelHandler(Declarative.Handler):
         except Exception as e:
             self._append_output(f"Failed to update cartridge data: {e!r}")
             self.cancel_enabled.value = False
+            self.scan_buttons_enabled.value = True
             return
 
     def handle_perform_acquisition_clicked(self, widget: typing.Any) -> None:
@@ -587,9 +594,6 @@ class OverviewSamplePanelHandler(Declarative.Handler):
         if width < 1 or height < 1 or binning < 1:
             self._append_output("Please ensure width and height are positive.")
             return
-        if width >= 1000 or height >= 1000:
-            self._append_output("Warning: Requested scan size is outside of sensible limit")
-            return
         if abs(defocus * 1e9) < 1000 or abs(defocus * 1e9) > 500000:
             self._append_output("Warning: Requested defocus is outside of safe limit")
             return
@@ -606,6 +610,7 @@ class OverviewSamplePanelHandler(Declarative.Handler):
             self._run_acquisition_async(stem_controller, camera, defocus, target_width, binning)
         )
         self.cancel_enabled.value = False
+        self.scan_buttons_enabled.value = True
 
     def handle_max_clicked(self, widget: typing.Any) -> None:
         """
@@ -630,10 +635,6 @@ class OverviewSamplePanelHandler(Declarative.Handler):
         stem_controller = self.stem_controller
         camera = self.camera
 
-        self._cancel_requested = False
-        self._is_running = True
-        self.cancel_enabled.value = True
-
         # calculating the maximum scan size at the specified defocus/binning for the image to be pushed to the sample navigation map
         success, tv_pixel_angle_rad = stem_controller.TryGetVal("TVPixelAngle")
 
@@ -654,22 +655,6 @@ class OverviewSamplePanelHandler(Declarative.Handler):
         self.height_value = str(int(dimension_y * sub_area_shift * 1e6))
         self.property_changed_event.fire("width_value")
         self.property_changed_event.fire("height_value")
-
-        target_width = (int(self.width_value), int(self.height_value))
-
-        result = self.acquisition(stem_controller, camera, defocus, target_width, timer=True, binning=binning)
-        if result is None or len(result) != 3:
-            return
-        master_data, total_images, t_total = result
-        time_taken = t_total * total_images / 2  # average time to move the stage
-        self._append_output(
-            f"This acquisition will take approximately {(time_taken // 3600):.0f}h {((time_taken % 3600) / 60):.0f}min {(time_taken % 60):.0f}s\n"
-        )
-
-        self._acq_task = self._event_loop.create_task(
-            self._run_acquisition_async(stem_controller, camera, defocus, target_width, binning)
-        )
-        self.cancel_enabled.value = False
 
     def handle_clear_minimap_clicked(self, widget: typing.Any) -> None:
         """
