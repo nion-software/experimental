@@ -554,7 +554,7 @@ class OverviewSamplePanelHandler(Declarative.Handler):
                 cartridge_string = cartridge_result.value
                 self._append_output_threadsafe(f"Cartridge in stage: {cartridge_string}")
 
-                properties: JSONDict = {"ImageScaleRad_m": total_image_height, "ImageOffsetX_px": sx / pixel_size, "ImageOffsetY_px": sy / pixel_size, "ImageFile": str(export_path)}
+                properties: JSONDict = {"ImageScaleRad_m": total_image_height // 2, "ImageOffsetX_px": sx / pixel_size, "ImageOffsetY_px": sy / pixel_size, "ImageFile": str(export_path)}
 
                 # Set the values on the cartridge
 
