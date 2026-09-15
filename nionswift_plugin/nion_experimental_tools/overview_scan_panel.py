@@ -302,7 +302,6 @@ class OverviewSamplePanelHandler(Declarative.Handler):
             #  this allows the plugin to run on uSim
             shift_x_control_name = "stage_position_m.x"
             shift_y_control_name = "stage_position_m.y"
-            matrix = None
 
             frame = camera.grab_next_to_start()[0]
             assert frame is not None
