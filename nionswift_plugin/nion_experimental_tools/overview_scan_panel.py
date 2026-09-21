@@ -253,60 +253,6 @@ class OverviewSamplePanelHandler(Declarative.Handler):
 
         return pixel_size, frame_size, frame_width, master_sub_area, master_sub_area_size, sub_area_shift, sub_area
 
-    def spiral_indices(self, rows: int, cols: int) -> typing.Iterator[tuple[int, int]]:
-        # Start from center tile.
-        r = rows // 2
-        c = cols // 2
-
-        yielded = 0
-        total = rows * cols
-
-        # Emit start if valid.
-        if 0 <= r < rows and 0 <= c < cols:
-            yield r, c
-            yielded += 1
-
-        # Spiral: right, down, left, up with step lengths 1,1,2,2,3,3,...
-        step_len = 1
-        while yielded < total:
-            # right
-            for _ in range(step_len):
-                c += 1
-                if 0 <= r < rows and 0 <= c < cols:
-                    yield r, c
-                    yielded += 1
-                    if yielded >= total:
-                        return
-            # down
-            for _ in range(step_len):
-                r += 1
-                if 0 <= r < rows and 0 <= c < cols:
-                    yield r, c
-                    yielded += 1
-                    if yielded >= total:
-                        return
-
-            step_len += 1
-
-            # left
-            for _ in range(step_len):
-                c -= 1
-                if 0 <= r < rows and 0 <= c < cols:
-                    yield r, c
-                    yielded += 1
-                    if yielded >= total:
-                        return
-            # up
-            for _ in range(step_len):
-                r -= 1
-                if 0 <= r < rows and 0 <= c < cols:
-                    yield r, c
-                    yielded += 1
-                    if yielded >= total:
-                        return
-
-            step_len += 1
-
     def acquisition(self,
                     stem_controller: stem_controller_module.STEMController,
                     camera: camera_base.CameraHardwareSource,
@@ -398,84 +344,23 @@ class OverviewSamplePanelHandler(Declarative.Handler):
             dimensions = (2, 1)  # for timing purposes, only need to acquire 2 frames and average the time to take them both
 
         try:
-            #for row in range(dimensions[0]):
+            for row in range(dimensions[0]):
                 #  cancel mechanism
-                # if self._cancel_requested:
-                #     self._append_output_threadsafe("Acquisition Cancelled.")
-                #     self.cancel_enabled.value = False
-                #     self.scan_buttons_enabled.value = True
-                #     return None if not timer else (0, 0.0)
+                if self._cancel_requested:
+                    self._append_output_threadsafe("Acquisition Cancelled.")
+                    self.cancel_enabled.value = False
+                    self.scan_buttons_enabled.value = True
+                    return None if not timer else (0, 0.0)
 
                 # acquisition algorithm in a snake pattern
-
-                ###SNAKE
-                # col_iter = range(dimensions[1]) if (row % 2 == 0) else range(dimensions[1] - 1, -1, -1)
-                # for column in col_iter:
-
-                ###LINE
-                #for column in range(dimensions[1]):
-                    # if self._cancel_requested:
-                    #     self._append_output_threadsafe("Acquisition Cancelled.")
-                    #     self.cancel_enabled.value = False
-                    #     self.scan_buttons_enabled.value = True
-                    #     return None if not timer else (0, 0.0)
-                    #
-                    # if shift_x_control_name == "stage_position_m.x":  # if the plugin is being run on uSim then correction for stage axis is not needed as can move straight along the camera axis
-                    #     delta_x = - sub_area_shift * (column - dimensions[1] // 2)
-                    #     delta_y = - sub_area_shift * (row - dimensions[0] // 2)
-                    # else:  # if the plugin is being run on a microscope need to transform every movement from the stage axis to the camera axis
-                    #     delta_x = - sub_area_shift * (column - dimensions[1] // 2)
-                    #     delta_y = - sub_area_shift * (row - dimensions[0] // 2)
-                    #     delta_camera = numpy.array([delta_x, delta_y], dtype=numpy.float64)
-                    #     delta_fast = numpy.linalg.solve(matrix, delta_camera)
-                    #
-                    #     delta_x = float(delta_fast[0])
-                    #     delta_y = float(delta_fast[1])
-                    #
-                    # counter += 1
-                    # attempts = 0
-                    #
-                    # while attempts < 4:
-                    #     if self._cancel_requested:
-                    #         self._append_output_threadsafe("Acquisition Cancelled.")
-                    #         self.cancel_enabled.value = False
-                    #         self.scan_buttons_enabled.value = True
-                    #         return None if not timer else (0, 0.0)
-                    #
-                    #     attempts += 1
-                    #
-                    #     try:  # try to move the stage to the desired position, if it times out then try again up to 4 times
-                    #         tolerance_factor = 0.0001
-                    #         stem_controller.set_control_output(shift_x_control_name, sx - delta_x, {"confirm": True, "confirm_tolerance_factor": tolerance_factor})
-                    #         stem_controller.set_control_output(shift_y_control_name, sy - delta_y, {"confirm": True, "confirm_tolerance_factor": tolerance_factor})
-                    #     except TimeoutError:
-                    #         self._append_output_threadsafe(f"Timeout row= {row} column= {column}")
-                    #         continue
-                    #     break
-                    #
-                    # #  adding the new frame to the data item
-                    # supradata = camera.grab_next_to_start()[0]
-                    # assert supradata is not None
-                    #
-                    # data = supradata.data[master_sub_area[0][0]:master_sub_area[0][0] + master_sub_area[1][0]:binning, master_sub_area[0][1]:master_sub_area[0][1] + master_sub_area[1][1]:binning]
-                    # slice_row = row
-                    # slice_column = column
-                    # slice0 = slice(slice_row * sub_area[1][0], (slice_row + 1) * sub_area[1][0])
-                    # slice1 = slice(slice_column * sub_area[1][1], (slice_column + 1) * sub_area[1][1])
-                    # master_data[slice0, slice1] = data
-                    #
-                    # if not timer:  # if performing the actual acquisition then update the progress bar and output window
-                    #     pct = int(100 * counter / total_images)
-                    #     self._set_progress_threadsafe(pct, total_images, f"Progress:\nAcquiring frame {counter} of {total_images}")
-
-                ###########SPIRAL
-
-                for row, column in self.spiral_indices(dimensions[0], dimensions[1]):
+                col_iter = range(dimensions[1]) if (row % 2 == 0) else range(dimensions[1] - 1, -1, -1)
+                for column in col_iter:
                     if self._cancel_requested:
                         self._append_output_threadsafe("Acquisition Cancelled.")
                         self.cancel_enabled.value = False
                         self.scan_buttons_enabled.value = True
                         return None if not timer else (0, 0.0)
+
                     if shift_x_control_name == "stage_position_m.x":  # if the plugin is being run on uSim then correction for stage axis is not needed as can move straight along the camera axis
                         delta_x = - sub_area_shift * (column - dimensions[1] // 2)
                         delta_y = - sub_area_shift * (row - dimensions[0] // 2)
