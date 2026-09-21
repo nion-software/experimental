@@ -17,13 +17,12 @@ from nion.swift import Workspace
 from nion.swift.model import PlugInManager
 from nion.typeshed import API_1_0
 from nion.ui import Declarative
-from nion.utils import Model
+from nion.utils import Model, Geometry
 from nion.utils import Registry
 
 _ = gettext.gettext
 JSONDict = dict[str, typing.Any]
 max_size = 32000  # this is the maximum size of the final image in pixels that can be pushed to the sample navigation window. Placeholder value at the moment because something weird is happening with AS2 where the max possible size is decreasing
-
 
 class OverviewScanPanelUI:
     panel_type = "overview-scan-panel"
@@ -149,60 +148,15 @@ class OverviewSamplePanelHandler(Declarative.Handler):
         """
         self._event_loop.call_soon_threadsafe(self._append_output, message)
 
-    def find_matrix(self, ds: float = 16e-6) -> numpy.ndarray:
-        """
-        Calculate the transformation matrix from stage coordinates to camera coordinates by moving the stage in small increments and measuring the resulting changes in camera coordinates.
-        This is done because moving along the stage axis is much faster than moving along the camera axis as it requires fewer moves.
-
-        Args:
-        - ds: the step size by which the stage is moved in the x and y directions to measure the resulting changes in camera coordinates.
-
-        Returns:
-        - matrix: a 2x2 numpy array representing the transformation matrix from stage coordinates to camera coordinates.
-        """
-        stem_controller = self.stem_controller
-
-        # Get original stage position in both stage and camera coordinates
-        sx0 = stem_controller.get_control_output("SShft.sx")
-        sy0 = stem_controller.get_control_output("SShft.sy")
-        x0 = stem_controller.get_control_output("SShft.x")
-        y0 = stem_controller.get_control_output("SShft.y")
-
-        #  Move a small amount in x direction in the stage axis and then measure the change in x and y in the camera axis
-        stem_controller.set_control_output("SShft.sx", sx0 + ds)
-        x1 = stem_controller.get_control_output("SShft.x")
-        y1 = stem_controller.get_control_output("SShft.y")
-
-        dx_from_sx = x1 - x0
-        dy_from_sx = y1 - y0
-
-        # Put the stage back to its original position
-        stem_controller.set_control_output("SShft.sx", sx0)
-        stem_controller.set_control_output("SShft.sy", sy0)
-        stem_controller.set_control_output("SShft.x", x0)
-        stem_controller.set_control_output("SShft.y", y0)
-
-        # Move a small amount in y direction in the stage axis and then measure the change in x and y in the camera axis
-        stem_controller.set_control_output("SShft.sy", sy0 + ds)
-        x2 = stem_controller.get_control_output("SShft.x")
-        y2 = stem_controller.get_control_output("SShft.y")
-
-        dx_from_sy = x2 - x0
-        dy_from_sy = y2 - y0
-
-        # Put the stage back to its original position
-        stem_controller.set_control_output("SShft.sy", sy0)
-        stem_controller.set_control_output("SShft.sx", sx0)
-        stem_controller.set_control_output("SShft.x", x0)
-        stem_controller.set_control_output("SShft.y", y0)
-
-        # Construct the transformation matrix from stage coordinates to camera coordinates
-        matrix = numpy.array([
-            [dx_from_sx / ds, dx_from_sy / ds],
-            [dy_from_sx / ds, dy_from_sy / ds],
-        ])
-
-        return matrix
+    def _get_axis_description(self, axis_name: str) -> stem_controller_module.AxisDescription:
+        for axis_description in self.stem_controller.axis_descriptions:
+            if axis_description.axis_id == axis_name:
+                return axis_description
+            if axis_description.display_name == axis_name:
+                return axis_description
+            if getattr(axis_description, "searchable_name", None) == axis_name:
+                return axis_description
+        raise ValueError(f"Axis '{axis_name}' not found.")
 
     @staticmethod
     def find_dimensions(stem_controller: stem_controller_module.STEMController,
@@ -294,10 +248,9 @@ class OverviewSamplePanelHandler(Declarative.Handler):
         self.scan_buttons_enabled.value = False
 
         success, tv_pixel_angle_rad = stem_controller.TryGetVal("TVPixelAngle")  # if success is False, the plugin is likely being run on uSim
-        matrix = self.find_matrix()
 
-        if success and matrix is not None and numpy.linalg.det(matrix) != 0 and len(matrix) != 0:  #even if success is True, it could still be on usim- this would give an empty or singular matrix so can guard against non-uSim controls being used
-            # this branch will run where the plugin is used on an actual microscope
+        if success:  #even if success is True, it could still be on usim- this would give an empty or singular matrix so can guard against non-uSim controls being used
+            #  this branch will run where the plugin is used on an actual microscope
             shift_x_control_name = "SShft.sx"
             shift_y_control_name = "SShft.sy"
 
@@ -361,15 +314,15 @@ class OverviewSamplePanelHandler(Declarative.Handler):
                         self.scan_buttons_enabled.value = True
                         return None if not timer else (0, 0.0)
 
-                    if shift_x_control_name == "stage_position_m.x":  # if the plugin is being run on uSim then correction for stage axis is not needed as can move straight along the camera axis
-                        delta_x = - sub_area_shift * (column - dimensions[1] // 2)
-                        delta_y = - sub_area_shift * (row - dimensions[0] // 2)
-                    else:  # if the plugin is being run on a microscope need to transform every movement from the stage axis to the camera axis
-                        delta_x = - sub_area_shift * (column - dimensions[1] // 2)
-                        delta_y = - sub_area_shift * (row - dimensions[0] // 2)
-                        delta_camera = numpy.array([delta_x, delta_y], dtype=numpy.float64)
-                        delta_fast = numpy.linalg.solve(matrix, delta_camera)
+                    delta_x = - sub_area_shift * (column - dimensions[1] // 2)
+                    delta_y = - sub_area_shift * (row - dimensions[0] // 2)
 
+                    stage_axis = self._get_axis_description("StageAxis")
+                    camera_axis = self._get_axis_description("TV")
+
+                    delta_fast = stem_controller.axis_transform_point(Geometry.FloatPoint(y=delta_y, x=delta_x),from_axis=stage_axis, to_axis=camera_axis)
+
+                    if delta_fast:
                         delta_x = float(delta_fast[0])
                         delta_y = float(delta_fast[1])
 
@@ -411,8 +364,6 @@ class OverviewSamplePanelHandler(Declarative.Handler):
 
                 t2 = time.time()
                 time_total = t2 - t1
-
-
 
         finally:
             # restore stage to original location
