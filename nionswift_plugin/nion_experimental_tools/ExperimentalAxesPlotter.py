@@ -114,6 +114,7 @@ class ExperimentalAxesPlotterHandler(Declarative.Handler):
 
         self._axis_id_to_axis: dict[str, CoordinateTransform] = {}
         self._axis_id_to_safeid: dict[str, str] = {}
+        self._axis_color_models: dict[str, Model.PropertyModel[str]] = {}
         self._axis_graphics: dict[AxisGraphicKey, VisibleAxisOverlay] = {}
         self._axis_toggle_callback_names: set[str] = set()
 
@@ -130,16 +131,14 @@ class ExperimentalAxesPlotterHandler(Declarative.Handler):
         self._coordinate_transforms_listener: Event.EventListener | None = (self._coordinate_transforms_stream.value_stream.listen(self._coordinate_transforms_changed))
 
     def _full_length_enabled_changed(self, value: bool | None) -> None:
-        """Rebuild visible overlays when the full-length PropertyModel changes."""
+        """Rebuild overlays only on the currently selected display."""
 
-        if self._axis_graphics:
-            self._rebuild_existing_axes()
+        self._rebuild_existing_axes_for_selected_display()
 
     def _selected_image_axis_changed(self, value: int | None) -> None:
-        """Rebuild visible overlays when the image-axis selection changes."""
+        """Rebuild overlays only on the currently selected display."""
 
-        if self._axis_graphics:
-            self._rebuild_existing_axes()
+        self._rebuild_existing_axes_for_selected_display()
 
     def close(self) -> None:
         """Declarative widget close.
@@ -198,7 +197,12 @@ class ExperimentalAxesPlotterHandler(Declarative.Handler):
         """Update axes from the selected/focused display item."""
 
         self._current_display_item = display_item
-        self._set_coordinate_transforms_value(self._create_coordinate_transforms_for_current_display_item())
+
+        if display_item is None:
+            self._set_coordinate_transforms_value(None)
+            return
+
+        self._set_coordinate_transforms_value(create_coordinate_transforms_from_display_item(display_item))
 
     def refresh_from_current_selection(self) -> None:
         """Manual fallback refresh using the current display item or API target."""
@@ -266,8 +270,8 @@ class ExperimentalAxesPlotterHandler(Declarative.Handler):
                     u.create_row(
                         u.create_label(text=axis_label, width=160),
                         u.create_push_button(text="Toggle", on_clicked=toggle_method, width=70),
-                        u.create_line_edit(text=f"@binding({color_attr})", width=90),
-                        {"type": "nionswift.color_chooser", "color": f"@binding({color_attr})"},
+                        u.create_line_edit(text=f"@binding({color_attr}.value)", width=90),
+                        {"type": "nionswift.color_chooser", "color": f"@binding({color_attr}.value)"},
                         u.create_stretch(),
                         spacing=8
                     )
@@ -305,11 +309,54 @@ class ExperimentalAxesPlotterHandler(Declarative.Handler):
         return safe_id
 
     def _clear_axis_color_attributes(self) -> None:
-        """Remove dynamic colour binding attributes from the handler."""
+        """Remove dynamic colour models and their binding attributes."""
+
+        for color_model in self._axis_color_models.values():
+            color_model.on_value_changed = None
+
+        self._axis_color_models.clear()
 
         for attr_name in list(vars(self)):
             if attr_name.startswith("axis_color_"):
                 delattr(self, attr_name)
+
+    def _make_axis_color_changed_handler(self, axis_id: str) -> typing.Callable[[str | None], None]:
+        """Create a colour-model callback for one axis."""
+
+        def _handler(value: str | None) -> None:
+            if isinstance(value, str):
+                self._update_axis_color_on_selected_display(axis_id, value)
+
+        return _handler
+
+    def _update_axis_color_on_selected_display(self, axis_id: str, color: str) -> None:
+        """Apply a colour change immediately to the selected display's visible axis."""
+
+        data_item = self._get_active_data_item()
+
+        if data_item is None:
+            return
+
+        overlay_key: AxisGraphicKey = (self._get_data_item_key(data_item), axis_id)
+        overlay = self._axis_graphics.get(overlay_key)
+
+        if overlay is None:
+            return
+
+        for _graphic_data_item, graphic in overlay.graphics:
+            try:
+                graphic.set_property("stroke_color", color)
+            except Exception:
+                traceback.print_exc()
+
+        self._axis_graphics[overlay_key] = VisibleAxisOverlay(
+            data_item_key=overlay.data_item_key,
+            axis_id=overlay.axis_id,
+            axis=overlay.axis,
+            graphics_data_item=overlay.graphics_data_item,
+            color=color,
+            graphics=overlay.graphics
+        )
 
     def _clear_axis_toggle_callbacks(self) -> None:
         """Remove dynamic axis toggle callbacks from the handler."""
@@ -321,18 +368,30 @@ class ExperimentalAxesPlotterHandler(Declarative.Handler):
         self._axis_toggle_callback_names.clear()
 
     def _get_target_document_window(self) -> Facade.DocumentWindow | None:
-        windows = self._api.application.document_windows
+        """Return a usable facade document window, ignoring transient popup windows."""
 
-        if not windows:
+        try:
+            windows = self._api.application.document_windows
+        except (AttributeError, RuntimeError):
             return None
 
+        fallback_window: Facade.DocumentWindow | None = None
+
         for window in windows:
-            if window.target_display is not None:
+            try:
+                target_display = window.target_display
+                window.target_data_item
+            except (AttributeError, RuntimeError):
+                # Workspace/project changes can temporarily expose PopupWindow objects.
+                continue
+
+            if fallback_window is None:
+                fallback_window = window
+
+            if target_display is not None:
                 return window
 
-        # Prefer a window with an active target display. If none exists, fall back to the
-        # first document window so manual refresh can still work when focus state is not set.
-        return windows[0]
+        return fallback_window
 
     def _get_active_data_item(self) -> Facade.DataItem | None:
         window = self._get_target_document_window()
@@ -340,11 +399,18 @@ class ExperimentalAxesPlotterHandler(Declarative.Handler):
         if window is None:
             return None
 
-        if window.target_data_item is not None:
-            return window.target_data_item
+        try:
+            target_data_item = window.target_data_item
 
-        if window.target_display is not None:
-            return window.target_display.data_item
+            if target_data_item is not None:
+                return target_data_item
+
+            target_display = window.target_display
+
+            if target_display is not None:
+                return target_display.data_item
+        except (AttributeError, RuntimeError):
+            return None
 
         return None
 
@@ -434,7 +500,10 @@ class ExperimentalAxesPlotterHandler(Declarative.Handler):
             self.image_axis_ids.append(axis_id)
             self.image_axis_display_names.append(axis.display_name)
 
-            setattr(self, f"axis_color_{safeid}", axis.color)
+            color_model = Model.PropertyModel[str](axis.color)
+            color_model.on_value_changed = self._make_axis_color_changed_handler(axis_id)
+            self._axis_color_models[axis_id] = color_model
+            setattr(self, f"axis_color_{safeid}", color_model)
 
         #This is a workaround having the user select the image axis. In future we would look to have the native axis stored in the metadata and use that as the default or remove this entirely
         if current_image_axis_id in self.image_axis_ids:
@@ -743,8 +812,8 @@ class ExperimentalAxesPlotterHandler(Declarative.Handler):
             self.status_text.value = f"Removed axis {axis.display_name} from active data item."
             return
 
-        safeid = self._axis_id_to_safeid.get(axis_id, self._sanitize_axis_id(axis_id))
-        color = getattr(self, f"axis_color_{safeid}", axis.color)
+        color_model = self._axis_color_models.get(axis_id)
+        color = color_model.value if color_model is not None else axis.color
 
         if not isinstance(color, str):
             color = axis.color
@@ -780,21 +849,47 @@ class ExperimentalAxesPlotterHandler(Declarative.Handler):
                 traceback.print_exc()
 
     def _remove_all_axis_graphics(self) -> None:
+        """Remove all overlays from every tracked display during panel shutdown."""
+
         for overlay_key in list(self._axis_graphics.keys()):
             self._remove_graphics_for_key(overlay_key)
 
-    def _rebuild_existing_axes(self) -> None:
-        """Rebuild all currently visible overlays after display-option changes."""
+    def _remove_axis_graphics_for_selected_display(self) -> None:
+        """Remove managed overlays only from the currently selected display."""
 
-        overlays = list(self._axis_graphics.values())
-        self._remove_all_axis_graphics()
+        data_item = self._get_active_data_item()
+
+        if data_item is None:
+            return
+
+        data_item_key = self._get_data_item_key(data_item)
+
+        for overlay_key in list(self._axis_graphics.keys()):
+            if overlay_key[0] == data_item_key:
+                self._remove_graphics_for_key(overlay_key)
+
+    def _rebuild_existing_axes_for_selected_display(self) -> None:
+        """Rebuild visible overlays only on the currently selected display."""
+
+        data_item = self._get_active_data_item()
+
+        if data_item is None:
+            return
+
+        data_item_key = self._get_data_item_key(data_item)
+        overlays = [overlay for overlay in self._axis_graphics.values() if overlay.data_item_key == data_item_key]
 
         for overlay in overlays:
-            graphics = self._show_axis_overlay(
-                overlay.axis,
-                overlay.graphics_data_item,
-                overlay.color
-            )
+            self._remove_graphics_for_key((overlay.data_item_key, overlay.axis_id))
+
+        for overlay in overlays:
+            color_model = self._axis_color_models.get(overlay.axis_id)
+            color = color_model.value if color_model is not None else overlay.color
+
+            if not isinstance(color, str):
+                color = overlay.color
+
+            graphics = self._show_axis_overlay(overlay.axis, overlay.graphics_data_item, color)
 
             if graphics is None:
                 continue
@@ -806,13 +901,13 @@ class ExperimentalAxesPlotterHandler(Declarative.Handler):
                 axis_id=overlay.axis_id,
                 axis=overlay.axis,
                 graphics_data_item=overlay.graphics_data_item,
-                color=overlay.color,
+                color=color,
                 graphics=graphics
             )
 
     def on_clear_all_clicked(self, widget: Declarative.UIWidget) -> None:
-        self._remove_all_axis_graphics()
-        self.status_text.value = "Cleared all axis overlays."
+        self._remove_axis_graphics_for_selected_display()
+        self.status_text.value = "Cleared axis overlays from the selected display."
 
     def on_refresh_clicked(self, widget: Declarative.UIWidget) -> None:
         self.refresh_from_current_selection()
@@ -888,7 +983,9 @@ class ExperimentalAxesPlotterPanel(Panel.Panel):
             self.__handler.set_display_item(current_display_item)
             return
 
-        self.__handler.set_display_item(typing.cast(Facade.Display | None, display_item))
+        # None is normal while a workspace or project is closing. Passing it explicitly
+        # prevents the handler from probing transient application popup windows.
+        self.__handler.set_display_item(None)
 
     def close(self) -> None:
         for listener in self.__display_item_changed_listeners:
