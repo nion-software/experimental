@@ -4,9 +4,8 @@ import asyncio
 import gettext
 import math
 import numpy
-import numpy.typing as npt
-from pathlib import Path
-from PIL import Image
+import numpy.typing
+import pathlib
 import time
 
 from nion.instrumentation import camera_base
@@ -14,14 +13,17 @@ from nion.instrumentation import stem_controller as stem_controller_module
 from nion.swift import DocumentController
 from nion.swift import Panel
 from nion.swift import Workspace
+from nion.swift.model import ImportExportManager
 from nion.swift.model import PlugInManager
 from nion.typeshed import API_1_0
 from nion.ui import Declarative
-from nion.utils import Model, Geometry
+from nion.utils import Converter
+from nion.utils import Geometry
+from nion.utils import Model
 from nion.utils import Registry
 
 _ = gettext.gettext
-JSONDict = dict[str, typing.Any]
+JSONType = stem_controller_module.JSONType
 max_size = 32000  # this is the maximum size of the final image in pixels that can be pushed to the sample navigation window. Placeholder value at the moment because something weird is happening with AS2 where the max possible size is decreasing
 
 class OverviewScanPanelUI:
@@ -50,10 +52,12 @@ class OverviewSamplePanelHandler(Declarative.Handler):
         self.stem_controller = typing.cast(stem_controller_module.STEMController, Registry.get_component('stem_controller'))
         self.camera = typing.cast(camera_base.CameraHardwareSource, self.stem_controller.ronchigram_camera)
         self._document_controller = document_controller
-        self.width_value: str = "30"
-        self.height_value: str = "30"
-        self.defocus: str = "-50000"
-        self.binning: str = "1"
+        self.integer_to_string_converter = Converter.IntegerToStringConverter()
+        self.float_to_string_converter = Converter.FloatToStringConverter(pass_none=True)
+        self._width_value: int = 30
+        self._height_value: int = 30
+        self._defocus: float = -5e-05
+        self._binning: int = 1
         self.output_text: str = ""
         self.progress_value: int = 0
         self.progress_max: int = 100
@@ -65,6 +69,58 @@ class OverviewSamplePanelHandler(Declarative.Handler):
         self.cancel_enabled = Model.PropertyModel(False)
         self.scan_buttons_enabled = Model.PropertyModel(True)
         self.ui_view = self._build_ui()
+
+    @property
+    def width_value(self) -> int:
+        return self._width_value
+
+    @width_value.setter
+    def width_value(self, value: int | None) -> None:
+        if value is None or value < 1:
+            self._append_output_threadsafe("Width must be a positive integer.")
+            return
+        if value != self._width_value:
+            self._width_value = value
+            self.property_changed_event.fire("width_value")
+
+    @property
+    def height_value(self) -> int:
+        return self._height_value
+
+    @height_value.setter
+    def height_value(self, value: int | None) -> None:
+        if value is None or value < 1:
+            self._append_output_threadsafe("Width must be a positive integer.")
+            return
+        if value != self._height_value:
+            self._height_value = value
+            self.property_changed_event.fire("height_value")
+
+    @property
+    def binning(self) -> int:
+        return self._binning
+
+    @binning.setter
+    def binning(self, value: int | None) -> None:
+        if value is None or value < 1:
+            self._append_output_threadsafe("Binning must be a positive integer.")
+            return
+        if value != self._binning:
+            self._binning = value
+            self.property_changed_event.fire("binning")
+
+    @property
+    def defocus(self) -> float:
+        return self._defocus * 1e9
+
+    @defocus.setter
+    def defocus(self, value: float | None) -> None:
+        if value is None or abs(value * 1e9) > 500000:
+            self._append_output_threadsafe("Defocus must be between -500000 and 500000 nm.")
+            return
+        if value != self._defocus:
+            self._defocus = value
+            self.property_changed_event.fire("defocus")
 
     def _set_progress(self, value: int, maximum: int, text: str) -> None:
         """
@@ -95,13 +151,13 @@ class OverviewSamplePanelHandler(Declarative.Handler):
         max_button = u.create_push_button(text="Calculate maximum scan", on_clicked="handle_max_clicked", enabled="@binding(scan_buttons_enabled.value)")
         properties_label = u.create_label(text="Desired properties of image:")
         width_label = u.create_label(text="Width (um):", width=80)
-        width_field = u.create_line_edit(text="@binding(width_value)", width=50, editable=True)
+        width_field = u.create_line_edit(text="@binding(width_value, converter=integer_to_string_converter)", width=50, editable=True)
         height_label = u.create_label(text="Height (um):", width=80)
-        height_field = u.create_line_edit(text="@binding(height_value)", width=50, editable=True)
+        height_field = u.create_line_edit(text="@binding(height_value, converter=integer_to_string_converter)", width=50, editable=True)
         defocus_label = u.create_label(text="Defocus (nm):", width=80)
-        defocus_field = u.create_line_edit(text="@binding(defocus)", width=50, editable=True)
+        defocus_field = u.create_line_edit(text="@binding(defocus, converter=float_to_string_converter)", width=50, editable=True)
         binning_label = u.create_label(text="Binning:")
-        binning_field = u.create_line_edit(text="@binding(binning)", width=50, editable=True)
+        binning_field = u.create_line_edit(text="@binding(binning, converter=integer_to_string_converter)", width=50, editable=True)
         output_label = u.create_label(text="Output:")
         output_box = u.create_text_edit(text="@binding(output_text)", editable=False, height=200)
         progress_label = u.create_label(text="@binding(progress_text)")
@@ -211,9 +267,9 @@ class OverviewSamplePanelHandler(Declarative.Handler):
                     stem_controller: stem_controller_module.STEMController,
                     camera: camera_base.CameraHardwareSource,
                     defocus: float,
-                    target_width: tuple[float | int, float | int], timer: bool = False,
-                    binning: float = 1.0) -> (tuple[npt.NDArray[numpy.float64], int, float] |
-                                              tuple[npt.NDArray[numpy.float64], tuple[tuple[int, int], tuple[int, int]], float, float, float, float, float] |
+                    target_width: int, target_height: int, timer: bool = False,
+                    binning: float = 1.0) -> (tuple[numpy.typing.NDArray[numpy.float64], int, float] |
+                                              tuple[numpy.typing.NDArray[numpy.float64], tuple[tuple[int, int], tuple[int, int]], float, float, float, float, float] |
                                               tuple[int, float] | None):
         """
         Move across the sample in a snake pattern, acquiring images at each position, and return the resulting data and relevant parameters.
@@ -274,8 +330,8 @@ class OverviewSamplePanelHandler(Declarative.Handler):
         pixel_size, frame_size, frame_width, master_sub_area, master_sub_area_size, sub_area_shift, sub_area = self.find_dimensions(stem_controller, camera, defocus, tv_pixel_angle_rad, binning)
 
         # calculate the number of frames to cover the target area
-        frames_needed_width = math.ceil(target_width[0] * 1e-6 / sub_area_shift)
-        frames_needed_height = math.ceil(target_width[1] * 1e-6 / sub_area_shift)
+        frames_needed_width = math.ceil(target_width * 1e-6 / sub_area_shift)
+        frames_needed_height = math.ceil(target_height * 1e-6 / sub_area_shift)
         dimensions = (frames_needed_width, frames_needed_height)
 
         total_image_height = dimensions[1] * frame_width  # calculate the height of the image in um
@@ -292,6 +348,7 @@ class OverviewSamplePanelHandler(Declarative.Handler):
             self._set_progress_threadsafe(0, total_images, "Progress:\nStarting acquisition...")
 
         t1 = time.time()
+        time_total = 0.0
 
         if timer:
             dimensions = (2, 1)  # for timing purposes, only need to acquire 2 frames and average the time to take them both
@@ -347,7 +404,7 @@ class OverviewSamplePanelHandler(Declarative.Handler):
                             continue
                         break
 
-                    #  adding the new frame to the data item
+                    # adding the new frame to the data item
                     supradata = camera.grab_next_to_start()[0]
                     assert supradata is not None
 
@@ -382,7 +439,7 @@ class OverviewSamplePanelHandler(Declarative.Handler):
             self.scan_buttons_enabled.value = True
             return master_data, sub_area, sub_area_shift, pixel_size, total_image_height, sx, sy
 
-    def handle_cancel_acquisition_clicked(self, widget: typing.Any) -> None:
+    def handle_cancel_acquisition_clicked(self, widget: Declarative.UIWidget) -> None:
         """
         Cancel button: off when the acquisition is not running, on when it is.
         """
@@ -391,31 +448,25 @@ class OverviewSamplePanelHandler(Declarative.Handler):
             self._set_progress_threadsafe(self.progress_value, 100, "Cancel requested...")
 
 
-    def handle_estimate_time_clicked(self, widget: typing.Any) -> None:
+    def handle_estimate_time_clicked(self, widget: Declarative.UIWidget) -> None:
         """
         Estimates the time an acquisition will take by averaging the time it takes to capture two frames and multiplying by the total number of frames required for the acquisition.
         """
         #  guardrails to make sure width, height, defocus and binning are all integers and within sensible limits
         try:
-            width = int(self.width_value)
-            height = int(self.height_value)
-            defocus = int(self.defocus) * 1e-9
-            binning = int(self.binning)
+            width = self.width_value
+            height = self.height_value
+            defocus = self.defocus * 1e-9
+            binning = self._binning
         except ValueError:
             self._append_output("Please enter width, height, binning and defocus as integers.")
             return
-        if width < 1 or height < 1 or binning < 1:
-            self._append_output("Please ensure width and height are positive.")
-            return
-        if abs(defocus * 1e9) > 500000:
-            self._append_output("Warning: Requested defocus is outside of safe limit")
-            return
+
 
         stem_controller = self.stem_controller
         camera = self.camera
-        target_width = (width, height)
 
-        result = self.acquisition(stem_controller, camera, defocus, target_width, timer=True, binning=binning)
+        result = self.acquisition(stem_controller, camera, defocus, width, height, timer=True, binning=binning)
         if result is None or len(result) != 3:
             return
 
@@ -435,7 +486,7 @@ class OverviewSamplePanelHandler(Declarative.Handler):
                                      stem_controller: stem_controller_module.STEMController,
                                      camera: camera_base.CameraHardwareSource,
                                      defocus: float,
-                                     target_width: tuple[int, int],
+                                     target_width: int, target_height: int,
                                      binning: int) -> None:
         """
         Performs acquisition asynchronously to avoid blocking the UI thread, then pushes results to the sample navigation map in AS2.
@@ -452,7 +503,7 @@ class OverviewSamplePanelHandler(Declarative.Handler):
 
         self._append_output_threadsafe("Starting acquisition...\n")
         try:
-            result = await loop.run_in_executor(None, self.acquisition, stem_controller, camera, defocus, target_width, False, binning)
+            result = await loop.run_in_executor(None, self.acquisition, stem_controller, camera, defocus, target_width, target_height, False, binning)
             if result is None or len(result) != 7:
                 self._set_progress(0, 100, "Progress:\nIdle")
                 return
@@ -477,28 +528,16 @@ class OverviewSamplePanelHandler(Declarative.Handler):
             xdata = self._api.create_data_and_metadata(master_data, dimensional_calibrations=dimensional_calibrations)
 
             # create final data item
-            library.create_data_item_from_data_and_metadata(xdata, "Composite Survey")
+            data_item = library.create_data_item_from_data_and_metadata(xdata, "Composite Survey")
+            display_item = self._document_controller.document_model.get_display_item_for_data_item(data_item)
+            data_path = pathlib.Path(r"C:\AS2\AS2User\Pictures\overview-scan.jpg")
+            ImportExportManager.ImportExportManager().write_display_item(display_item, data_path)
 
             self._append_output("Acquisition complete.\n")
 
             self._append_output("Image properties:")
             self._append_output_threadsafe(f"Total image height: {(total_image_height * 1e3):.3f} mm")
             self._append_output_threadsafe(f"Original stage coordinates: {(sx * 1e6):.3f}, {(sy * 1e6):.3f} um")
-
-            # convert the data to uint8 and save as a jpg
-            data_array = numpy.array(xdata)
-            data_min = float(numpy.min(data_array))
-            data_max = float(numpy.max(data_array))
-            data_range = data_max - data_min
-
-            data_uint8 = ((data_array - data_min / data_range * 255).astype(numpy.uint8))
-
-            img = Image.fromarray(data_uint8)
-            export_path = Path(r"C:\AS2\AS2User\Pictures\overview-scan.jpg")
-            if not export_path.parent.exists():
-                export_path.parent.mkdir(parents=True, exist_ok=True)
-
-            img.save(export_path)
 
         except Exception as e:
             self._append_output(f"Failed to publish result: {e!r}")
@@ -512,13 +551,13 @@ class OverviewSamplePanelHandler(Declarative.Handler):
             if cartridge_result.is_valid:
                 cartridge_string = cartridge_result.value
                 self._append_output_threadsafe(f"Cartridge in stage: {cartridge_string}")
-                properties: JSONDict = {"ImageScaleRad_m": total_image_height / 2, "ImageOffsetX_px": sx / pixel_size, "ImageOffsetY_px": sy / pixel_size, "ImageFile": str(export_path)}
+                properties: JSONType = {"ImageScaleRad_m": total_image_height / 2, "ImageOffsetX_px": sx / pixel_size, "ImageOffsetY_px": sy / pixel_size, "ImageFile": str(data_path)}
 
                 # Set the values on the cartridge
 
-                stem_controller._put_rest_api(f"/exchange/cartridges/{cartridge_string}", content=properties)
-                if hasattr(cartridge_result, "is_valid") and not cartridge_result.is_valid:
-                    self._append_output_threadsafe(f"PUT failed: {cartridge_result.exception}")
+                property_result = stem_controller._put_rest_api(f"/exchange/cartridges/{cartridge_string}", content=properties)
+                if not property_result.is_valid:
+                    self._append_output_threadsafe(f"PUT failed: {property_result.exception}")
             else:
                 self._append_output_threadsafe(f"Failed to get CartridgeInStage: {cartridge_result.exception}")
                 return
@@ -529,56 +568,42 @@ class OverviewSamplePanelHandler(Declarative.Handler):
             self.scan_buttons_enabled.value = True
             return
 
-    def handle_perform_acquisition_clicked(self, widget: typing.Any) -> None:
+    def handle_perform_acquisition_clicked(self, widget: Declarative.UIWidget) -> None:
         """
         Starts the acquisition process by validating input parameters.
         Initiates the asynchronous acquisition task.
         """
         # guardrails to make sure width, height, defocus and binning are all integers and within sensible limits
         try:
-            width = int(self.width_value)
-            height = int(self.height_value)
-            defocus = int(self.defocus) * 1e-9
-            binning = int(self.binning)
+            width = self.width_value
+            height = self.height_value
+            defocus = self.defocus * 1e-9
+            binning = self._binning
         except ValueError:
             self._append_output("Please enter width, height, binning and defocus as integers.")
-            return
-
-        if width < 1 or height < 1 or binning < 1:
-            self._append_output("Please ensure width and height are positive.")
-            return
-        if abs(defocus * 1e9) > 500000:
-            self._append_output("Warning: Requested defocus is outside of safe limit")
             return
 
         if self._acq_task and not self._acq_task.done():
             self._append_output("Acquisition already running.")
             return
 
-        stem_controller = self.stem_controller
-        camera = self.camera
-        target_width = (width, height)
-
         self._acq_task = self._event_loop.create_task(
-            self._run_acquisition_async(stem_controller, camera, defocus, target_width, binning)
+            self._run_acquisition_async(self.stem_controller, self.camera, defocus, width, height, binning)
         )
         self.cancel_enabled.value = False
         self.scan_buttons_enabled.value = True
 
-    def handle_max_clicked(self, widget: typing.Any) -> None:
+    def handle_max_clicked(self, widget: Declarative.UIWidget) -> None:
         """
         Calculates the maximum scan size at the specified defocus/binning for the image to be pushed to the sample navigation map.
         Estimates the time it will take and performs the acquisition.
         """
         # guardrails to make sure defocus and binning are both integers and within sensible limits
         try:
-            defocus = int(self.defocus) * 1e-9
-            binning = int(self.binning)
+            defocus = self.defocus * 1e-9
+            binning = self._binning
         except ValueError:
             self._append_output("Please enter defocus and binning as integers.")
-            return
-        if abs(defocus * 1e9) > 500000:
-            self._append_output("Warning: Requested defocus is outside of sensible limit")
             return
 
         if self._acq_task and not self._acq_task.done():
@@ -604,12 +629,10 @@ class OverviewSamplePanelHandler(Declarative.Handler):
         dimension_x = max_size // sub_area[1][1]
 
         # putting the calculated maximum scan size into the width and height fields in the UI
-        self.width_value = str(int(dimension_x * sub_area_shift * 1e6))
-        self.height_value = str(int(dimension_y * sub_area_shift * 1e6))
-        self.property_changed_event.fire("width_value")
-        self.property_changed_event.fire("height_value")
+        self.width_value = int(dimension_x * sub_area_shift * 1e6)
+        self.height_value = int(dimension_y * sub_area_shift * 1e6)
 
-    def handle_clear_minimap_clicked(self, widget: typing.Any) -> None:
+    def handle_clear_minimap_clicked(self, widget: Declarative.UIWidget) -> None:
         """
         Clears the image, scale height and offsets from the sample navigation map.
         """
@@ -618,7 +641,7 @@ class OverviewSamplePanelHandler(Declarative.Handler):
             cartridge_result = stem_controller._get_rest_api("/exchange?property=CartridgeInStage")
             if cartridge_result.is_valid:
                 cartridge_string = cartridge_result.value
-                properties: JSONDict = {"ImageScaleRad_m": 0.0, "ImageOffsetX_px": 0.0, "ImageOffsetY_px": 0.0, "ImageFile": ""}
+                properties: JSONType = {"ImageScaleRad_m": 0.0, "ImageOffsetX_px": 0.0, "ImageOffsetY_px": 0.0, "ImageFile": ""}
                 stem_controller._put_rest_api(f"/exchange/cartridges/{cartridge_string}", content=properties)
                 self._append_output_threadsafe("Minimap cleared.")
             else:
