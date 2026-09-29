@@ -150,9 +150,9 @@ class OverviewSamplePanelHandler(Declarative.Handler):
         acq_button = u.create_push_button(text="Scan", on_clicked="handle_perform_acquisition_clicked", enabled="@binding(scan_buttons_enabled.value)")
         max_button = u.create_push_button(text="Calculate maximum scan", on_clicked="handle_max_clicked", enabled="@binding(scan_buttons_enabled.value)")
         properties_label = u.create_label(text="Desired properties of image:")
-        width_label = u.create_label(text="Width (um):", width=80)
+        width_label = u.create_label(text="Width (μm):", width=80)
         width_field = u.create_line_edit(text="@binding(width_value, converter=integer_to_string_converter)", width=50, editable=True)
-        height_label = u.create_label(text="Height (um):", width=80)
+        height_label = u.create_label(text="Height (μm):", width=80)
         height_field = u.create_line_edit(text="@binding(height_value, converter=integer_to_string_converter)", width=50, editable=True)
         defocus_label = u.create_label(text="Defocus (nm):", width=80)
         defocus_field = u.create_line_edit(text="@binding(defocus, converter=float_to_string_converter)", width=50, editable=True)
@@ -340,9 +340,9 @@ class OverviewSamplePanelHandler(Declarative.Handler):
         master_data = numpy.empty((sub_area[1][0] * dimensions[0], sub_area[1][1] * dimensions[1]))  # create an empty array to hold the final image data
 
         if not timer:  # if performing the full acquisition instead of just estimating the time, update the progress bar and output window
-            self._append_output_threadsafe(f"Stage starting position: {(sx * 1e6):.3f}, {(sy * 1e6):.3f} um")
+            self._append_output_threadsafe(f"Stage starting position: {(sx * 1e6):.3f}, {(sy * 1e6):.3f} μm")
             self._append_output_threadsafe(f"Pixel size: {(pixel_size * 1e9):.3f} nm")
-            self._append_output_threadsafe(f"Frame width: {(frame_width * 1e6):.3f} um")
+            self._append_output_threadsafe(f"Frame width: {(frame_width * 1e6):.3f} μm")
             self._append_output_threadsafe(f"Master size: {master_data.shape}\n")
 
             self._set_progress_threadsafe(0, total_images, "Progress:\nStarting acquisition...")
@@ -545,7 +545,7 @@ class OverviewSamplePanelHandler(Declarative.Handler):
 
             self._append_output("Image properties:")
             self._append_output_threadsafe(f"Total image height: {(total_image_height * 1e3):.3f} mm")
-            self._append_output_threadsafe(f"Original stage coordinates: {(sx * 1e6):.3f}, {(sy * 1e6):.3f} um")
+            self._append_output_threadsafe(f"Original stage coordinates: {(sx * 1e6):.3f}, {(sy * 1e6):.3f} μm")
 
         except Exception as e:
             self._append_output(f"Failed to publish result: {e!r}")
