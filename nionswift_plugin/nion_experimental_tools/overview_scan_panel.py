@@ -524,13 +524,21 @@ class OverviewSamplePanelHandler(Declarative.Handler):
                 self._api.create_calibration(0.0, y_scale, "um"),
                 self._api.create_calibration(0.0, x_scale, "um"),
             ]
+            data_descriptor = self._api.create_data_descriptor(False, 0, 2)
 
-            xdata = self._api.create_data_and_metadata(master_data, dimensional_calibrations=dimensional_calibrations)
-
+            xdata = self._api.create_data_and_metadata(master_data, dimensional_calibrations=dimensional_calibrations, data_descriptor=data_descriptor)
             # create final data item
             data_item = library.create_data_item_from_data_and_metadata(xdata, "Composite Survey")
-            display_item = self._document_controller.document_model.get_display_item_for_data_item(data_item)
+            document_controller = self._api.application.document_controllers[0]
+            document_controller.display_data_item(data_item)
+
+            await asyncio.sleep(0.5) # allow time for the display to be created so the image exporter doesn't throw an assertion error
+
+            display = data_item.display
+            display.display_type = "image"
+            display_item = display._display_item
             data_path = pathlib.Path(r"C:\AS2\AS2User\Pictures\overview-scan.jpg")
+
             ImportExportManager.ImportExportManager().write_display_item(display_item, data_path)
 
             self._append_output("Acquisition complete.\n")
