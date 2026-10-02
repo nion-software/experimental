@@ -41,7 +41,6 @@ class DimensionsResult:
 
 @dataclass
 class AcquisitionTimingResult:
-    master_data: numpy.typing.NDArray[numpy.float64]
     total_images: int
     time_total: float
     total_image_size: tuple[int, int]
@@ -87,7 +86,7 @@ class OverviewSamplePanelHandler(Declarative.Handler):
         self.float_to_string_converter = Converter.FloatToStringConverter(pass_none=True)
         self._width_value_m: float = 3e-5
         self._height_value_m: float = 3e-5
-        self._defocus_m: float = -5e-5 # defocus is in metres here
+        self._defocus_m: float = -5e-5  # defocus is in metres here
         self._binning: int = 1
         self.output_widget: UserInterface.TextEditWidget | None = None
         self.progress_value: int = 0
@@ -112,7 +111,7 @@ class OverviewSamplePanelHandler(Declarative.Handler):
     @width_value_um.setter
     def width_value_um(self, value: int) -> None:
         if value is None or value < 1:
-            self._append_output_threadsafe("Width must be a positive integer. Returning to default value.\n")
+            self._append_output_threadsafe("Width must be a positive integer. Returning to previous value.\n")
             return
         width_um = value * 1e-6
         if width_um != self._width_value_m:
@@ -130,13 +129,12 @@ class OverviewSamplePanelHandler(Declarative.Handler):
     @height_value_um.setter
     def height_value_um(self, value: int) -> None:
         if value is None or value < 1:
-            self._append_output_threadsafe("Height must be a positive integer. Returning to default value.\n")
+            self._append_output_threadsafe("Height must be a positive integer. Returning to previous value.\n")
             return
         height_um = value * 1e-6
         if height_um != self._height_value_m:
             self._height_value_m = height_um
             self.notify_property_changed("height_value_um")
-
 
     @property
     def defocus_m(self) -> float:  # defocus is in nm here
@@ -149,7 +147,7 @@ class OverviewSamplePanelHandler(Declarative.Handler):
     @defocus_nm.setter
     def defocus_nm(self, value: float | None) -> None:
         if value is None or abs(value) > 500000:
-            self._append_output_threadsafe(f"Defocus must be between -500000 and 500000 nm. Returning to default value.\n")
+            self._append_output_threadsafe("Defocus must be between -500000 and 500000 nm. Returning to previous value.\n")
             return
         defocus_nm = value * 1e-9
         if defocus_nm != self._defocus_m:
@@ -311,14 +309,14 @@ class OverviewSamplePanelHandler(Declarative.Handler):
         )
 
         return DimensionsResult(
-    pixel_size=pixel_size_m,
-    frame_size=frame_size_px,
-    frame_width=frame_width_m,
-    master_sub_area=master_sub_area,
-    master_sub_area_size=master_sub_area_size,
-    sub_area_shift=sub_area_shift_m,
-    sub_area=sub_area,
-)
+            pixel_size=pixel_size_m,
+            frame_size=frame_size_px,
+            frame_width=frame_width_m,
+            master_sub_area=master_sub_area,
+            master_sub_area_size=master_sub_area_size,
+            sub_area_shift=sub_area_shift_m,
+            sub_area=sub_area,
+        )
 
     def acquisition(self,
                     stem_controller: stem_controller_module.STEMController,
@@ -361,7 +359,7 @@ class OverviewSamplePanelHandler(Declarative.Handler):
 
         success, pixel_angle_rad = stem_controller.TryGetVal("TVPixelAngle")  # if success is False, the plugin is likely being run on uSim
 
-        if success:  #even if success is True, it could still be on usim- this would give an empty or singular matrix so can guard against non-uSim controls being used
+        if success:  # even if success is True, it could still be on usim- this would give an empty or singular matrix so can guard against non-uSim controls being used
             #  this branch will run where the plugin is used on an actual microscope
             shift_x_control_name = "SShft.sx"
             shift_y_control_name = "SShft.sy"
@@ -438,7 +436,7 @@ class OverviewSamplePanelHandler(Declarative.Handler):
                     stage_axis = self._get_axis_description("StageAxis")
                     camera_axis = self._get_axis_description("TV")
 
-                    delta_fast = stem_controller.axis_transform_point(Geometry.FloatPoint(y=delta_y, x=delta_x),from_axis=stage_axis, to_axis=camera_axis)
+                    delta_fast = stem_controller.axis_transform_point(Geometry.FloatPoint(y=delta_y, x=delta_x), from_axis=stage_axis, to_axis=camera_axis)
 
                     if delta_fast:
                         delta_x = float(delta_fast[0])
@@ -493,7 +491,6 @@ class OverviewSamplePanelHandler(Declarative.Handler):
 
         if timer:
             return AcquisitionTimingResult(
-                master_data=master_data,
                 total_images=total_images,
                 time_total=time_total,
                 total_image_size=total_image_size_px,
@@ -517,7 +514,6 @@ class OverviewSamplePanelHandler(Declarative.Handler):
             self._cancel_requested = True
             self._set_progress_threadsafe(self.progress_value, 100, "Cancel requested...")
 
-
     def handle_estimate_time_clicked(self, widget: Declarative.UIWidget) -> None:
         """
         Estimates the time an acquisition will take by averaging the time it takes to capture two frames and multiplying by the total number of frames required for the acquisition.
@@ -532,9 +528,17 @@ class OverviewSamplePanelHandler(Declarative.Handler):
 
         result = self.acquisition(stem_controller, camera, defocus_m, width_m, height_m, timer=True, binning=binning)
 
-        total_images = result.total_images
-        t_total = result.time_total
-        image_size_px = result.total_image_size
+        if type(result) == AcquisitionTimingResult:
+            result = typing.cast(AcquisitionTimingResult, result)
+            total_images = result.total_images
+            t_total = result.time_total
+            image_size_px = result.total_image_size
+        else:
+            self._append_output_threadsafe("Acquisition failed.")
+            self.cancel_enabled.value = False
+            self.scan_buttons_enabled.value = True
+            self._set_progress_threadsafe(0, 100, "Progress:\nIdle")
+            return
         time_taken = t_total * total_images / 2  # average time to move the stage
         self._append_output(f"This acquisition will take approximately {(time_taken // 3600):.0f}h {((time_taken % 3600) / 60):.0f}min {(time_taken % 60):.0f}s")
 
@@ -576,14 +580,14 @@ class OverviewSamplePanelHandler(Declarative.Handler):
         try:
             result = await loop.run_in_executor(None, self.acquisition, stem_controller, camera, defocus_m, target_width, target_height, False, binning)
             self._set_progress(0, 100, "Progress:\nIdle")
-
-            master_data = result.master_data
-            sub_area = result.sub_area
-            sub_area_shift_m = result.sub_area_shift
-            pixel_size_m = result.pixel_size
-            total_image_height_m = result.total_image_height
-            sx = result.sx
-            sy = result.sy
+            if type(result) == AcquisitionFullResult:
+                result = typing.cast(AcquisitionFullResult, result)
+            else:
+                self._append_output(f"Acquisition failed: {result!r}")
+                self.cancel_enabled.value = False
+                self.scan_buttons_enabled.value = True
+                self._set_progress_threadsafe(0, 100, "Progress:\nIdle")
+                return
         except Exception as e:
             self._append_output(f"Acquisition failed: {e!r}")
             self.cancel_enabled.value = False
@@ -593,6 +597,13 @@ class OverviewSamplePanelHandler(Declarative.Handler):
 
         try:
             # dimensional calibrations for the final data item
+            master_data = result.master_data
+            sub_area = result.sub_area
+            sub_area_shift_m = result.sub_area_shift
+            pixel_size_m = result.pixel_size
+            total_image_height_m = result.total_image_height
+            sx = result.sx
+            sy = result.sy
             library = self._api.library
             y_scale_um = (sub_area_shift_m / sub_area[1][0]) * 1e6
             x_scale_um = (sub_area_shift_m / sub_area[1][1]) * 1e6
@@ -609,7 +620,7 @@ class OverviewSamplePanelHandler(Declarative.Handler):
             document_window = self._api.application.document_controllers[0]
             document_window.display_data_item(data_item)
 
-            await asyncio.sleep(5) # allow time for the display to be created so the image exporter doesn't throw an assertion error- needs more the bigger the data item
+            await asyncio.sleep(5)  # allow time for the display to be created so the image exporter doesn't throw an assertion error
 
             display = data_item.display
             display.display_type = "image"
@@ -711,7 +722,7 @@ class OverviewSamplePanelHandler(Declarative.Handler):
         dimension_x = max_size // sub_area[1][1]
 
         # putting the calculated maximum scan size into the width and height fields in the UI
-        self.width_value_um = int(dimension_x * sub_area_shift_m * 1e6) # convert to micrometers
+        self.width_value_um = int(dimension_x * sub_area_shift_m * 1e6)  # convert to micrometers
         self.height_value_um = int(dimension_y * sub_area_shift_m * 1e6)
 
     def handle_clear_minimap_clicked(self, widget: Declarative.UIWidget) -> None:
