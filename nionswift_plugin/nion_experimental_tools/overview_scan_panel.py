@@ -1,7 +1,7 @@
 import typing
 
 import asyncio
-from dataclasses import dataclass
+import dataclasses
 import gettext
 import math
 import numpy
@@ -17,7 +17,8 @@ from nion.swift import Workspace
 from nion.swift.model import ImportExportManager
 from nion.swift.model import PlugInManager
 from nion.typeshed import API_1_0
-from nion.ui import Declarative, UserInterface
+from nion.ui import Declarative
+from nion.ui import UserInterface
 from nion.utils import Converter
 from nion.utils import Geometry
 from nion.utils import Model
@@ -28,7 +29,7 @@ JSONType = stem_controller_module.JSONType
 max_size = 32000  # this is the maximum size of the final image in pixels that can be pushed to the sample navigation window. Placeholder value at the moment because something weird is happening with AS2 where the max possible size is decreasing
 
 
-@dataclass
+@dataclasses.dataclass
 class DimensionsResult:
     pixel_size: float
     frame_size: tuple[int, int]
@@ -39,14 +40,14 @@ class DimensionsResult:
     sub_area: tuple[tuple[int, int], tuple[int, int]]
 
 
-@dataclass
+@dataclasses.dataclass
 class AcquisitionTimingResult:
     total_images: int
     time_total: float
     total_image_size: tuple[int, int]
 
 
-@dataclass
+@dataclasses.dataclass
 class AcquisitionFullResult:
     master_data: numpy.typing.NDArray[numpy.float64]
     sub_area: tuple[tuple[int, int], tuple[int, int]]
@@ -67,16 +68,14 @@ class OverviewScanPanelUI:
             **kwargs: typing.Any,
     ) -> Declarative.HandlerLike:
         api = api_broker.get_api("~1.0")
-        document_controller = typing.cast(DocumentController.DocumentController, kwargs.get("document_controller"))
-        return OverviewSamplePanelHandler(api, event_loop, document_controller)
+        return OverviewSamplePanelHandler(api, event_loop)
 
 
 class OverviewSamplePanelHandler(Declarative.Handler):
 
     def __init__(self,
-                 api: "API_1_0.API",
-                 event_loop: typing.Optional[asyncio.AbstractEventLoop],
-                 document_controller: DocumentController.DocumentController) -> None:
+                 api: API_1_0.API,
+                 event_loop: typing.Optional[asyncio.AbstractEventLoop]) -> None:
         super().__init__()
         self._api = api
         self._event_loop = event_loop or asyncio.get_event_loop()
@@ -98,6 +97,7 @@ class OverviewSamplePanelHandler(Declarative.Handler):
         self._is_running: bool = False
         self.cancel_enabled = Model.PropertyModel(False)
         self.scan_buttons_enabled = Model.PropertyModel(True)
+        self._document_controller: DocumentController.DocumentController | None = None
         self.ui_view = self._build_ui()
 
     @property
@@ -617,15 +617,27 @@ class OverviewSamplePanelHandler(Declarative.Handler):
             # create final data item
             self._append_output_threadsafe("Creating data item in library...\n")
             data_item = library.create_data_item_from_data_and_metadata(xdata, "Composite Survey")
-            document_window = self._api.application.document_controllers[0]
-            document_window.display_data_item(data_item)
 
             await asyncio.sleep(5)  # allow time for the display to be created so the image exporter doesn't throw an assertion error
+
 
             display = data_item.display
             display.display_type = "image"
             display_item = display._display_item
-            data_path = pathlib.Path(r"C:\AS2\AS2User\Pictures\overview-scan.jpg")
+            document_window = self._api.application.document_controllers[0]
+            document_window.display_data_item(data_item)
+            document_controller = self._document_controller
+            assert document_controller is not None
+            ui = document_controller.ui
+            # user can choose where to save the image and what to name it
+            path_str, selected_filter, selected_directory = document_controller.get_save_file_path("Save Overview Scan", ui.get_document_location(), "JPEG files (*.jpg);;All Files (*.*)")
+            if not path_str:
+                self._append_output_threadsafe("Save cancelled.\n")
+                return
+
+            data_path = pathlib.Path(path_str)
+            if not data_path.suffix:
+                data_path = data_path.with_suffix(".jpg")
 
             ImportExportManager.ImportExportManager().write_display_item(display_item, data_path)
 
@@ -763,6 +775,7 @@ class OverviewScanPanel(Panel.Panel):
                     ui_handler,
                 )
                 break
+        ui_handler._document_controller = document_controller
 
 
 class OverviewScanPanelExtension:
