@@ -1,6 +1,5 @@
 import typing
 import gettext
-import copy
 import math
 import numpy
 import numpy.typing
@@ -407,13 +406,9 @@ class ApplyShifts(MultiDimensionalProcessingComputation):
             shift_axis_indices = list(input_xdata.datum_dimension_indexes)
         else:
             raise ValueError(f"Unknown shift axis: '{shift_axis}'.")
-        # Like this we directly write to the underlying storage and don't have to cache everything in memory first
-        result_data_item = self.computation.get_result('shifted')
-        if result_data_item.xdata.data_shape == input_xdata.data_shape:
-            MultiDimensionalProcessing.function_apply_multi_dimensional_shifts(input_xdata, shifts, tuple(shift_axis_indices), out=result_data_item.xdata)
-            result_xdata = result_data_item.xdata
-        else: # But if the shape in the data item does not match the input's shape we cannot do that
-            result_xdata = MultiDimensionalProcessing.function_apply_multi_dimensional_shifts(input_xdata, shifts, tuple(shift_axis_indices))
+        # The shifted data is computed into memory and set as the result in commit, so it does not depend on how the result is stored
+        result_xdata = MultiDimensionalProcessing.function_apply_multi_dimensional_shifts(input_xdata, shifts, tuple(shift_axis_indices))
+        assert result_xdata is not None
         if crop_to_valid:
             shift_axis_shape = [input_xdata.data_shape[i] for i in range(len(input_xdata.data_shape)) if i in shift_axis_indices]
             valid_area = calculate_valid_area_from_shifts(tuple(shift_axis_shape), shifts)
@@ -440,13 +435,6 @@ class ApplyShifts(MultiDimensionalProcessingComputation):
 def apply_shifts(api: Facade.API_1, window: Facade.DocumentWindow, input_di: Facade.DataItem, shifts_di: Facade.DataItem, shift_axis: str) -> Facade.DataItem:
     data_item = DataItem.DataItem(large_format=True)
     window._document_controller.document_model.append_data_item(data_item)
-    input_xdata = input_di.xdata
-    assert input_xdata
-    assert input_xdata.data_dtype
-    data_item.reserve_data(data_shape=input_xdata.data_shape, data_dtype=input_xdata.data_dtype, data_descriptor=input_xdata.data_descriptor)
-    data_item.dimensional_calibrations = input_xdata.dimensional_calibrations
-    data_item.intensity_calibration = input_xdata.intensity_calibration
-    data_item.metadata = copy.deepcopy(input_xdata.metadata)
     result_data_item = Facade.DataItem(data_item)
 
     settings_dict = computation_settings.get("nion.align_and_integrate_image_sequence", dict())
