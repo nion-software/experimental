@@ -1,4 +1,7 @@
+import contextlib
 import gettext
+import pathlib
+import tempfile
 import typing
 import unittest
 
@@ -10,6 +13,7 @@ from nion.swift import Application
 from nion.swift import Facade
 from nion.swift.model import DataItem
 from nion.swift.model import Graphics
+from nion.swift.test import Storage_test
 from nion.swift.test import TestContext
 from nion.ui import TestUI
 from nion.utils import Geometry
@@ -419,6 +423,39 @@ class TestMultiDimensionalProcessing(unittest.TestCase):
                 self.assertEqual(3, len(document_model.data_items))
                 self.assertFalse(any(computation.error_text for computation in document_model.computations))
                 self.assertIn("(Apply Shifts)", shifted_data_item.title)
+
+    def test_small_apply_shifts_result_holds_shifted_data_after_reload(self) -> None:
+        # a small result is stored in an ndata file, so this needs a file based profile.
+        data = numpy.random.RandomState(0).rand(5, 6, 7).astype(numpy.float32)
+        shifts = numpy.array([[0, 0], [1, 2], [2, 1], [0, 3], [3, 0]], dtype=numpy.float64)
+        expected_data = numpy.zeros_like(data)
+        for frame_index, (shift_y, shift_x) in enumerate(shifts.astype(int)):
+            expected_data[frame_index, shift_y:, shift_x:] = data[frame_index, :6 - shift_y, :7 - shift_x]
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            with Storage_test.TempProfileContext(pathlib.Path(temporary_directory)) as profile_context:
+                document_controller = profile_context.create_document_controller(auto_close=False)
+                with contextlib.closing(document_controller):
+                    document_model = document_controller.document_model
+                    # the api finds the document model through the application.
+                    self._test_setup.app._set_document_model(document_model)
+                    api = Facade.get_api("~1.0", "~1.0")
+                    data_item = DataItem.new_data_item(DataAndMetadata.new_data_and_metadata(data, data_descriptor=DataAndMetadata.DataDescriptor(True, 0, 2)))
+                    document_model.append_data_item(data_item)
+                    shifts_data_item = DataItem.new_data_item(DataAndMetadata.new_data_and_metadata(shifts))
+                    document_model.append_data_item(shifts_data_item)
+                    shifted_data_item = MultiDimensionalProcessing.apply_shifts(api, Facade.DocumentWindow(document_controller), Facade.DataItem(data_item), Facade.DataItem(shifts_data_item), "data")
+                    # the computation starts with the crop to valid setting other computations used last.
+                    document_model.computations[-1].set_input_value("crop_to_valid", False)
+                    # with the result no longer displayed, its data is not held in memory while it computes.
+                    document_controller.selected_display_panel.set_display_panel_display_item(document_model.get_display_item_for_data_item(data_item))
+                    document_model.recompute_all()
+                    self.assertFalse(any(computation.error_text for computation in document_model.computations))
+                    numpy.testing.assert_array_equal(shifted_data_item.data, expected_data)
+                    shifted_data_item_uuid = shifted_data_item.uuid
+                document_controller = profile_context.create_document_controller(auto_close=False)
+                with contextlib.closing(document_controller):
+                    read_shifted_data_item = next(data_item for data_item in document_controller.document_model.data_items if data_item.uuid == shifted_data_item_uuid)
+                    numpy.testing.assert_array_equal(read_shifted_data_item.data, expected_data)
 
     def test_crop_multidimensional_computation(self) -> None:
         with create_memory_profile_context() as test_context:
