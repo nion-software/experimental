@@ -368,30 +368,23 @@ class ExperimentalAxesPlotterHandler(Declarative.Handler):
         self._axis_toggle_callback_names.clear()
 
     def _get_target_document_window(self) -> Facade.DocumentWindow | None:
-        """Return a usable facade document window, ignoring transient popup windows."""
+        """Ignore transient non-document windows during workspace changes and return None when no window has a target display."""
 
         try:
             windows = self._api.application.document_windows
         except (AttributeError, RuntimeError):
             return None
 
-        fallback_window: Facade.DocumentWindow | None = None
-
         for window in windows:
             try:
                 target_display = window.target_display
-                window.target_data_item
             except (AttributeError, RuntimeError):
-                # Workspace/project changes can temporarily expose PopupWindow objects.
                 continue
-
-            if fallback_window is None:
-                fallback_window = window
 
             if target_display is not None:
                 return window
 
-        return fallback_window
+        return None
 
     def _get_active_data_item(self) -> Facade.DataItem | None:
         window = self._get_target_document_window()
@@ -410,6 +403,7 @@ class ExperimentalAxesPlotterHandler(Declarative.Handler):
             if target_display is not None:
                 return target_display.data_item
         except (AttributeError, RuntimeError):
+            # The window can be closed or replaced between selection and target access.
             return None
 
         return None
@@ -524,9 +518,9 @@ class ExperimentalAxesPlotterHandler(Declarative.Handler):
         index = self.selected_image_axis_index.value
 
         if index is not None and 0 <= index < len(self.image_axis_ids):
-            return self.image_axis_ids[index]
+            return typing.cast(str, self.image_axis_ids[index])
 
-        return self.image_axis_ids[0]
+        return typing.cast(str, self.image_axis_ids[0])
 
     def _get_selected_image_axis(self) -> CoordinateTransform | None:
         """Return the currently selected image axis transform."""
