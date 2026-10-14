@@ -20,6 +20,7 @@ Design intent:
 
 from __future__ import annotations
 
+import math
 import traceback
 import types
 import typing
@@ -44,6 +45,8 @@ PANEL_TITLE = "[Experimental] Axis plotter"
 # STEMController.update_instrument_properties calls stem_controller.get_autostem_properties,
 # which stores the axis_transformation_matrix_metadata at this metadata path.
 AXIS_TRANSFORMATION_MATRICES_METADATA_PATH = "instrument.axis_transformation_matrices"
+SCAN_ROTATION_METADATA_PATH = "scan.rotation"
+SCAN_ROTATION_DEGREES_METADATA_PATH = "scan.rotation_deg"
 
 
 # --------------------------------------------------------------------------------------
@@ -192,6 +195,7 @@ class ExperimentalAxesPlotterHandler(Declarative.Handler):
         self._current_coordinate_transforms = coordinate_transforms
         self._refresh_axes_from_coordinate_transforms(coordinate_transforms)
         self._rebuild_ui()
+        self._rebuild_existing_axes_for_selected_display()
 
     def set_display_item(self, display_item: Facade.Display | None) -> None:
         """Update axes from the selected/focused display item."""
@@ -207,7 +211,9 @@ class ExperimentalAxesPlotterHandler(Declarative.Handler):
     def refresh_from_current_selection(self) -> None:
         """Manual fallback refresh using the current display item or API target."""
 
-        self._set_coordinate_transforms_value(self._create_coordinate_transforms_for_current_display_item())
+        data_item = self._get_active_data_item()
+        coordinate_transforms = (create_coordinate_transforms_from_data_item(data_item) if data_item is not None else None)
+        self._coordinate_transforms_changed(coordinate_transforms)
 
     def _rebuild_ui(self) -> None:
         """Recreate the Declarative UI and ask the owning widget to replace it."""
@@ -507,7 +513,17 @@ class ExperimentalAxesPlotterHandler(Declarative.Handler):
         else:
             self.selected_image_axis_index.value = 0
 
-        self.status_text.value = f"Loaded {len(self.axis_ids)} axes from {metadata_source}."
+        scan_rotation_radians = (
+            get_scan_rotation_radians(self._get_active_data_item())
+            if self._get_active_data_item() is not None
+            else None
+        )
+        rotation_status = (
+            f" Scan rotation: {math.degrees(scan_rotation_radians):.1f} degrees."
+            if scan_rotation_radians is not None
+            else ""
+        )
+        self.status_text.value = f"Loaded {len(self.axis_ids)} axes from {metadata_source}.{rotation_status}"
 
     def _get_selected_image_axis_id(self) -> str | None:
         """Return the currently selected image axis id."""
@@ -877,13 +893,21 @@ class ExperimentalAxesPlotterHandler(Declarative.Handler):
             self._remove_graphics_for_key((overlay.data_item_key, overlay.axis_id))
 
         for overlay in overlays:
+            # Use the newly parsed transform rather than the transform stored when the
+            # overlay was first drawn. This is required for mutable image metadata such as
+            # scan.rotation and scan.rotation_deg.
+            axis = self._axis_id_to_axis.get(overlay.axis_id)
+
+            if axis is None:
+                continue
+
             color_model = self._axis_color_models.get(overlay.axis_id)
             color = color_model.value if color_model is not None else overlay.color
 
             if not isinstance(color, str):
                 color = overlay.color
 
-            graphics = self._show_axis_overlay(overlay.axis, overlay.graphics_data_item, color)
+            graphics = self._show_axis_overlay(axis, overlay.graphics_data_item, color)
 
             if graphics is None:
                 continue
@@ -893,7 +917,7 @@ class ExperimentalAxesPlotterHandler(Declarative.Handler):
             self._axis_graphics[overlay_key] = VisibleAxisOverlay(
                 data_item_key=overlay.data_item_key,
                 axis_id=overlay.axis_id,
-                axis=overlay.axis,
+                axis=axis,
                 graphics_data_item=overlay.graphics_data_item,
                 color=color,
                 graphics=graphics
@@ -1073,6 +1097,23 @@ def get_axis_transformation_matrices_metadata(data_item: Facade.DataItem) -> typ
 
     if _is_mapping(axis_transformation_matrices):
         return axis_transformation_matrices
+
+    return None
+
+
+def get_scan_rotation_radians(data_item: Facade.DataItem) -> float | None:
+    """Return the scan rotation from image metadata, preferring radians."""
+
+    metadata = get_data_item_metadata(data_item)
+    rotation_radians = _as_float(_metadata_get_path(metadata, SCAN_ROTATION_METADATA_PATH))
+
+    if rotation_radians is not None and math.isfinite(rotation_radians):
+        return rotation_radians
+
+    rotation_degrees = _as_float(_metadata_get_path(metadata, SCAN_ROTATION_DEGREES_METADATA_PATH))
+
+    if rotation_degrees is not None and math.isfinite(rotation_degrees):
+        return math.radians(rotation_degrees)
 
     return None
 
