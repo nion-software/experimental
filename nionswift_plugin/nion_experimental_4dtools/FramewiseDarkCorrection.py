@@ -165,7 +165,8 @@ class FramewiseDarkCorrection:
         if metadata.get('hardware_source', {}).get('is_gain_corrected') and current_gain_image:
             assert current_gain_image.xdata
             if current_gain_image.xdata.data_shape == src1_xdata.data_shape[2:]:
-                data = data/current_gain_image.xdata.data
+                # HDF5-stored data doesn't implement division, so read both into arrays first
+                data = np.asarray(data) / np.asarray(current_gain_image.xdata.data)
 
         if (cam_center >= spectrum_range_y).all(): # spectrum is above center
             dark_image = np.mean(data[..., top_dark_area_range_y[0]:top_dark_area_range_y[1],
