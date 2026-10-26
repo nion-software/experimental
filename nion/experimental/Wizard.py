@@ -123,6 +123,11 @@ class AsyncWizardUIHandler(Declarative.Handler):
         self.__task: typing.Optional[asyncio.Task[None]] = None
         self.on_closed: typing.Optional[typing.Callable[[], typing.Any]] = None
         self.__canceled_ui_visible = False
+
+        # the step task which cancel_clicked canceled. the task shows the canceled UI itself when it ends, so that the UI
+        # is updated before anything awaiting the task resumes. only used on the main thread.
+        self.__canceled_step_task: asyncio.Task[None] | None = None
+
         self.__cancel_button_visible = False
         self.__skip_button_visible = True
         self.__status_text = ''
@@ -450,6 +455,9 @@ class AsyncWizardUIHandler(Declarative.Handler):
             exception = True
         finally:
             self.__set_up_ui_for_post_wizard_step()
+            if self.__canceled_step_task and self.__canceled_step_task is asyncio.current_task():
+                self.__canceled_step_task = None
+                self.canceled_ui_visible = True
             if exception:
                 self.status_text = ('An error occured during the current step. Check the terminal output for more details.\n'
                                     'You can still continue with the wizard regardless of the error.')
@@ -480,7 +488,15 @@ class AsyncWizardUIHandler(Declarative.Handler):
     def cancel_clicked(self, widget: Declarative.UIWidget) -> None:
         self.current_step.canceled = True
         if self.__task:
-            self.__task.add_done_callback(lambda task: setattr(self, 'canceled_ui_visible', True))
+            # the done callback shows the canceled UI for a task which ended without running its code, either because it
+            # had already finished or because it was canceled before it started.
+            def handle_canceled_step_task_done(task: asyncio.Task[None]) -> None:
+                if self.__canceled_step_task is task:
+                    self.__canceled_step_task = None
+                    self.canceled_ui_visible = True
+
+            self.__canceled_step_task = self.__task
+            self.__task.add_done_callback(handle_canceled_step_task_done)
             self.__task.cancel()
 
     def continue_clicked(self, widget: Declarative.UIWidget) -> None:
