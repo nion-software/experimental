@@ -243,12 +243,13 @@ class DarkCorrection4DMenuItem:
 
 
 def dark_correction_4D(api: Facade.API_1, window: Facade.DocumentWindow, data_item: Facade.DataItem, gain_mode: str, is_binned: bool, gain_image: Facade.DataItem | None) -> tuple[Facade.DataItem, Facade.DataItem]:
-    if not data_item.xdata or not data_item.xdata.is_data_4d:
+    data_metadata = data_item.data_metadata
+    if not data_metadata or not data_metadata.is_data_4d:
         raise ValueError("Data item must be 4D.")
     document_controller = window._document_controller
     document_model = document_controller.document_model
     total_bin_data_item = api.library.create_data_item()
-    total_bin_data_item.data = np.zeros(data_item.xdata.data_shape[:2], dtype=float)
+    total_bin_data_item.data = np.zeros(data_metadata.data_shape[:2], dtype=float)
     api.library.create_computation('nion.total_bin_4d_SI',
                                    inputs={'src': data_item},
                                    outputs={'target': total_bin_data_item})

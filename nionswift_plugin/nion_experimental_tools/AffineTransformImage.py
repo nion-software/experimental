@@ -116,9 +116,11 @@ class AffineTransformMenuItem:
         vector_b.label = "Vector b"
         typing.cast(Graphics.LineGraphic, vector_b._graphic).end_arrow_enabled = True
 
-        assert data_item.xdata
+        data_metadata = data_item.data_metadata
+        assert data_metadata
 
-        result_data_item = self.__api.library.create_data_item_from_data_and_metadata(DataAndMetadata.new_data_and_metadata(numpy.zeros_like(data_item.data), data_descriptor=data_item.xdata.data_descriptor))
+        placeholder_xdata = DataAndMetadata.new_data_and_metadata(numpy.zeros(data_metadata.data_shape, data_metadata.data_dtype), data_descriptor=data_metadata.data_descriptor)
+        result_data_item = self.__api.library.create_data_item_from_data_and_metadata(placeholder_xdata)
         self.__api.library.create_computation("nion.affine_transform_image",
                                               inputs={"src_data_item": data_item, "vector_a": [vector_a], "vector_b": [vector_b]},
                                               outputs={"target": result_data_item})
@@ -174,8 +176,10 @@ class CopyAffineTransformMenuItem:
             vector_b.label = "Vector b"
             typing.cast(Graphics.LineGraphic, vector_b._graphic).end_arrow_enabled = True
 
-            assert data_item_.xdata
-            result_data_item = self.__api.library.create_data_item_from_data_and_metadata(DataAndMetadata.new_data_and_metadata(numpy.zeros_like(data_item_.data), data_descriptor=data_item_.xdata.data_descriptor))
+            data_metadata = data_item_.data_metadata
+            assert data_metadata
+            placeholder_xdata = DataAndMetadata.new_data_and_metadata(numpy.zeros(data_metadata.data_shape, data_metadata.data_dtype), data_descriptor=data_metadata.data_descriptor)
+            result_data_item = self.__api.library.create_data_item_from_data_and_metadata(placeholder_xdata)
             self.__api.library.create_computation("nion.affine_transform_image",
                                                   inputs={"src_data_item": data_item_, "vector_a": [vector_a], "vector_b": [vector_b]},
                                                   outputs={"target": result_data_item})

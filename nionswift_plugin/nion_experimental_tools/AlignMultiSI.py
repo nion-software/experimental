@@ -31,7 +31,7 @@ class AlignMultiSI(Symbolic.ComputationHandlerLike):
                 haadf_sequence_data_item = self.computation._computation.get_input("haadf_sequence_data_item")
                 if current_region and haadf_sequence_data_item:
                     bounds = current_region.bounds
-                    shape = haadf_sequence_data_item.xdata.datum_dimension_shape
+                    shape = haadf_sequence_data_item.datum_dimension_shape
                     current_region = ((int(bounds[0][0]*shape[0]), int(bounds[0][1]*shape[1])),
                                       (int(bounds[1][0]*shape[0]), int(bounds[1][1]*shape[1])))
                 self.align_region_label.text = str(current_region)
@@ -239,12 +239,12 @@ def align_multi_si2(api: API, window: API.DocumentWindow, haadf_sequence_data_it
     aligned_si = api.library.create_data_item()
     shifts = api.library.create_data_item_from_data(numpy.zeros((2, 2)))
 
-    haadf_xdata = haadf_sequence_data_item.xdata
-    assert haadf_xdata
+    haadf_data_metadata = haadf_sequence_data_item.data_metadata
+    assert haadf_data_metadata
 
     inputs = {"haadf_data_item": {"object": haadf_sequence_data_item, "type": "data_source"},
               "si_data_item": {"object": si_sequence_data_item, "type": "data_source"},
-              "reference_index": haadf_xdata.sequence_dimension_shape[0] // 2,
+              "reference_index": haadf_data_metadata.sequence_dimension_shape[0] // 2,
               "relative_shifts": False,
               "max_shift": 3,
               }

@@ -110,9 +110,10 @@ class MakeColorCOM(Symbolic.ComputationHandlerLike):
 
 
 def color_COM(api: API, window: API.DocumentWindow, data_item: Facade.DataItem) -> tuple[Facade.DataItem, Facade.DataItem]:
-    assert data_item.xdata
-    assert data_item.xdata.is_sequence or data_item.xdata.collection_dimension_count == 1
-    assert data_item.xdata.datum_dimension_count == 2
+    data_metadata = data_item.data_metadata
+    assert data_metadata
+    assert data_metadata.is_sequence or data_metadata.collection_dimension_count == 1
+    assert data_metadata.datum_dimension_count == 2
 
     result_data_items = {
         "output": api.library.create_data_item(),
@@ -155,7 +156,8 @@ class MakeColorCOMMenuItem:
         if not data_item:
             return
 
-        if data_item.xdata and (data_item.xdata.is_sequence or data_item.xdata.collection_dimension_count == 1) and data_item.xdata.datum_dimension_count == 2:
+        data_metadata = data_item.data_metadata
+        if data_metadata and (data_metadata.is_sequence or data_metadata.collection_dimension_count == 1) and data_metadata.datum_dimension_count == 2:
             color_COM(self.__api, window, Facade.DataItem(data_item))
 
 

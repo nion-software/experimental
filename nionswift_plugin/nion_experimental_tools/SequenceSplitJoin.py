@@ -67,9 +67,9 @@ def sequence_join(api: Facade.API_1, window: Facade.DocumentWindow, display_item
 
         if data_item:
             data_items.append(data_item)
-            data_item_xdata = data_item.xdata
-            if (data_item_xdata is not None and len(display_item.data_items) == 1 and len(data_item_xdata.data_shape) > 1 and
-                    (data_item_xdata.datum_dimension_count == 1 or display_item.display_type == 'line_plot')):
+            data_metadata = data_item.data_metadata
+            if (data_metadata is not None and len(display_item.data_items) == 1 and len(data_metadata.data_shape) > 1 and
+                    (data_metadata.datum_dimension_count == 1 or display_item.display_type == 'line_plot')):
                 if i == 0:
                     display_layers_list = display_item._display_item.display_layers_list
                     legend_position = display_item._display_item.get_display_property('legend_position')
@@ -124,18 +124,18 @@ def sequence_split(api: Facade.API_1, window: Facade.DocumentWindow, display_ite
     data_item_ = display_item._display_item.data_item
     assert data_item_
     data_item = Facade.DataItem(data_item_)
-    data_item_xdata = data_item.xdata
-    if not data_item_xdata:
+    data_metadata = data_item_.data_metadata
+    if not data_metadata:
         return list()
-    if data_item_xdata and len(data_item_xdata.data_shape) > 2 and (data_item_xdata.datum_dimension_count == 1 or display_item.display_type == 'line_plot'):
+    if len(data_metadata.data_shape) > 2 and (data_metadata.datum_dimension_count == 1 or display_item.display_type == 'line_plot'):
         display_layers = typing.cast(list[DisplayItem.DisplayLayer], display_item._display_item.display_layers)
         legend_position = display_item._display_item.get_display_property('legend_position')
         display_type = display_item.display_type
 
     result_data_items = dict[str, Facade.DataItem]()
 
-    if data_item_xdata.is_sequence:
-        split_count = data_item_xdata.data_shape[0]
+    if data_metadata.is_sequence:
+        split_count = data_metadata.data_shape[0]
         if split_count > 100:
             logging.error("Splitting sequences of more than 100 items is disabled for performance reasons.")
             return list()
