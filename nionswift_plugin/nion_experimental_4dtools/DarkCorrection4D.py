@@ -156,17 +156,21 @@ class DarkCorrection4D:
             current_gain_image = self.__api.library.get_data_item_by_uuid(uuid.UUID(current_gain_image_uuid))
         if metadata.get('hardware_source', {}).get('is_gain_corrected'):
             if gain_mode in ('custom', 'off') and current_gain_image:
-                assert current_gain_image.xdata
-                if current_gain_image.xdata.data_shape == src1_xdata.data_shape[2:]:
-                    self.__new_xdata /= current_gain_image.xdata[crop_area[0, 0]:crop_area[0, 0]+crop_area[1, 0],
-                                                                 crop_area[0, 1]:crop_area[0, 1]+crop_area[1, 1]]
+                current_gain_data_metadata = current_gain_image.data_metadata
+                assert current_gain_data_metadata
+                if current_gain_data_metadata.data_shape == src1_xdata.data_shape[2:]:
+                    current_gain_xdata = current_gain_image.xdata
+                    assert current_gain_xdata
+                    self.__new_xdata /= current_gain_xdata[crop_area[0, 0]:crop_area[0, 0]+crop_area[1, 0],
+                                                           crop_area[0, 1]:crop_area[0, 1]+crop_area[1, 1]]
 
         if ((gain_mode == 'auto' and not metadata.get('hardware_source', {}).get('is_gain_corrected') and current_gain_image) or
             (gain_mode == 'custom' and gain_image)):
             assert current_gain_image
-            assert current_gain_image.xdata
+            assert current_gain_image.data_metadata
 
             gain_xdata = gain_image[0].xdata if gain_mode == 'custom' else current_gain_image.xdata
+            assert gain_xdata
 
             if gain_xdata.data_shape == self.__new_xdata.data_shape[2:]:
                 self.__new_xdata *= gain_xdata

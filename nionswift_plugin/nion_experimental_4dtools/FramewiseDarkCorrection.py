@@ -163,10 +163,13 @@ class FramewiseDarkCorrection:
         if current_gain_image_uuid:
             current_gain_image = self.__api.library.get_data_item_by_uuid(uuid.UUID(current_gain_image_uuid))
         if metadata.get('hardware_source', {}).get('is_gain_corrected') and current_gain_image:
-            assert current_gain_image.xdata
-            if current_gain_image.xdata.data_shape == src1_xdata.data_shape[2:]:
+            current_gain_data_metadata = current_gain_image.data_metadata
+            assert current_gain_data_metadata
+            if current_gain_data_metadata.data_shape == src1_xdata.data_shape[2:]:
+                current_gain_xdata = current_gain_image.xdata
+                assert current_gain_xdata
                 # HDF5-stored data doesn't implement division, so read both into arrays first
-                data = np.asarray(data) / np.asarray(current_gain_image.xdata.data)
+                data = np.asarray(data) / np.asarray(current_gain_xdata.data)
 
         if (cam_center >= spectrum_range_y).all(): # spectrum is above center
             dark_image = np.mean(data[..., top_dark_area_range_y[0]:top_dark_area_range_y[1],
@@ -196,7 +199,7 @@ class FramewiseDarkCorrection:
         if ((gain_mode == 'auto' and current_gain_image) or # apply gain correction if needed
             (gain_mode == 'custom' and gain_image)):
             assert current_gain_image
-            assert current_gain_image.xdata
+            assert current_gain_image.data_metadata
             gain_xdata = gain_image[0].xdata if gain_mode == 'custom' else current_gain_image.xdata
             assert gain_xdata
 
