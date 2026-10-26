@@ -49,6 +49,7 @@ include = [
 
 [tool.pytest.ini_options]
 testpaths = [
+    "nion/experimental/test",
     "nionswift_plugin/nion_experimental_tools/test",
     "nionswift_plugin/nion_experimental_4dtools/test",
 ]
