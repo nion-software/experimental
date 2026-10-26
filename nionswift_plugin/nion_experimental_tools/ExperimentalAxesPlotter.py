@@ -506,7 +506,8 @@ class ExperimentalAxesPlotterHandler(Declarative.Handler):
     def _get_active_data_shape(self, data_item: Facade.DataItem) -> tuple[int, int] | None:
         """Return the active data shape used for normalized overlay vector scaling."""
 
-        return self._shape_to_height_width(data_item.xdata.data_shape)
+        data_metadata = data_item.data_metadata
+        return self._shape_to_height_width(data_metadata.data_shape if data_metadata else None)
 
     def _normalize_vector(self, vector: Geometry.FloatPoint) -> Geometry.FloatPoint:
         """Return a unit vector, preserving zero vectors as zero vectors."""

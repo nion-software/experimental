@@ -93,9 +93,10 @@ class MakeIDPC(Symbolic.ComputationHandlerLike):
 
 
 def iDPC(api: Facade.API_1, window: API_1_0.DocumentWindow, data_item: Facade.DataItem) -> Facade.DataItem:
-    assert data_item.xdata
-    assert data_item.xdata.is_sequence or data_item.xdata.collection_dimension_count == 1
-    assert data_item.xdata.datum_dimension_count == 2
+    data_metadata = data_item.data_metadata
+    assert data_metadata
+    assert data_metadata.is_sequence or data_metadata.collection_dimension_count == 1
+    assert data_metadata.datum_dimension_count == 2
 
     crop_region = None
     for graphic in data_item.graphics:
@@ -132,7 +133,8 @@ class MakeIDPCMenuItem:
         data_item = display_item.data_items[0] if display_item and len(display_item.data_items) > 0 else None
         if not data_item:
             return
-        if data_item.xdata and (data_item.xdata.is_sequence or data_item.xdata.collection_dimension_count == 1) and data_item.xdata.datum_dimension_count == 2:
+        data_metadata = data_item.data_metadata
+        if data_metadata and (data_metadata.is_sequence or data_metadata.collection_dimension_count == 1) and data_metadata.datum_dimension_count == 2:
             iDPC(self.__api, window, Facade.DataItem(data_item))
 
 

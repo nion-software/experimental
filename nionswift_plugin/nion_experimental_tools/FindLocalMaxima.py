@@ -69,7 +69,6 @@ class FindLocalMaxima(Symbolic.ComputationHandlerLike):
         self.computation = computation
         self.__max_points: typing.List[typing.Tuple[int, ...]] = []
         self.__max_vals: typing.List[float] = []
-        self.__api = Facade.get_api(version="~1.0")
 
     def execute(self, *, input_data_item: Facade.DataItem, spacing: int, number_maxima: int, **kwargs: typing.Any) -> None: # type: ignore
         assert input_data_item.xdata is not None
@@ -80,22 +79,21 @@ class FindLocalMaxima(Symbolic.ComputationHandlerLike):
         src = self.computation.get_input("input_data_item")
         old_graphics = list[Facade.Graphic]()
         if self.__max_points and src:
-            src_xdata = src.xdata
-            assert src_xdata is not None
+            data_metadata = src.data_metadata
+            assert data_metadata is not None
+            shape = data_metadata.data_shape
             old_graphics = self.computation.get_result("max_graphics", None)
-            with self.__api.library.data_ref_for_data_item(src):
-                shape = src_xdata.data.shape
-                new_graphics = []
-                if numpy.ndim(src_xdata.data) == 1:
-                    for point, value in zip(self.__max_points, self.__max_vals):
-                        graphic = src.add_channel_region((point[0] + 0.5) / shape[0])
-                        graphic.label = f'{value:.3g}'
-                        new_graphics.append(graphic)
-                else:
-                    for point, value in zip(self.__max_points, self.__max_vals):
-                        graphic = src.add_point_region((point[0] + 0.5) / shape[0], (point[1] + 0.5) / shape[1])
-                        graphic.label = f'{value:.3g}'
-                        new_graphics.append(graphic)
+            new_graphics = []
+            if len(shape) == 1:
+                for point, value in zip(self.__max_points, self.__max_vals):
+                    graphic = src.add_channel_region((point[0] + 0.5) / shape[0])
+                    graphic.label = f'{value:.3g}'
+                    new_graphics.append(graphic)
+            else:
+                for point, value in zip(self.__max_points, self.__max_vals):
+                    graphic = src.add_point_region((point[0] + 0.5) / shape[0], (point[1] + 0.5) / shape[1])
+                    graphic.label = f'{value:.3g}'
+                    new_graphics.append(graphic)
             self.computation.set_result("max_graphics", new_graphics)
         if old_graphics:
             for graphic in old_graphics:
@@ -121,7 +119,7 @@ class FindLocalMaximaMenuItemDelegate:
 
     def menu_item_execute(self, window: Facade.DocumentWindow) -> None:
         selected_data_item = window.target_data_item
-        if not selected_data_item or not selected_data_item.xdata:
+        if not selected_data_item or not selected_data_item.data_metadata:
             return
         find_local_maxima(self.__api, selected_data_item)
         return None

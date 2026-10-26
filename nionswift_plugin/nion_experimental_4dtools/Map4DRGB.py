@@ -306,8 +306,8 @@ def map_4D_RGB(api: Facade.API_1, window: Facade.DocumentWindow, display_item: F
     if not display_data_channel:
         raise ValueError("Display item must have a single display.")
     assert display_data_channel.data_item
-    data_item = Facade.DataItem(display_data_channel.data_item)
-    if not data_item.xdata or not data_item.xdata.is_data_4d:
+    data_metadata = display_data_channel.data_item.data_metadata
+    if not data_metadata or not data_metadata.is_data_4d:
         raise ValueError("Data item must be 4D.")
     document_model = api.library._document_model
     map_data_item = api.library.create_data_item()
