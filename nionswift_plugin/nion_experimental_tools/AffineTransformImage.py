@@ -53,8 +53,8 @@ class AffineTransformImage(Symbolic.ComputationHandlerLike):
             if xdata.is_sequence:
                 navigation_dimensions += 1
             navigation_dimensions += xdata.collection_dimension_count
-            navigation_dimensions_shape = xdata.data.shape[:navigation_dimensions]
-            result_data = numpy.zeros_like(xdata.data)
+            navigation_dimensions_shape = xdata.data_shape[:navigation_dimensions]
+            result_data = numpy.zeros(xdata.data_shape, xdata.data_dtype)
             new_coords = Core.calculate_coordinates_for_affine_transform(xdata.data[numpy.unravel_index(0, navigation_dimensions_shape)], matrix)
             for i in range(numpy.prod(navigation_dimensions_shape, dtype=numpy.uint64)):
                 index = numpy.unravel_index(i, navigation_dimensions_shape)
@@ -76,7 +76,7 @@ class AffineTransformImage(Symbolic.ComputationHandlerLike):
             index = numpy.unravel_index(0, navigation_dimensions_shape)
             index = ((index[0],) if xdata.is_sequence else tuple()) + (slice(None), slice(None)) + index[-xdata.datum_dimension_count:]
             new_coords = Core.calculate_coordinates_for_affine_transform(xdata.data[index], matrix)
-            result_data = numpy.zeros_like(xdata.data)
+            result_data = numpy.zeros(xdata.data_shape, xdata.data_dtype)
             for i in range(numpy.prod(navigation_dimensions_shape)):
                 index = numpy.unravel_index(i, navigation_dimensions_shape)
                 index = ((index[0],) if xdata.is_sequence else tuple()) + (slice(None), slice(None)) + index[-xdata.datum_dimension_count:]
