@@ -91,8 +91,8 @@ def measure_shifts(interactive, api):
     # src_data_max = numpy.amax(src_data)
     # src_data = scipy.stats.threshold(src_data, src_data_max * 0.1, src_data_max, 0)
 
-    # apply a hann function to de-emphasize the edges
-    src_data *= scipy.signal.hann(src_data.shape[-1])
+    # apply a hann function to de-emphasize the edges, into a new array since src.data belongs to the source item
+    src_data = src_data * scipy.signal.hann(src_data.shape[-1])
 
     # convert the SI to a sequence ordered by x- and the y- direction
     data_descriptor = DataAndMetadata.DataDescriptor(True, 0, 1)
