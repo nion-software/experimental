@@ -11,6 +11,7 @@ import numpy
 from nion.data import DataAndMetadata
 from nion.swift import Application
 from nion.swift import Facade
+from nion.swift import Inspector
 from nion.swift.model import DataItem
 from nion.swift.model import Graphics
 from nion.swift.test import TestContext
@@ -453,6 +454,26 @@ class TestMultiDimensionalProcessing(unittest.TestCase):
                 with contextlib.closing(document_controller):
                     read_shifted_data_item = next(data_item for data_item in document_controller.document_model.data_items if data_item.uuid == shifted_data_item_uuid)
                     numpy.testing.assert_array_equal(read_shifted_data_item.data, expected_data)
+
+    def test_inspector_axis_choice_shows_the_input_axes(self) -> None:
+        with create_memory_profile_context() as test_context:
+            document_controller = test_context.create_document_controller_with_application()
+            document_model = document_controller.document_model
+            api = Facade.get_api("~1.0", "~1.0")
+            xdata = DataAndMetadata.new_data_and_metadata(numpy.zeros((4, 8, 8)), data_descriptor=DataAndMetadata.DataDescriptor(True, 0, 2))
+            data_item = DataItem.new_data_item(xdata)
+            document_model.append_data_item(data_item)
+            MultiDimensionalProcessing.measure_shifts(api, Facade.DocumentWindow(document_controller), Facade.DataItem(data_item), None, "data")
+            document_controller.periodic()
+            computation = document_model.computations[0]
+            variable = computation._get_variable("axes_description")
+            assert variable
+            # the computation inspector makes the axis choice handler for the variable and shows its axes
+            variable_model = Inspector.VariableValueModel(document_controller, computation, variable)
+            handler = MultiDimensionalProcessing.AxisChoiceVariableHandlerFactory().make_variable_handler(document_controller, computation, variable, variable_model)
+            assert isinstance(handler, MultiDimensionalProcessing.AxisChoiceVariableHandler)
+            with contextlib.closing(handler):
+                self.assertEqual(["Sequence", "Data"], handler.axes)
 
     def test_crop_multidimensional_computation(self) -> None:
         with create_memory_profile_context() as test_context:
