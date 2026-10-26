@@ -10,7 +10,6 @@ import operator
 import scipy.interpolate
 import scipy.optimize
 import scipy.signal
-import scipy.stats
 
 
 def sequence_estimate_zlp_pos(s):
@@ -86,13 +85,11 @@ def measure_shifts(interactive, api):
     xc = src.dimensional_calibrations[1]
     ec = src.dimensional_calibrations[2]
 
-    # DISABLED: threshold the data (10% of max). This removes the tails of the ZLP and makes cross correlation inaccurate.
+    # the data is not thresholded, since removing the tails of the ZLP makes the cross correlation inaccurate
     src_data = src.data
-    # src_data_max = numpy.amax(src_data)
-    # src_data = scipy.stats.threshold(src_data, src_data_max * 0.1, src_data_max, 0)
 
     # apply a hann function to de-emphasize the edges, into a new array since src.data belongs to the source item
-    src_data = src_data * scipy.signal.hann(src_data.shape[-1])
+    src_data = src_data * scipy.signal.windows.hann(src_data.shape[-1])
 
     # convert the SI to a sequence ordered by x- and the y- direction
     data_descriptor = DataAndMetadata.DataDescriptor(True, 0, 1)
@@ -111,7 +108,7 @@ def measure_shifts(interactive, api):
     md_range = md_max - md_min
     t_min = md_min - md_range * 0.1
     t_max = md_max + md_range * 0.1
-    md = scipy.stats.threshold(md, t_min, t_max, 0)
+    md = numpy.where((md < t_min) | (md > t_max), 0, md)
 
     # since sequence_register measures the shift between each frame, integrate it to produce absolute shift
     # and also note that register_translation produces negative values for historical/compatibility reasons (scikit).
