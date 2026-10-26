@@ -170,3 +170,22 @@ class TestComputations4D(unittest.TestCase):
             self.assertIn("Map 4D RGB", map_data_item.title)
             self.assertEqual(3, len(display_item.graphics))
             self.assertEqual(1, len(map_display_item.graphics))
+
+    def test_4D_actions_on_2D_image_raise(self) -> None:
+        actions: dict[str, typing.Callable[[Facade.API_1, Facade.DocumentWindow, Facade.Display], object]] = {
+            "map 4D": lambda api, window, display: Map4D.map_4D(api, window, display, []),
+            "center of mass 4D": lambda api, window, display: CenterOfMass4D.center_of_mass_4D(api, window, display, []),
+            "map 4D RGB": lambda api, window, display: Map4DRGB.map_4D_RGB(api, window, display, [], [], []),
+            "dark correction 4D": lambda api, window, display: DarkCorrection4D.dark_correction_4D(api, window, display.data_items[0], 'auto', True, None),
+            "framewise dark correction 4D": lambda api, window, display: FramewiseDarkCorrection.framewise_correction_4D(api, window, display.data_items[0], 'auto', True, None),
+        }
+        for name, action in actions.items():
+            with self.subTest(name), create_memory_profile_context() as profile_context:
+                document_controller = profile_context.create_document_controller_with_application()
+                document_model = document_controller.document_model
+                data_item = DataItem.new_data_item(DataAndMetadata.new_data_and_metadata(numpy.ones((8, 8))))
+                document_model.append_data_item(data_item)
+                display_item = document_model.get_display_item_for_data_item(data_item)
+                api = Facade.get_api("~1.0", "~1.0")
+                with self.assertRaises(ValueError):
+                    action(api, Facade.DocumentWindow(document_controller), Facade.Display(display_item))
