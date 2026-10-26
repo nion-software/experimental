@@ -8,7 +8,7 @@ from nion.swift.model import PlugInManager
 from nion.experimental import Wizard
 
 
-class TestAsyncWizardStep(Wizard.AsyncWizardStep):
+class AsyncWizardTestStep(Wizard.AsyncWizardStep):
     title = 'Test Step'
 
     def __init__(self, api, step_index, depends_on_previous_step, event, requirements = None):
@@ -40,10 +40,10 @@ class TestWizard(unittest.IsolatedAsyncioTestCase):
 
         event = asyncio.Event()
 
-        wizard_steps = [TestAsyncWizardStep(api, 0, False, event),
-                        TestAsyncWizardStep(api, 1, True, event),
-                        TestAsyncWizardStep(api, 2, True, event),
-                        TestAsyncWizardStep(api, 3, False, event)]
+        wizard_steps = [AsyncWizardTestStep(api, 0, False, event),
+                        AsyncWizardTestStep(api, 1, True, event),
+                        AsyncWizardTestStep(api, 2, True, event),
+                        AsyncWizardTestStep(api, 3, False, event)]
 
         wizard_ui_handler = Wizard.WizardUI().get_ui_handler_v2(api_broker, wizard_steps, 'Test Wizard')
         event_loop.call_later(1.0, wizard_ui_handler.skip_clicked, None)
@@ -64,7 +64,7 @@ class TestWizard(unittest.IsolatedAsyncioTestCase):
 
         event = asyncio.Event()
 
-        wizard_steps = [TestAsyncWizardStep(api, 0, False, event)]
+        wizard_steps = [AsyncWizardTestStep(api, 0, False, event)]
 
         wizard_ui_handler = Wizard.WizardUI().get_ui_handler_v2(api_broker, wizard_steps, 'Test Wizard')
         event_loop.call_later(1.0, wizard_ui_handler.cancel_clicked, None)
@@ -83,7 +83,7 @@ class TestWizard(unittest.IsolatedAsyncioTestCase):
 
         event = asyncio.Event()
 
-        wizard_steps = [TestAsyncWizardStep(api, 0, False, event, requirements=['req 1', 'req 2'])]
+        wizard_steps = [AsyncWizardTestStep(api, 0, False, event, requirements=['req 1', 'req 2'])]
 
         wizard_ui_handler = Wizard.WizardUI().get_ui_handler_v2(api_broker, wizard_steps, 'Test Wizard')
         wizard_ui_handler.init_handler()
