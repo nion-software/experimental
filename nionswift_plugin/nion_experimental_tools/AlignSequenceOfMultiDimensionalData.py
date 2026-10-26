@@ -48,11 +48,11 @@ class AlignMultiDimensionalSequence(Symbolic.ComputationHandlerLike):
         translations = Core.function_sequence_measure_relative_translation(haadf_xdata,
                                                                            haadf_xdata[align_index],
                                                                            True, bounds=bounds)
-        sequence_shape = haadf_sequence_data_item.xdata.sequence_dimension_shape
+        sequence_shape = haadf_xdata.sequence_dimension_shape
 
         c = int(numpy.prod(sequence_shape))
-        haadf_result_data = numpy.empty_like(haadf_xdata.data)
-        si_result_data = numpy.empty_like(si_xdata.data)
+        haadf_result_data = numpy.empty(haadf_xdata.data_shape, haadf_xdata.data_dtype)
+        si_result_data = numpy.empty(si_xdata.data_shape, si_xdata.data_dtype)
 
         align_data_shape = haadf_xdata.datum_dimension_shape
         align_axes_start_index: typing.Optional[int] = None
