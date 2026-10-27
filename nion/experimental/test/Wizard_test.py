@@ -46,7 +46,7 @@ class TestWizard(unittest.IsolatedAsyncioTestCase):
                         AsyncWizardTestStep(api, 3, False, event)]
 
         wizard_ui_handler = Wizard.WizardUI().get_ui_handler_v2(api_broker, wizard_steps, 'Test Wizard')
-        event_loop.call_later(1.0, wizard_ui_handler.skip_clicked, None)
+        event_loop.call_later(0.5, wizard_ui_handler.skip_clicked, None)
         wizard_ui_handler.init_handler()
         await asyncio.wait_for(wizard_ui_handler._task, 3.0)
         event.set()
@@ -67,7 +67,7 @@ class TestWizard(unittest.IsolatedAsyncioTestCase):
         wizard_steps = [AsyncWizardTestStep(api, 0, False, event)]
 
         wizard_ui_handler = Wizard.WizardUI().get_ui_handler_v2(api_broker, wizard_steps, 'Test Wizard')
-        event_loop.call_later(1.0, wizard_ui_handler.cancel_clicked, None)
+        event_loop.call_later(0.5, wizard_ui_handler.cancel_clicked, None)
         wizard_ui_handler.init_handler()
         self.assertFalse(wizard_ui_handler.canceled_ui_visible)
         await asyncio.wait_for(wizard_ui_handler._task, 3.0)
