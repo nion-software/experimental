@@ -13,7 +13,6 @@ from nion.swift import Application
 from nion.swift import Facade
 from nion.swift.model import DataItem
 from nion.swift.model import Graphics
-from nion.swift.test import Storage_test
 from nion.swift.test import TestContext
 from nion.ui import TestUI
 from nion.utils import Geometry
@@ -432,12 +431,10 @@ class TestMultiDimensionalProcessing(unittest.TestCase):
         for frame_index, (shift_y, shift_x) in enumerate(shifts.astype(int)):
             expected_data[frame_index, shift_y:, shift_x:] = data[frame_index, :6 - shift_y, :7 - shift_x]
         with tempfile.TemporaryDirectory() as temporary_directory:
-            with Storage_test.TempProfileContext(pathlib.Path(temporary_directory)) as profile_context:
-                document_controller = profile_context.create_document_controller(auto_close=False)
+            with TestContext.FileProfileContext(pathlib.Path(temporary_directory)) as profile_context:
+                document_controller = profile_context.create_document_controller_with_application(auto_close=False)
                 with contextlib.closing(document_controller):
                     document_model = document_controller.document_model
-                    # the api finds the document model through the application.
-                    self._test_setup.app._set_document_model(document_model)
                     api = Facade.get_api("~1.0", "~1.0")
                     data_item = DataItem.new_data_item(DataAndMetadata.new_data_and_metadata(data, data_descriptor=DataAndMetadata.DataDescriptor(True, 0, 2)))
                     document_model.append_data_item(data_item)
