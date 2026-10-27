@@ -71,6 +71,7 @@ class TestWizard(unittest.IsolatedAsyncioTestCase):
         wizard_ui_handler.init_handler()
         self.assertFalse(wizard_ui_handler.canceled_ui_visible)
         await asyncio.wait_for(wizard_ui_handler._task, 3.0)
+        await asyncio.sleep(0.0)
         self.assertTrue(wizard_steps[0].canceled)
         self.assertEqual(wizard_ui_handler.current_step_index, 0)
         self.assertTrue(wizard_steps[-1].started)
