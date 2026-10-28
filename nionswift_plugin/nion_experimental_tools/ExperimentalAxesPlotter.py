@@ -469,31 +469,32 @@ class ExperimentalAxesPlotterHandler(Declarative.Handler):
 
         return self._axis_id_to_axis.get(image_axis_id)
 
-    def _vector_in_image_axis(self, vector: Geometry.FloatPoint, image_axis: CoordinateTransform) -> Geometry.FloatPoint | None:
-        """Express a vector in the selected image-axis basis."""
-
-        image_axis_x = image_axis.x_vector
-        image_axis_y = image_axis.y_vector
-        determinant = image_axis_x.y * image_axis_y.x - image_axis_y.y * image_axis_x.x
-
-        if abs(determinant) <= 1e-12:
-            return None
-
-        x_component = (vector.y * image_axis_y.x - image_axis_y.y * vector.x) / determinant
-        y_component = (image_axis_x.y * vector.x - vector.y * image_axis_x.x) / determinant
-
-        return Geometry.FloatPoint(y=y_component, x=x_component)
-
     def _axis_vectors_in_image_axis(self, axis: CoordinateTransform, image_axis: CoordinateTransform) -> tuple[Geometry.FloatPoint, Geometry.FloatPoint] | None:
-        """Return source-axis basis vectors expressed in image-axis coordinates."""
+        """Return the source-axis basis drawn in the selected image-axis coordinates.
 
-        x_vector = self._vector_in_image_axis(axis.x_vector, image_axis)
-        y_vector = self._vector_in_image_axis(axis.y_vector, image_axis)
+        Metadata vectors are stored as x/y columns. Convert using
+        image_matrix * inverse(source_matrix), then store display vectors as y/x points.
+        """
 
-        if x_vector is None or y_vector is None:
+        source_x = axis.x_vector
+        source_y = axis.y_vector
+        source_determinant = source_x.x * source_y.y - source_y.x * source_x.y
+
+        if abs(source_determinant) <= 1e-12:
             return None
 
-        return x_vector, y_vector
+        inverse_00 = source_y.y / source_determinant
+        inverse_01 = -source_y.x / source_determinant
+        inverse_10 = -source_x.y / source_determinant
+        inverse_11 = source_x.x / source_determinant
+
+        image_x = image_axis.x_vector
+        image_y = image_axis.y_vector
+
+        return (
+            Geometry.FloatPoint(y=image_x.y * inverse_00 + image_y.y * inverse_10, x=image_x.x * inverse_00 + image_y.x * inverse_10),
+            Geometry.FloatPoint(y=image_x.y * inverse_01 + image_y.y * inverse_11, x=image_x.x * inverse_01 + image_y.x * inverse_11)
+        )
 
     def _shape_to_height_width(self, shape_value: object) -> tuple[int, int] | None:
         """Convert an xdata value to display height and width."""
@@ -988,22 +989,25 @@ def get_axis_transformation_matrices_metadata(data_item: Facade.DataItem) -> typ
 
 
 def _read_float_point(value: typing.Any) -> Geometry.FloatPoint | None:
-    """Read a point/vector from sequence, y/x mapping, or 0/1 mapping."""
+    """Read an x/y metadata vector into a display-oriented y/x FloatPoint."""
 
     if isinstance(value, typing.Sequence) and not isinstance(value, str) and len(value) >= 2:
         try:
-            return Geometry.FloatPoint(y=float(value[0]), x=float(value[1]))
+            return Geometry.FloatPoint(y=float(value[1]), x=float(value[0]))
         except (TypeError, ValueError):
             return None
 
     if _is_mapping(value):
-        for y_key, x_key in (("y", "x"), (0, 1), ("0", "1")):
-            if y_key in value and x_key in value:
+        if "x" in value and "y" in value:
+            try:
+                return Geometry.FloatPoint(y=float(value["y"]), x=float(value["x"]))
+            except (TypeError, ValueError):
+                return None
+
+        for x_key, y_key in ((0, 1), ("0", "1")):
+            if x_key in value and y_key in value:
                 try:
-                    return Geometry.FloatPoint(
-                        y=float(value[y_key]),
-                        x=float(value[x_key])
-                    )
+                    return Geometry.FloatPoint(y=float(value[y_key]), x=float(value[x_key]))
                 except (TypeError, ValueError):
                     return None
 
@@ -1144,8 +1148,8 @@ def _read_matrix_from_mapping(value: typing.Mapping[typing.Any, typing.Any]) -> 
     if len(scalar_values) >= 4:
         return (
             ("x", "y"),
-            Geometry.FloatPoint(y=scalar_values[0], x=scalar_values[1]),
-            Geometry.FloatPoint(y=scalar_values[2], x=scalar_values[3])
+            Geometry.FloatPoint(y=scalar_values[1], x=scalar_values[0]),
+            Geometry.FloatPoint(y=scalar_values[3], x=scalar_values[2])
         )
 
     return None
@@ -1164,12 +1168,12 @@ def _read_matrix_from_sequence(value: typing.Sequence[typing.Any]) -> tuple[tupl
     if len(value) < 4:
         return None
 
-    y0 = _as_float(value[0])
-    x0 = _as_float(value[1])
-    y1 = _as_float(value[2])
-    x1 = _as_float(value[3])
+    x0 = _as_float(value[0])
+    y0 = _as_float(value[1])
+    x1 = _as_float(value[2])
+    y1 = _as_float(value[3])
 
-    if y0 is None or x0 is None or y1 is None or x1 is None:
+    if x0 is None or y0 is None or x1 is None or y1 is None:
         return None
 
     return (
