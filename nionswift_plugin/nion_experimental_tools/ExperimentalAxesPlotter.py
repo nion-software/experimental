@@ -320,31 +320,24 @@ class ExperimentalAxesPlotterHandler(Declarative.Handler):
 
         self._axis_toggle_callback_names.clear()
 
-    def _get_target_document_window(self) -> Facade.DocumentWindow | None:
-        windows = self._api.application.document_windows
-
-        if not windows:
-            return None
-
-        for window in windows:
-            if window.target_display is not None:
-                return window
-
-        # Prefer a window with an active target display. If none exists, fall back to the
-        # first document window so manual refresh can still work when focus state is not set.
-        return windows[0]
-
     def _get_active_data_item(self) -> Facade.DataItem | None:
-        window = self._get_target_document_window()
+        """Return the facade data item for the display selected by this panel"""
 
-        if window is None:
+        display_item = self._current_display_item
+
+        if display_item is None:
             return None
 
-        if window.target_data_item is not None:
-            return window.target_data_item
+        selected_data_item = display_item.data_item
 
-        if window.target_display is not None:
-            return window.target_display.data_item
+        if selected_data_item is None:
+            return None
+
+        selected_data_item_uuid = selected_data_item.uuid
+
+        for data_item in self._api.library.data_items:
+            if data_item.uuid == selected_data_item_uuid:
+                return data_item
 
         return None
 
@@ -353,10 +346,7 @@ class ExperimentalAxesPlotterHandler(Declarative.Handler):
         return str(data_item.uuid)
 
     def _create_coordinate_transforms_for_current_display_item(self) -> CoordinateTransforms | None:
-        """Create transforms from the current display item, falling back to the active item."""
-
-        if self._current_display_item is not None:
-            return create_coordinate_transforms_from_display_item(self._current_display_item)
+        """Create transforms from the data item selected by this panel."""
 
         data_item = self._get_active_data_item()
 
@@ -455,9 +445,9 @@ class ExperimentalAxesPlotterHandler(Declarative.Handler):
         index = self.selected_image_axis_index.value
 
         if index is not None and 0 <= index < len(self.image_axis_ids):
-            return self.image_axis_ids[index]
+            return typing.cast(str, self.image_axis_ids[index])
 
-        return self.image_axis_ids[0]
+        return typing.cast(str, self.image_axis_ids[0])
 
     def _get_selected_image_axis(self) -> CoordinateTransform | None:
         """Return the currently selected image axis transform."""
@@ -889,7 +879,9 @@ class ExperimentalAxesPlotterPanel(Panel.Panel):
             self.__handler.set_display_item(current_display_item)
             return
 
-        self.__handler.set_display_item(typing.cast(Facade.Display | None, display_item))
+        # None is normal while a workspace or project is closing. The handler only uses
+        # this panel's selection and does not fall back to application-level windows.
+        self.__handler.set_display_item(None)
 
     def close(self) -> None:
         for listener in self.__display_item_changed_listeners:
