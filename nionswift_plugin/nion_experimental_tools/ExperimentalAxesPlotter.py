@@ -29,8 +29,9 @@ from dataclasses import dataclass
 from nion.swift import DocumentController
 from nion.swift import Panel
 from nion.swift import Workspace
+from nion.swift.model import DisplayItem
 from nion.swift.model import PlugInManager
-from nion.typeshed import API_1_0 as Facade
+from nion.swift import Facade
 from nion.ui import Declarative
 from nion.utils import Event
 from nion.utils import Geometry
@@ -101,8 +102,7 @@ class ExperimentalAxesPlotterHandler(Declarative.Handler):
         super().__init__()
 
         api_broker = PlugInManager.APIBroker()
-        facade_api = typing.cast(Facade.API, api_broker.get_api(version="~1.0"))
-        self._api = facade_api
+        self._api: Facade.API_1 = api_broker.get_api(version="~1.0")
 
         self._rebuild_widget_fn = rebuild_widget_fn
         self._current_display_item: Facade.Display | None = None
@@ -507,8 +507,10 @@ class ExperimentalAxesPlotterHandler(Declarative.Handler):
     def _get_active_data_shape(self, data_item: Facade.DataItem) -> tuple[int, int] | None:
         """Return the active data shape used for normalized overlay vector scaling."""
 
-        data_metadata = data_item.data_metadata
-        return self._shape_to_height_width(data_metadata.data_shape if data_metadata else None)
+        data_and_metadata = data_item.data_and_metadata
+        return self._shape_to_height_width(
+            data_and_metadata.data_shape if data_and_metadata else None
+        )
 
     def _normalize_vector(self, vector: Geometry.FloatPoint) -> Geometry.FloatPoint:
         """Return a unit vector, preserving zero vectors as zero vectors."""
@@ -869,28 +871,25 @@ class ExperimentalAxesPlotterPanel(Panel.Panel):
 
     def __get_current_display_item(self) -> Facade.Display | None:
         focused_display_item = self.__document_controller.focused_display_item
-
         if focused_display_item is not None:
-            return typing.cast(Facade.Display, focused_display_item)
+            return Facade.Display(focused_display_item)
 
         selected_display_item = self.__document_controller.selected_display_item
-
         if selected_display_item is not None:
-            return typing.cast(Facade.Display, selected_display_item)
+            return Facade.Display(selected_display_item)
 
         return None
 
     def __load_initial_display_item(self) -> None:
         self.__handler.set_display_item(self.__get_current_display_item())
 
-    def __display_item_changed(self, display_item: object | None = None) -> None:
+    def __display_item_changed(self, display_item: DisplayItem.DisplayItem | None = None,) -> None:
         current_display_item = self.__get_current_display_item()
-
         if current_display_item is not None:
             self.__handler.set_display_item(current_display_item)
             return
 
-        self.__handler.set_display_item(typing.cast(Facade.Display | None, display_item))
+        self.__handler.set_display_item(Facade.Display(display_item) if display_item is not None else None)
 
     def close(self) -> None:
         for listener in self.__display_item_changed_listeners:
@@ -923,7 +922,7 @@ def unregister_panel() -> None:
 class ExperimentalAxesPlotterExtension:
     extension_id = "nion.extension.experimental_axes_plotter"
 
-    def __init__(self, api_broker: typing.Any) -> None:
+    def __init__(self, api_broker: Facade.APIBroker) -> None:
         """Register the panel."""
 
         api_broker.get_api(version="~1.0")
