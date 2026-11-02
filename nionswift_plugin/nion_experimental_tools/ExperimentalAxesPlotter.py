@@ -103,8 +103,7 @@ class ExperimentalAxesPlotterHandler(Declarative.Handler):
         super().__init__()
 
         api_broker = PlugInManager.APIBroker()
-        facade_api = typing.cast(Facade.API_1, api_broker.get_api(version="~1.0"))
-        self._api = facade_api
+        self._api = api_broker.get_api(version="~1.0")
 
         self._rebuild_widget_fn = rebuild_widget_fn
         self._current_display_item: Facade.Display | None = None
@@ -168,16 +167,10 @@ class ExperimentalAxesPlotterHandler(Declarative.Handler):
         """Create the current CoordinateTransforms value stream."""
 
         try:
-            return typing.cast(
-                Stream.ValueStream[CoordinateTransforms | None],
-                Stream.ValueStream(None)
-            )
+            return Stream.ValueStream[CoordinateTransforms | None](None)
         except TypeError:
             # Older Nion Stream.ValueStream builds do not accept an initial value
-            coordinate_transforms_stream = typing.cast(
-                Stream.ValueStream[CoordinateTransforms | None],
-                Stream.ValueStream()
-            )
+            coordinate_transforms_stream = Stream.ValueStream[CoordinateTransforms | None]()
             coordinate_transforms_stream.value = None
             return coordinate_transforms_stream
 
@@ -439,7 +432,7 @@ class ExperimentalAxesPlotterHandler(Declarative.Handler):
             setattr(self, f"axis_color_{safeid}", axis.color)
 
         #This is a workaround having the user select the image axis. In future we would look to have the native axis stored in the metadata and use that as the default or remove this entirely
-        if current_image_axis_id in self.image_axis_ids:
+        if current_image_axis_id is not None and current_image_axis_id in self.image_axis_ids:
             self.selected_image_axis_index.value = self.image_axis_ids.index(current_image_axis_id)
         elif "tv" in self.image_axis_ids:
             self.selected_image_axis_index.value = self.image_axis_ids.index("tv")
@@ -449,17 +442,15 @@ class ExperimentalAxesPlotterHandler(Declarative.Handler):
         self.status_text.value = f"Loaded {len(self.axis_ids)} axes from {metadata_source}."
 
     def _get_selected_image_axis_id(self) -> str | None:
-        """Return the currently selected image axis id."""
-
         if not self.image_axis_ids:
             return None
 
-        index = self.selected_image_axis_index.value
+        index = typing.cast(int | None, self.selected_image_axis_index.value)
 
         if index is not None and 0 <= index < len(self.image_axis_ids):
-            return self.image_axis_ids[index]
+            return str(self.image_axis_ids[index])
 
-        return self.image_axis_ids[0]
+        return str(self.image_axis_ids[0])
 
     def _get_selected_image_axis(self) -> CoordinateTransform | None:
         """Return the currently selected image axis transform."""
@@ -471,32 +462,32 @@ class ExperimentalAxesPlotterHandler(Declarative.Handler):
 
         return self._axis_id_to_axis.get(image_axis_id)
 
-    def _axis_vectors_in_image_axis(self, axis: CoordinateTransform, image_axis: CoordinateTransform) -> tuple[Geometry.FloatPoint, Geometry.FloatPoint] | None:
-        """Return the source-axis basis drawn in the selected image-axis coordinates.
+    def _axis_vectors_in_image_axis(self, plotted_axis: CoordinateTransform, image_axis: CoordinateTransform) -> tuple[Geometry.FloatPoint, Geometry.FloatPoint] | None:
+        """Return the plotted-axis directions in the selected Image-axis coordinates."""
 
-        Metadata vectors are stored as x/y columns. Convert using
-        image_matrix * inverse(source_matrix), then store display vectors as y/x points.
-        """
+        plotted_axis_x = plotted_axis.x_vector
+        plotted_axis_y = plotted_axis.y_vector
 
-        source_x = axis.x_vector
-        source_y = axis.y_vector
-        source_determinant = source_x.x * source_y.y - source_y.x * source_x.y
+        plotted_axis_determinant = (plotted_axis_x.x * plotted_axis_y.y - plotted_axis_y.x * plotted_axis_x.y)
 
-        if abs(source_determinant) <= 1e-12:
+        if abs(plotted_axis_determinant) <= 1e-12:
             return None
 
-        inverse_00 = source_y.y / source_determinant
-        inverse_01 = -source_y.x / source_determinant
-        inverse_10 = -source_x.y / source_determinant
-        inverse_11 = source_x.x / source_determinant
+        plotted_x_image_x_weight = (plotted_axis_y.y / plotted_axis_determinant)
+        plotted_x_image_y_weight = (-plotted_axis_x.y / plotted_axis_determinant)
+        plotted_y_image_x_weight = (-plotted_axis_y.x / plotted_axis_determinant)
+        plotted_y_image_y_weight = (plotted_axis_x.x / plotted_axis_determinant)
 
-        image_x = image_axis.x_vector
-        image_y = image_axis.y_vector
+        image_axis_x = image_axis.x_vector
+        image_axis_y = image_axis.y_vector
 
-        return (
-            Geometry.FloatPoint(y=image_x.y * inverse_00 + image_y.y * inverse_10, x=image_x.x * inverse_00 + image_y.x * inverse_10),
-            Geometry.FloatPoint(y=image_x.y * inverse_01 + image_y.y * inverse_11, x=image_x.x * inverse_01 + image_y.x * inverse_11)
-        )
+        plotted_x_in_image = Geometry.FloatPoint(y=(image_axis_x.y * plotted_x_image_x_weight + image_axis_y.y * plotted_x_image_y_weight),
+                                                 x=(image_axis_x.x * plotted_x_image_x_weight + image_axis_y.x * plotted_x_image_y_weight))
+
+        plotted_y_in_image = Geometry.FloatPoint(y=(image_axis_x.y * plotted_y_image_x_weight + image_axis_y.y * plotted_y_image_y_weight),
+            x=(image_axis_x.x * plotted_y_image_x_weight + image_axis_y.x * plotted_y_image_y_weight))
+
+        return plotted_x_in_image, plotted_y_in_image
 
     def _shape_to_height_width(self, shape_value: object) -> tuple[int, int] | None:
         """Convert an xdata value to display height and width."""
@@ -508,9 +499,7 @@ class ExperimentalAxesPlotterHandler(Declarative.Handler):
 
     def _get_active_data_shape(self, facade_data_item: Facade.DataItem) -> tuple[int, int] | None:
         """Return the active data shape used for normalized overlay vector scaling."""
-
-        data_item: DataItem.DataItem = facade_data_item._data_item
-        data_metadata = data_item.data_metadata
+        data_metadata = facade_data_item.data_metadata
         return self._shape_to_height_width(data_metadata.data_shape if data_metadata else None)
 
     def _normalize_vector(self, vector: Geometry.FloatPoint) -> Geometry.FloatPoint:
