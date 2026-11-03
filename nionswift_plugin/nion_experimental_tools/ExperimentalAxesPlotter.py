@@ -879,7 +879,8 @@ class ExperimentalAxesPlotterPanel(Panel.Panel):
             self.__handler.set_display_item(current_display_item)
             return
 
-        self.__handler.set_display_item(Facade.Display(display_item) if display_item is not None else None)
+        # None is normal while a workspace or project is closing.
+        self.__handler.set_display_item(None)
 
     def close(self) -> None:
         for listener in self.__display_item_changed_listeners:
