@@ -27,10 +27,12 @@ import typing
 from dataclasses import dataclass
 
 from nion.swift import DocumentController
+from nion.swift import Facade
 from nion.swift import Panel
 from nion.swift import Workspace
+from nion.swift.model import DataItem
+from nion.swift.model import DisplayItem
 from nion.swift.model import PlugInManager
-from nion.typeshed import API_1_0 as Facade
 from nion.ui import Declarative
 from nion.utils import Event
 from nion.utils import Geometry
@@ -101,8 +103,7 @@ class ExperimentalAxesPlotterHandler(Declarative.Handler):
         super().__init__()
 
         api_broker = PlugInManager.APIBroker()
-        facade_api = typing.cast(Facade.API, api_broker.get_api(version="~1.0"))
-        self._api = facade_api
+        self._api = api_broker.get_api(version="~1.0")
 
         self._rebuild_widget_fn = rebuild_widget_fn
         self._current_display_item: Facade.Display | None = None
@@ -166,16 +167,10 @@ class ExperimentalAxesPlotterHandler(Declarative.Handler):
         """Create the current CoordinateTransforms value stream."""
 
         try:
-            return typing.cast(
-                Stream.ValueStream[CoordinateTransforms | None],
-                Stream.ValueStream(None)
-            )
+            return Stream.ValueStream[CoordinateTransforms | None](None)
         except TypeError:
             # Older Nion Stream.ValueStream builds do not accept an initial value
-            coordinate_transforms_stream = typing.cast(
-                Stream.ValueStream[CoordinateTransforms | None],
-                Stream.ValueStream()
-            )
+            coordinate_transforms_stream = Stream.ValueStream[CoordinateTransforms | None]()
             coordinate_transforms_stream.value = None
             return coordinate_transforms_stream
 
@@ -427,7 +422,7 @@ class ExperimentalAxesPlotterHandler(Declarative.Handler):
             setattr(self, f"axis_color_{safeid}", axis.color)
 
         #This is a workaround having the user select the image axis. In future we would look to have the native axis stored in the metadata and use that as the default or remove this entirely
-        if current_image_axis_id in self.image_axis_ids:
+        if current_image_axis_id is not None and current_image_axis_id in self.image_axis_ids:
             self.selected_image_axis_index.value = self.image_axis_ids.index(current_image_axis_id)
         elif "tv" in self.image_axis_ids:
             self.selected_image_axis_index.value = self.image_axis_ids.index("tv")
@@ -493,10 +488,9 @@ class ExperimentalAxesPlotterHandler(Declarative.Handler):
 
         return None
 
-    def _get_active_data_shape(self, data_item: Facade.DataItem) -> tuple[int, int] | None:
+    def _get_active_data_shape(self, facade_data_item: Facade.DataItem) -> tuple[int, int] | None:
         """Return the active data shape used for normalized overlay vector scaling."""
-
-        data_metadata = data_item.data_metadata
+        data_metadata = facade_data_item.data_metadata
         return self._shape_to_height_width(data_metadata.data_shape if data_metadata else None)
 
     def _normalize_vector(self, vector: Geometry.FloatPoint) -> Geometry.FloatPoint:
@@ -858,29 +852,25 @@ class ExperimentalAxesPlotterPanel(Panel.Panel):
 
     def __get_current_display_item(self) -> Facade.Display | None:
         focused_display_item = self.__document_controller.focused_display_item
-
         if focused_display_item is not None:
-            return typing.cast(Facade.Display, focused_display_item)
+            return Facade.Display(focused_display_item)
 
         selected_display_item = self.__document_controller.selected_display_item
-
         if selected_display_item is not None:
-            return typing.cast(Facade.Display, selected_display_item)
+            return Facade.Display(selected_display_item)
 
         return None
 
     def __load_initial_display_item(self) -> None:
         self.__handler.set_display_item(self.__get_current_display_item())
 
-    def __display_item_changed(self, display_item: object | None = None) -> None:
+    def __display_item_changed(self, display_item: DisplayItem.DisplayItem | None = None) -> None:
         current_display_item = self.__get_current_display_item()
-
         if current_display_item is not None:
             self.__handler.set_display_item(current_display_item)
             return
 
-        # None is normal while a workspace or project is closing. The handler only uses
-        # this panel's selection and does not fall back to application-level windows.
+        # None is normal while a workspace or project is closing.
         self.__handler.set_display_item(None)
 
     def close(self) -> None:
@@ -914,7 +904,7 @@ def unregister_panel() -> None:
 class ExperimentalAxesPlotterExtension:
     extension_id = "nion.extension.experimental_axes_plotter"
 
-    def __init__(self, api_broker: typing.Any) -> None:
+    def __init__(self, api_broker: Facade.APIBroker) -> None:
         """Register the panel."""
 
         api_broker.get_api(version="~1.0")
