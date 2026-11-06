@@ -27,10 +27,12 @@ import typing
 from dataclasses import dataclass
 
 from nion.swift import DocumentController
+from nion.swift import Facade
 from nion.swift import Panel
 from nion.swift import Workspace
+from nion.swift.model import DataItem
+from nion.swift.model import DisplayItem
 from nion.swift.model import PlugInManager
-from nion.typeshed import API_1_0 as Facade
 from nion.ui import Declarative
 from nion.utils import Event
 from nion.utils import Geometry
@@ -101,8 +103,7 @@ class ExperimentalAxesPlotterHandler(Declarative.Handler):
         super().__init__()
 
         api_broker = PlugInManager.APIBroker()
-        facade_api = typing.cast(Facade.API, api_broker.get_api(version="~1.0"))
-        self._api = facade_api
+        self._api = api_broker.get_api(version="~1.0")
 
         self._rebuild_widget_fn = rebuild_widget_fn
         self._current_display_item: Facade.Display | None = None
@@ -166,16 +167,10 @@ class ExperimentalAxesPlotterHandler(Declarative.Handler):
         """Create the current CoordinateTransforms value stream."""
 
         try:
-            return typing.cast(
-                Stream.ValueStream[CoordinateTransforms | None],
-                Stream.ValueStream(None)
-            )
+            return Stream.ValueStream[CoordinateTransforms | None](None)
         except TypeError:
             # Older Nion Stream.ValueStream builds do not accept an initial value
-            coordinate_transforms_stream = typing.cast(
-                Stream.ValueStream[CoordinateTransforms | None],
-                Stream.ValueStream()
-            )
+            coordinate_transforms_stream = Stream.ValueStream[CoordinateTransforms | None]()
             coordinate_transforms_stream.value = None
             return coordinate_transforms_stream
 
@@ -437,7 +432,7 @@ class ExperimentalAxesPlotterHandler(Declarative.Handler):
             setattr(self, f"axis_color_{safeid}", axis.color)
 
         #This is a workaround having the user select the image axis. In future we would look to have the native axis stored in the metadata and use that as the default or remove this entirely
-        if current_image_axis_id in self.image_axis_ids:
+        if current_image_axis_id is not None and current_image_axis_id in self.image_axis_ids:
             self.selected_image_axis_index.value = self.image_axis_ids.index(current_image_axis_id)
         elif "tv" in self.image_axis_ids:
             self.selected_image_axis_index.value = self.image_axis_ids.index("tv")
@@ -447,17 +442,15 @@ class ExperimentalAxesPlotterHandler(Declarative.Handler):
         self.status_text.value = f"Loaded {len(self.axis_ids)} axes from {metadata_source}."
 
     def _get_selected_image_axis_id(self) -> str | None:
-        """Return the currently selected image axis id."""
-
         if not self.image_axis_ids:
             return None
 
-        index = self.selected_image_axis_index.value
+        index = typing.cast(int | None, self.selected_image_axis_index.value)
 
         if index is not None and 0 <= index < len(self.image_axis_ids):
-            return self.image_axis_ids[index]
+            return str(self.image_axis_ids[index])
 
-        return self.image_axis_ids[0]
+        return str(self.image_axis_ids[0])
 
     def _get_selected_image_axis(self) -> CoordinateTransform | None:
         """Return the currently selected image axis transform."""
@@ -469,31 +462,32 @@ class ExperimentalAxesPlotterHandler(Declarative.Handler):
 
         return self._axis_id_to_axis.get(image_axis_id)
 
-    def _vector_in_image_axis(self, vector: Geometry.FloatPoint, image_axis: CoordinateTransform) -> Geometry.FloatPoint | None:
-        """Express a vector in the selected image-axis basis."""
+    def _axis_vectors_in_image_axis(self, plotted_axis: CoordinateTransform, image_axis: CoordinateTransform) -> tuple[Geometry.FloatPoint, Geometry.FloatPoint] | None:
+        """Return the plotted-axis directions in the selected Image-axis coordinates."""
+
+        plotted_axis_x = plotted_axis.x_vector
+        plotted_axis_y = plotted_axis.y_vector
+
+        plotted_axis_determinant = (plotted_axis_x.x * plotted_axis_y.y - plotted_axis_y.x * plotted_axis_x.y)
+
+        if abs(plotted_axis_determinant) <= 1e-12:
+            return None
+
+        plotted_x_image_x_weight = (plotted_axis_y.y / plotted_axis_determinant)
+        plotted_x_image_y_weight = (-plotted_axis_x.y / plotted_axis_determinant)
+        plotted_y_image_x_weight = (-plotted_axis_y.x / plotted_axis_determinant)
+        plotted_y_image_y_weight = (plotted_axis_x.x / plotted_axis_determinant)
 
         image_axis_x = image_axis.x_vector
         image_axis_y = image_axis.y_vector
-        determinant = image_axis_x.y * image_axis_y.x - image_axis_y.y * image_axis_x.x
 
-        if abs(determinant) <= 1e-12:
-            return None
+        plotted_x_in_image = Geometry.FloatPoint(y=(image_axis_x.y * plotted_x_image_x_weight + image_axis_y.y * plotted_x_image_y_weight),
+                                                 x=(image_axis_x.x * plotted_x_image_x_weight + image_axis_y.x * plotted_x_image_y_weight))
 
-        x_component = (vector.y * image_axis_y.x - image_axis_y.y * vector.x) / determinant
-        y_component = (image_axis_x.y * vector.x - vector.y * image_axis_x.x) / determinant
+        plotted_y_in_image = Geometry.FloatPoint(y=(image_axis_x.y * plotted_y_image_x_weight + image_axis_y.y * plotted_y_image_y_weight),
+            x=(image_axis_x.x * plotted_y_image_x_weight + image_axis_y.x * plotted_y_image_y_weight))
 
-        return Geometry.FloatPoint(y=y_component, x=x_component)
-
-    def _axis_vectors_in_image_axis(self, axis: CoordinateTransform, image_axis: CoordinateTransform) -> tuple[Geometry.FloatPoint, Geometry.FloatPoint] | None:
-        """Return source-axis basis vectors expressed in image-axis coordinates."""
-
-        x_vector = self._vector_in_image_axis(axis.x_vector, image_axis)
-        y_vector = self._vector_in_image_axis(axis.y_vector, image_axis)
-
-        if x_vector is None or y_vector is None:
-            return None
-
-        return x_vector, y_vector
+        return plotted_x_in_image, plotted_y_in_image
 
     def _shape_to_height_width(self, shape_value: object) -> tuple[int, int] | None:
         """Convert an xdata value to display height and width."""
@@ -503,10 +497,9 @@ class ExperimentalAxesPlotterHandler(Declarative.Handler):
 
         return None
 
-    def _get_active_data_shape(self, data_item: Facade.DataItem) -> tuple[int, int] | None:
+    def _get_active_data_shape(self, facade_data_item: Facade.DataItem) -> tuple[int, int] | None:
         """Return the active data shape used for normalized overlay vector scaling."""
-
-        data_metadata = data_item.data_metadata
+        data_metadata = facade_data_item.data_metadata
         return self._shape_to_height_width(data_metadata.data_shape if data_metadata else None)
 
     def _normalize_vector(self, vector: Geometry.FloatPoint) -> Geometry.FloatPoint:
@@ -868,28 +861,25 @@ class ExperimentalAxesPlotterPanel(Panel.Panel):
 
     def __get_current_display_item(self) -> Facade.Display | None:
         focused_display_item = self.__document_controller.focused_display_item
-
         if focused_display_item is not None:
-            return typing.cast(Facade.Display, focused_display_item)
+            return Facade.Display(focused_display_item)
 
         selected_display_item = self.__document_controller.selected_display_item
-
         if selected_display_item is not None:
-            return typing.cast(Facade.Display, selected_display_item)
+            return Facade.Display(selected_display_item)
 
         return None
 
     def __load_initial_display_item(self) -> None:
         self.__handler.set_display_item(self.__get_current_display_item())
 
-    def __display_item_changed(self, display_item: object | None = None) -> None:
+    def __display_item_changed(self, display_item: DisplayItem.DisplayItem | None = None) -> None:
         current_display_item = self.__get_current_display_item()
-
         if current_display_item is not None:
             self.__handler.set_display_item(current_display_item)
             return
 
-        self.__handler.set_display_item(typing.cast(Facade.Display | None, display_item))
+        self.__handler.set_display_item(Facade.Display(display_item) if display_item is not None else None)
 
     def close(self) -> None:
         for listener in self.__display_item_changed_listeners:
@@ -922,7 +912,7 @@ def unregister_panel() -> None:
 class ExperimentalAxesPlotterExtension:
     extension_id = "nion.extension.experimental_axes_plotter"
 
-    def __init__(self, api_broker: typing.Any) -> None:
+    def __init__(self, api_broker: Facade.APIBroker) -> None:
         """Register the panel."""
 
         api_broker.get_api(version="~1.0")
@@ -988,22 +978,25 @@ def get_axis_transformation_matrices_metadata(data_item: Facade.DataItem) -> typ
 
 
 def _read_float_point(value: typing.Any) -> Geometry.FloatPoint | None:
-    """Read a point/vector from sequence, y/x mapping, or 0/1 mapping."""
+    """Read an x/y metadata vector into a display-oriented y/x FloatPoint."""
 
     if isinstance(value, typing.Sequence) and not isinstance(value, str) and len(value) >= 2:
         try:
-            return Geometry.FloatPoint(y=float(value[0]), x=float(value[1]))
+            return Geometry.FloatPoint(y=float(value[1]), x=float(value[0]))
         except (TypeError, ValueError):
             return None
 
     if _is_mapping(value):
-        for y_key, x_key in (("y", "x"), (0, 1), ("0", "1")):
-            if y_key in value and x_key in value:
+        if "x" in value and "y" in value:
+            try:
+                return Geometry.FloatPoint(y=float(value["y"]), x=float(value["x"]))
+            except (TypeError, ValueError):
+                return None
+
+        for x_key, y_key in ((0, 1), ("0", "1")):
+            if x_key in value and y_key in value:
                 try:
-                    return Geometry.FloatPoint(
-                        y=float(value[y_key]),
-                        x=float(value[x_key])
-                    )
+                    return Geometry.FloatPoint(y=float(value[y_key]), x=float(value[x_key]))
                 except (TypeError, ValueError):
                     return None
 
@@ -1144,8 +1137,8 @@ def _read_matrix_from_mapping(value: typing.Mapping[typing.Any, typing.Any]) -> 
     if len(scalar_values) >= 4:
         return (
             ("x", "y"),
-            Geometry.FloatPoint(y=scalar_values[0], x=scalar_values[1]),
-            Geometry.FloatPoint(y=scalar_values[2], x=scalar_values[3])
+            Geometry.FloatPoint(y=scalar_values[1], x=scalar_values[0]),
+            Geometry.FloatPoint(y=scalar_values[3], x=scalar_values[2])
         )
 
     return None
@@ -1164,12 +1157,12 @@ def _read_matrix_from_sequence(value: typing.Sequence[typing.Any]) -> tuple[tupl
     if len(value) < 4:
         return None
 
-    y0 = _as_float(value[0])
-    x0 = _as_float(value[1])
-    y1 = _as_float(value[2])
-    x1 = _as_float(value[3])
+    x0 = _as_float(value[0])
+    y0 = _as_float(value[1])
+    x1 = _as_float(value[2])
+    y1 = _as_float(value[3])
 
-    if y0 is None or x0 is None or y1 is None or x1 is None:
+    if x0 is None or y0 is None or x1 is None or y1 is None:
         return None
 
     return (
