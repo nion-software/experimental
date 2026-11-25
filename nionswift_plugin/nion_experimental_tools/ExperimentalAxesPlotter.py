@@ -32,7 +32,6 @@ from nion.swift import Panel
 from nion.swift import Workspace
 from nion.swift.model import DataItem
 from nion.swift.model import DisplayItem
-from nion.swift.model import PlugInManager
 from nion.ui import Declarative
 from nion.utils import Event
 from nion.utils import Geometry
@@ -101,9 +100,6 @@ class ExperimentalAxesPlotterHandler(Declarative.Handler):
 
     def __init__(self, rebuild_widget_fn: typing.Callable[[], None]) -> None:
         super().__init__()
-
-        api_broker = PlugInManager.APIBroker()
-        self._api = api_broker.get_api(version="~1.0")
 
         self._rebuild_widget_fn = rebuild_widget_fn
         self._current_display_item: Facade.Display | None = None
@@ -196,7 +192,7 @@ class ExperimentalAxesPlotterHandler(Declarative.Handler):
         self._set_coordinate_transforms_value(self._create_coordinate_transforms_for_current_display_item())
 
     def refresh_from_current_selection(self) -> None:
-        """Manual fallback refresh using the current display item or API target."""
+        """Manual refresh using the current display item."""
 
         self._set_coordinate_transforms_value(self._create_coordinate_transforms_for_current_display_item())
 
@@ -315,43 +311,22 @@ class ExperimentalAxesPlotterHandler(Declarative.Handler):
 
         self._axis_toggle_callback_names.clear()
 
-    def _get_target_document_window(self) -> Facade.DocumentWindow | None:
-        windows = self._api.application.document_windows
-
-        if not windows:
-            return None
-
-        for window in windows:
-            if window.target_display is not None:
-                return window
-
-        # Prefer a window with an active target display. If none exists, fall back to the
-        # first document window so manual refresh can still work when focus state is not set.
-        return windows[0]
-
     def _get_active_data_item(self) -> Facade.DataItem | None:
-        window = self._get_target_document_window()
+        """Return the facade data item for the display selected by this panel"""
 
-        if window is None:
+        display_item = self._current_display_item
+
+        if display_item is None:
             return None
 
-        if window.target_data_item is not None:
-            return window.target_data_item
-
-        if window.target_display is not None:
-            return window.target_display.data_item
-
-        return None
+        return display_item.data_item
 
     def _get_data_item_key(self, data_item: Facade.DataItem) -> str:
 
         return str(data_item.uuid)
 
     def _create_coordinate_transforms_for_current_display_item(self) -> CoordinateTransforms | None:
-        """Create transforms from the current display item, falling back to the active item."""
-
-        if self._current_display_item is not None:
-            return create_coordinate_transforms_from_display_item(self._current_display_item)
+        """Create transforms from the data item selected by this panel."""
 
         data_item = self._get_active_data_item()
 
@@ -874,12 +849,8 @@ class ExperimentalAxesPlotterPanel(Panel.Panel):
         self.__handler.set_display_item(self.__get_current_display_item())
 
     def __display_item_changed(self, display_item: DisplayItem.DisplayItem | None = None) -> None:
-        current_display_item = self.__get_current_display_item()
-        if current_display_item is not None:
-            self.__handler.set_display_item(current_display_item)
-            return
-
-        self.__handler.set_display_item(Facade.Display(display_item) if display_item is not None else None)
+        # None is normal while a workspace or project is closing.
+        self.__handler.set_display_item(self.__get_current_display_item())
 
     def close(self) -> None:
         for listener in self.__display_item_changed_listeners:
@@ -1230,14 +1201,3 @@ def create_coordinate_transforms_from_data_item(data_item: Facade.DataItem) -> C
         transforms=transforms,
         metadata_source=AXIS_TRANSFORMATION_MATRICES_METADATA_PATH
     )
-
-
-def create_coordinate_transforms_from_display_item(display_item: Facade.Display) -> CoordinateTransforms | None:
-    """Construct CoordinateTransforms from the known display-item shape."""
-
-    data_item = display_item.data_item
-
-    if data_item is None:
-        return None
-
-    return create_coordinate_transforms_from_data_item(data_item)
